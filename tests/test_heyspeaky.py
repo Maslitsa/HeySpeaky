@@ -550,5 +550,42 @@ class InstallProgress(unittest.TestCase):
         self.assertEqual(self.game.time_left(300), "about 5 minutes left")
 
 
+from PIL import Image  # noqa: E402
+
+from heyspeaky import glass, theme  # noqa: E402
+
+
+class GlassPill(unittest.TestCase):
+    """The pill draws itself over a photograph of the desktop."""
+
+    def window(self):
+        return (theme.WIDTH, theme.HEIGHT + theme.SHADOW_MARGIN * 2)
+
+    def test_a_frame_is_the_size_of_the_window(self):
+        backdrop = Image.new("RGB", self.window(), (30, 30, 40))
+        frame = glass.render(backdrop, state="listening",
+                             levels=[0.5] * theme.BARS, status="Listening")
+        self.assertEqual(frame.size, self.window())
+
+    def test_dark_desktop_gets_light_text_and_light_gets_dark(self):
+        dark = glass.prepare(Image.new("RGB", self.window(), (12, 12, 16)))
+        light = glass.prepare(Image.new("RGB", self.window(), (240, 240, 245)))
+        self.assertFalse(dark.light)
+        self.assertTrue(light.light)
+
+    def test_the_glass_is_built_once_and_painted_many_times(self):
+        prepared = glass.prepare(Image.new("RGB", self.window(), (60, 60, 70)))
+        first = glass.paint(prepared, state="done", text="hello")
+        second = glass.paint(prepared, state="done", text="hello again")
+        self.assertEqual(first.size, second.size)
+        self.assertIsNot(first, prepared.image)
+
+    def test_long_text_is_shortened_rather_than_spilling(self):
+        backdrop = Image.new("RGB", self.window(), (20, 20, 24))
+        sentence = "word " * 200
+        frame = glass.render(backdrop, state="done", text=sentence)
+        self.assertEqual(frame.size, self.window())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

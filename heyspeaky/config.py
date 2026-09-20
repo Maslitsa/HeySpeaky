@@ -255,26 +255,15 @@ DEFAULTS = {
         "modifier_release_timeout": 5.0,
     },
     "overlay": {
-        "width": 620,
-        "height": 58,
+        # How the pill looks - colours, sizes, the waveform, the glass - lives
+        # in heyspeaky/theme.py, where tools/ui_lab.py can draw it for you.
+        # These three are here because they are about where it sits and how
+        # long it stays, which is a matter of taste rather than design.
+        #
         # Gap between the pill and the top of the taskbar.
         "margin_bottom": 14,
-        "corner_radius": 16,
-        "opacity": 0.96,
+        "opacity": 0.97,
         "hide_delay": 1.6,
-        "bars": 34,
-        "font_family": "Segoe UI",
-        "font_size": 11,
-        "colors": {
-            "background": "#101114",
-            "border": "#2c3038",
-            "text": "#f2f3f5",
-            "muted": "#8b8f98",
-            "recording": "#ff4d4f",
-            "transcribing": "#f5a623",
-            "done": "#34c759",
-            "error": "#ff6b6b",
-        },
     },
     "log_level": "INFO",
 }
