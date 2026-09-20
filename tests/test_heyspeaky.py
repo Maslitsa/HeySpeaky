@@ -1,4 +1,4 @@
-"""Tests for the parts of SpeakIt that need no microphone.
+"""Tests for the parts of HeySpeaky that need no microphone.
 
 Most of this project is Win32 behaviour and live audio, which is awkward to
 test in CI. These cover the pure logic underneath: audio maths, the segment
@@ -22,8 +22,8 @@ sys.path.insert(0, str(ROOT))
 
 import numpy as np  # noqa: E402
 
-from speakit import config as config_module          # noqa: E402
-from speakit.transcribe import (                     # noqa: E402
+from heyspeaky import config as config_module          # noqa: E402
+from heyspeaky.transcribe import (                     # noqa: E402
     CloudBackend, _default_keywords, _default_prompt, _join_segments,
     _merge_spans, pcm_to_float, pcm_to_wav,
 )
@@ -243,16 +243,16 @@ class ConfigMerge(unittest.TestCase):
 
 class HardwareResolution(unittest.TestCase):
     def test_explicit_values_are_left_alone(self):
-        from speakit.hardware import resolve_hardware
+        from heyspeaky.hardware import resolve_hardware
         self.assertEqual(resolve_hardware("cpu", "int8"), ("cpu", "int8"))
 
     def test_auto_compute_type_follows_the_device(self):
-        from speakit.hardware import resolve_hardware
+        from heyspeaky.hardware import resolve_hardware
         self.assertEqual(resolve_hardware("cuda", "auto")[1], "float16")
         self.assertEqual(resolve_hardware("cpu", "auto")[1], "int8")
 
     def test_auto_device_resolves_to_something_usable(self):
-        from speakit.hardware import resolve_hardware
+        from heyspeaky.hardware import resolve_hardware
         device, compute = resolve_hardware("auto", "auto")
         self.assertIn(device, ("cpu", "cuda"))
         self.assertIn(compute, ("int8", "float16"))
@@ -264,7 +264,7 @@ class CappedLogStream(unittest.TestCase):
     def _stream_class(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "speakit_run", ROOT / "run.py")
+            "heyspeaky_run", ROOT / "run.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module._CappedStream
@@ -292,7 +292,7 @@ class CappedLogStream(unittest.TestCase):
 
 
 class KeyFile(unittest.TestCase):
-    """Renaming the project from VoiceType must not lose anyone's saved key."""
+    """A rename must not lose anyone's saved key."""
 
     def _backend(self, appdata):
         import copy
@@ -311,28 +311,34 @@ class KeyFile(unittest.TestCase):
 
     def test_reads_the_current_location(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self._write(Path(tmp) / "SpeakIt", "test-key-new")
+            self._write(Path(tmp) / "HeySpeaky", "test-key-new")
             backend, env = self._backend(tmp)
             with env:
                 self.assertEqual(backend.api_key, "test-key-new")
 
-    def test_falls_back_to_the_voicetype_location(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self._write(Path(tmp) / "VoiceType", "test-key-old")
-            backend, env = self._backend(tmp)
-            with env:
-                self.assertEqual(backend.api_key, "test-key-old")
+    def test_falls_back_to_every_old_location(self):
+        for old in ("SpeakIt", "VoiceType"):
+            with tempfile.TemporaryDirectory() as tmp:
+                self._write(Path(tmp) / old, "test-key-old")
+                backend, env = self._backend(tmp)
+                with env:
+                    self.assertEqual(backend.api_key, "test-key-old", old)
+
+    def test_the_key_file_default_uses_the_current_name(self):
+        default = config_module.DEFAULTS["transcription"]["cloud"]["api_key_file"]
+        self.assertIn("HeySpeaky", default)
+        self.assertNotIn("SpeakIt", default)
 
     def test_current_location_wins_when_both_exist(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self._write(Path(tmp) / "SpeakIt", "test-key-new")
-            self._write(Path(tmp) / "VoiceType", "test-key-old")
+            self._write(Path(tmp) / "HeySpeaky", "test-key-new")
+            self._write(Path(tmp) / "SpeakIt", "test-key-old")
             backend, env = self._backend(tmp)
             with env:
                 self.assertEqual(backend.api_key, "test-key-new")
 
 
-from speakit import languages  # noqa: E402
+from heyspeaky import languages  # noqa: E402
 
 
 class LanguageList(unittest.TestCase):
@@ -429,11 +435,11 @@ class LanguageGroups(unittest.TestCase):
         self.assertTrue(all(len(code) == 2 for code in languages.NAMES))
 
 
-from speakit import diagnostics  # noqa: E402
+from heyspeaky import diagnostics  # noqa: E402
 
 
 class ProblemReport(unittest.TestCase):
-    """The ZIP someone sends when SpeakIt works worse on their PC."""
+    """The ZIP someone sends when HeySpeaky works worse on their PC."""
 
     # Built at runtime so the repository's secret scan has nothing to find.
     FAKE_KEY = "sk-proj-" + "a1" * 20
@@ -479,7 +485,7 @@ class ProblemReport(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs = Path(tmp) / "logs"
             logs.mkdir()
-            (logs / "speakit.log").write_text(
+            (logs / "heyspeaky.log").write_text(
                 "sent with " + self.FAKE_KEY, encoding="utf-8")
             path = diagnostics.save_report(cfg, [entry, entry], logs,
                                            out_dir=tmp, check_network=False)
@@ -488,7 +494,7 @@ class ProblemReport(unittest.TestCase):
                 contents = b"".join(archive.read(name) for name in names)
                 report = archive.read("report.txt").decode("utf-8")
         self.assertEqual(names, {"report.txt", "config.json",
-                                 "logs/speakit.log", "recordings/1.wav",
+                                 "logs/heyspeaky.log", "recordings/1.wav",
                                  "recordings/2.wav"})
         self.assertNotIn(self.FAKE_KEY.encode(), contents)
         self.assertIn("local (offline)", report)

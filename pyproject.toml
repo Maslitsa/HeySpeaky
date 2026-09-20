@@ -1,10 +1,10 @@
-# SpeakIt is an application you run from source, not a library you import,
+# HeySpeaky is an application you run from source, not a library you import,
 # so this file is here for metadata and tool configuration rather than for
 # publishing to PyPI. Dependencies live in requirements.txt, which is what
 # install.ps1 actually uses.
 
 [project]
-name = "speakit"
+name = "heyspeaky"
 version = "1.0.0"
 description = "Background push-to-talk dictation for Windows that survives switching language mid-sentence"
 readme = "README.md"
@@ -23,9 +23,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Maslitsa/SpeakIt"
-Issues = "https://github.com/Maslitsa/SpeakIt/issues"
-Changelog = "https://github.com/Maslitsa/SpeakIt/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Maslitsa/HeySpeaky"
+Issues = "https://github.com/Maslitsa/HeySpeaky/issues"
+Changelog = "https://github.com/Maslitsa/HeySpeaky/blob/main/CHANGELOG.md"
 
 [tool.ruff]
 line-length = 79

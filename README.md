@@ -1,10 +1,10 @@
 <div align="center">
 
-# SpeakIt
+# HeySpeaky
 
 **Dictation software makes you pick a language before you start talking.**
 
-SpeakIt assumes you are going to switch, probably mid-sentence.
+HeySpeaky assumes you are going to switch, probably mid-sentence.
 
 Hold Ctrl+Alt, talk, and the text lands in whatever window you were already
 typing in. No console window, nothing in the taskbar, nothing in Alt+Tab. Just
@@ -15,9 +15,9 @@ Windows. Built on [RealtimeSTT](https://github.com/KoljaB/RealtimeSTT). MIT.
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4?logo=windows&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Built on RealtimeSTT](https://img.shields.io/badge/built%20on-RealtimeSTT-8A2BE2)](https://github.com/KoljaB/RealtimeSTT)
-[![Stars](https://img.shields.io/github/stars/Maslitsa/SpeakIt?style=social)](https://github.com/Maslitsa/SpeakIt/stargazers)
+[![Stars](https://img.shields.io/github/stars/Maslitsa/HeySpeaky?style=social)](https://github.com/Maslitsa/HeySpeaky/stargazers)
 
-<img src="docs/img/overlay-hero.png" width="720" alt="The SpeakIt pill above the taskbar showing a live waveform and a sentence that starts in English and continues in Russian">
+<img src="docs/img/overlay-hero.png" width="720" alt="The HeySpeaky pill above the taskbar showing a live waveform and a sentence that starts in English and continues in Russian">
 
 </div>
 
@@ -28,11 +28,11 @@ Windows. Built on [RealtimeSTT](https://github.com/KoljaB/RealtimeSTT). MIT.
 Paste this into PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/Maslitsa/SpeakIt/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1 | iex
 ```
 
-It downloads about 1 GB, installs into `%LOCALAPPDATA%\Programs\SpeakIt`,
-starts SpeakIt with Windows and launches it. Then hold Ctrl+Alt and talk.
+It downloads about 1 GB, installs into `%LOCALAPPDATA%\Programs\HeySpeaky`,
+starts HeySpeaky with Windows and launches it. Then hold Ctrl+Alt and talk.
 
 ### With your OpenAI key (recommended)
 
@@ -43,15 +43,15 @@ sentence. Create a key at
 between the quotes, and paste the whole line into PowerShell instead:
 
 ```powershell
-$env:OPENAI_API_KEY = "PASTE-YOUR-KEY-HERE"; irm https://raw.githubusercontent.com/Maslitsa/SpeakIt/main/install.ps1 | iex
+$env:OPENAI_API_KEY = "PASTE-YOUR-KEY-HERE"; irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1 | iex
 ```
 
 Filled in, it looks like this:
 
-<pre>$env:OPENAI_API_KEY = "<a href="docs/no-key-for-you.md">sk-proj-R4nd0m...x9Qz</a>"; irm https://raw.githubusercontent.com/Maslitsa/SpeakIt/main/install.ps1 | iex</pre>
+<pre>$env:OPENAI_API_KEY = "<a href="docs/no-key-for-you.md">sk-proj-R4nd0m...x9Qz</a>"; irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1 | iex</pre>
 
 The installer checks the key with OpenAI, saves it to
-`%APPDATA%\SpeakIt\openai.key` where only your account can read it, and takes
+`%APPDATA%\HeySpeaky\openai.key` where only your account can read it, and takes
 it back out of your PowerShell history. To change the key later, run the same
 line with the new one.
 
@@ -67,9 +67,9 @@ the key there instead.
 Run the same command again to update. Your settings are kept.
 
 If it fails, the window stays open with the reason, and the whole run is in
-`%TEMP%\SpeakIt-install.log`. If your antivirus blocks the command, use the ZIP
+`%TEMP%\HeySpeaky-install.log`. If your antivirus blocks the command, use the ZIP
 and `INSTALL.bat` described below. If you hit a problem, please
-[open an issue](https://github.com/Maslitsa/SpeakIt/issues) and attach that
+[open an issue](https://github.com/Maslitsa/HeySpeaky/issues) and attach that
 log, so I can fix it.
 
 <details>
@@ -80,8 +80,8 @@ log, so I can fix it.
 To pass arguments, load the script into a script block in PowerShell:
 
 ```powershell
-$s = [scriptblock]::Create((irm https://raw.githubusercontent.com/Maslitsa/SpeakIt/main/install.ps1))
-& $s -InstallDir 'D:\Apps\SpeakIt'
+$s = [scriptblock]::Create((irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1))
+& $s -InstallDir 'D:\Apps\HeySpeaky'
 & $s -Backend local
 & $s -NoAutostart
 & $s -NoGame
@@ -97,13 +97,13 @@ $s = [scriptblock]::Create((irm https://raw.githubusercontent.com/Maslitsa/Speak
 Read [install.ps1](install.ps1) first, or skip the pipe:
 
 ```powershell
-git clone https://github.com/Maslitsa/SpeakIt.git
-cd SpeakIt
+git clone https://github.com/Maslitsa/HeySpeaky.git
+cd HeySpeaky
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 If you would rather not use a terminal at all, download the
-[ZIP](https://github.com/Maslitsa/SpeakIt/archive/refs/heads/main.zip), unzip
+[ZIP](https://github.com/Maslitsa/HeySpeaky/archive/refs/heads/main.zip), unzip
 it somewhere permanent and double-click `INSTALL.bat`.
 
 </details>
@@ -113,12 +113,12 @@ it somewhere permanent and double-click `INSTALL.bat`.
 Paste this into PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/Maslitsa/SpeakIt/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/uninstall.ps1 | iex
 ```
 
-It removes every copy of SpeakIt on this PC, including old ones called
-VoiceType, with their shortcuts, your saved OpenAI key and the downloaded
-speech models. A folder that is a git clone is left where it is.
+It removes every copy of HeySpeaky on this PC, including old ones called
+SpeakIt or VoiceType, with their shortcuts, your saved OpenAI key and the
+downloaded speech models. A folder that is a git clone is left where it is.
 
 ## How you use it
 
@@ -138,7 +138,7 @@ speech models. A folder that is a git clone is left where it is.
 
 Whisper picks one language per utterance. Anything you said in another language
 comes back translated, or it disappears. And a lot of the other tools keep a
-black console window open while they run. SpeakIt has none: it sits in the
+black console window open while they run. HeySpeaky has none: it sits in the
 tray, behind the little arrow next to the clock.
 
 ## Local or OpenAI
@@ -164,15 +164,15 @@ Russian, German and mid-sentence switching, not for speed.
 
 ## Something wrong?
 
-Double-click `CHECKUP.bat` in the SpeakIt folder, or run:
+Double-click `CHECKUP.bat` in the HeySpeaky folder, or run:
 
 ```powershell
-cd "$env:LOCALAPPDATA\Programs\SpeakIt"
+cd "$env:LOCALAPPDATA\Programs\HeySpeaky"
 .venv\Scripts\python.exe tools\doctor.py
 ```
 
 It checks the Python version, the dependencies, your settings, the microphone,
-the API key, whether SpeakIt is running and whether it starts with Windows.
+the API key, whether HeySpeaky is running and whether it starts with Windows.
 Anything it cannot fix gets a line telling you what to do.
 
 If it works worse on someone else's PC, have them dictate a few sentences,
@@ -183,10 +183,10 @@ says how to read it.
 
 ## Credits
 
-SpeakIt is built on [RealtimeSTT](https://github.com/KoljaB/RealtimeSTT) by
+HeySpeaky is built on [RealtimeSTT](https://github.com/KoljaB/RealtimeSTT) by
 [Kolja Beigel](https://github.com/KoljaB). RealtimeSTT does the microphone
 pipeline and the voice activity detection that ends a hands-free recording,
-and none of that is mine. If SpeakIt is useful to you, star
+and none of that is mine. If HeySpeaky is useful to you, star
 RealtimeSTT too.
 
 Transcription is [faster-whisper](https://github.com/SYSTRAN/faster-whisper)

@@ -19,7 +19,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from collections import deque
 
-logger = logging.getLogger("speakit.overlay")
+logger = logging.getLogger("heyspeaky.overlay")
 
 # Colour key for the transparent background; anything unlikely to be drawn.
 TRANSPARENT_KEY = "#010203"

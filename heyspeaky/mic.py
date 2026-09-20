@@ -11,7 +11,7 @@ import threading
 import numpy as np
 import pyaudio
 
-logger = logging.getLogger("speakit.mic")
+logger = logging.getLogger("heyspeaky.mic")
 
 # Maps RMS in dBFS onto the 0..1 range the meter draws.
 _DB_FLOOR = -58.0

@@ -33,7 +33,7 @@ import webrtcvad
 
 from .languages import NAMES
 
-logger = logging.getLogger("speakit.transcribe")
+logger = logging.getLogger("heyspeaky.transcribe")
 
 
 class CloudUnreachable(RuntimeError):
@@ -112,9 +112,12 @@ CONNECT_TIMEOUT = 4.0
 # wifi drop should cost one slow dictation, not a minute of degraded ones.
 OFFLINE_MEMO_SECONDS = 20.0
 
-# Where the key lived before the project was renamed from VoiceType. Only ever
-# read, as a fallback, so nobody has to move a file after updating.
-LEGACY_KEY_FILE = "%APPDATA%\\VoiceType\\openai.key"
+# Where the key lived under the older names, newest first. Only ever read,
+# as a fallback, so nobody has to move a file after updating.
+LEGACY_KEY_FILES = (
+    "%APPDATA%\\SpeakIt\\openai.key",
+    "%APPDATA%\\VoiceType\\openai.key",
+)
 
 
 def pcm_to_float(pcm_bytes):
@@ -309,7 +312,7 @@ class CloudBackend:
     def api_key(self):
         """Finds the key: config, then environment, then the key file.
 
-        The key file matters more than it looks. SpeakIt starts from a
+        The key file matters more than it looks. HeySpeaky starts from a
         Startup shortcut, and a process only inherits environment variables
         that existed when it was created, so a freshly set OPENAI_API_KEY is
         invisible until the next sign-in. The file is read at request time, so
@@ -329,9 +332,9 @@ class CloudBackend:
         path = (self._cloud.get("api_key_file") or "").strip()
         if not path:
             return ""
-        # SpeakIt was called VoiceType and kept the key under that name.
-        # Looking there as well means the rename cost nobody their key.
-        for candidate in (path, LEGACY_KEY_FILE):
+        # HeySpeaky was VoiceType, then SpeakIt, and the key stayed under
+        # those names. Looking there too means a rename costs nobody theirs.
+        for candidate in (path,) + LEGACY_KEY_FILES:
             try:
                 expanded = os.path.expandvars(os.path.expanduser(candidate))
                 # utf-8-sig: PowerShell's Set-Content writes a BOM, which

@@ -1,8 +1,8 @@
-# SpeakIt runtime dependencies.
+# HeySpeaky runtime dependencies.
 #
 # Lower bounds, for anyone installing by hand with pip. The installer does not
 # read this file. It installs requirements.lock, which pins every package,
-# including the ones pulled in indirectly, to the versions SpeakIt was tested
+# including the ones pulled in indirectly, to the versions HeySpeaky was tested
 # with, so an install next month gets what worked today. After changing
 # anything here, regenerate it:
 #
@@ -10,7 +10,7 @@
 
 # Microphone pipeline and voice activity detection.
 # 1.1.0 is the first release with the external-audio API (use_microphone=False
-# plus feed_audio) that SpeakIt drives by hand.
+# plus feed_audio) that HeySpeaky drives by hand.
 #
 # [default] matters. RealtimeSTT 1.1.2 moved both faster-whisper and silero-vad
 # into that extra. Without it a fresh install either has no speech model
@@ -22,7 +22,7 @@ RealtimeSTT[default]>=1.1.2
 # the scripts in tools/ import it directly.
 faster-whisper>=1.2.1
 
-# Pulled in by RealtimeSTT, listed because SpeakIt imports them directly and
+# Pulled in by RealtimeSTT, listed because HeySpeaky imports them directly and
 # should not silently depend on another package's requirements.
 numpy>=1.26
 PyAudio>=0.2.14

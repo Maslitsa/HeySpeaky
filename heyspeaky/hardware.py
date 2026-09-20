@@ -7,7 +7,7 @@ tested on a machine with neither installed.
 
 import logging
 
-logger = logging.getLogger("speakit.hardware")
+logger = logging.getLogger("heyspeaky.hardware")
 
 
 def resolve_hardware(device, compute_type):

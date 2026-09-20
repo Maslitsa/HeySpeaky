@@ -1,6 +1,6 @@
 """A problem report someone can send you.
 
-When SpeakIt works well on one PC and badly on another, the difference is
+When HeySpeaky works well on one PC and badly on another, the difference is
 nearly always one of a few things: it is not really using OpenAI, the
 microphone gives it poor audio, or a busy CPU drops pieces of the recording.
 The report puts what tells those apart into one ZIP on the Desktop, small
@@ -27,7 +27,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .transcribe import LEGACY_KEY_FILE, pcm_to_wav
+from .transcribe import LEGACY_KEY_FILES, pcm_to_wav
 
 KEEP = 5
 
@@ -43,7 +43,7 @@ What to look for
     level in Windows sound settings, or speak closer.
   - "clipped" above 1%: too loud, and the audio is distorted.
   - To hear what the microphone picked up, play the wav files, or run them
-    through SpeakIt on your own PC:
+    through HeySpeaky on your own PC:
       .venv\\Scripts\\python.exe tools\\try_demo.py path\\to\\1.wav --both
     Bad on your PC too means the audio is the problem. Fine on your PC means
     the other PC's setup is.
@@ -182,7 +182,7 @@ def key_source(cfg):
         return "found, in config.json"
     if (os.environ.get(cloud.get("api_key_env") or "") or "").strip():
         return "found, in the {} variable".format(cloud["api_key_env"])
-    for candidate in (cloud.get("api_key_file") or "", LEGACY_KEY_FILE):
+    for candidate in (cloud.get("api_key_file") or "",) + LEGACY_KEY_FILES:
         if not candidate:
             continue
         path = Path(os.path.expandvars(os.path.expanduser(candidate)))
@@ -247,7 +247,7 @@ def report_text(cfg, entries, check_network=True):
     backend = cfg["transcription"]["backend"]
     default_mic, inputs = _microphones()
     lines = [
-        "SpeakIt problem report",
+        "HeySpeaky problem report",
         "Made {}".format(time.strftime("%Y-%m-%d %H:%M")),
         "",
         "This PC",
@@ -284,7 +284,7 @@ def report_text(cfg, entries, check_network=True):
         for index, entry in enumerate(entries, 1):
             text += _describe(index, entry)
     else:
-        lines.append("No dictations since SpeakIt started. Dictate a few "
+        lines.append("No dictations since HeySpeaky started. Dictate a few "
                      "sentences, then save the report again.")
         text = "\n".join(lines) + "\n"
     return redact(text + "\n" + _WHAT_TO_LOOK_FOR)
@@ -294,7 +294,7 @@ def save_report(cfg, entries, log_dir, out_dir=None, check_network=True):
     """Writes the ZIP and returns its path."""
     out_dir = Path(out_dir) if out_dir else (desktop_dir() or Path(log_dir))
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "SpeakIt-report-{}.zip".format(
+    path = out_dir / "HeySpeaky-report-{}.zip".format(
         time.strftime("%Y%m%d-%H%M%S"))
 
     safe_cfg = copy.deepcopy(cfg)
@@ -308,7 +308,7 @@ def save_report(cfg, entries, log_dir, out_dir=None, check_network=True):
         log_dir = Path(log_dir)
         if log_dir.is_dir():
             for log in sorted(log_dir.iterdir()):
-                if log.is_file() and (log.name.startswith("speakit.log")
+                if log.is_file() and (log.name.startswith("heyspeaky.log")
                                       or log.name == "stdout.log"):
                     try:
                         content = log.read_text(encoding="utf-8",

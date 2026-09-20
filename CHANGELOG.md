@@ -1,12 +1,14 @@
 # Changelog
 
-Notable changes to SpeakIt, called VoiceType until September 2026. Format
-follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Notable changes to HeySpeaky, called VoiceType until September 2026 and then
+SpeakIt. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
-VoiceType is now SpeakIt. Old GitHub links still work, a saved API key is still
-found where it was, and the installer replaces the old shortcuts.
+VoiceType became SpeakIt, and SpeakIt is now HeySpeaky. Old GitHub links still
+work, a key saved under either old name is still found, settings and the key
+are copied across on the first update, and the old shortcuts are removed so
+only one copy starts with Windows.
 
 ### Fixed
 

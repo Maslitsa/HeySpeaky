@@ -24,7 +24,7 @@ from RealtimeSTT import AudioToTextRecorder
 
 from .hardware import resolve_hardware
 
-logger = logging.getLogger("speakit.engine")
+logger = logging.getLogger("heyspeaky.engine")
 
 # Effectively "never auto-stop", used for push-to-talk.
 _NO_AUTO_STOP = 3600.0
@@ -74,7 +74,7 @@ class TranscriptionEngine:
     def _initialise(self):
         """Loads the models, retrying offline and then with backoff.
 
-        SpeakIt starts from a Startup shortcut, which fires before Wi-Fi is
+        HeySpeaky starts from a Startup shortcut, which fires before Wi-Fi is
         up. faster-whisper contacts Hugging Face to check the model revision
         even when the weights are already cached, so a cold boot used to fail
         with "Server disconnected" and leave the app loaded but useless. The

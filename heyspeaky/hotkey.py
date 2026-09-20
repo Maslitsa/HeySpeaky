@@ -24,7 +24,7 @@ from ctypes import wintypes
 
 import keyboard
 
-logger = logging.getLogger("speakit.hotkey")
+logger = logging.getLogger("heyspeaky.hotkey")
 
 class _MOUSEINPUT(ctypes.Structure):
     _fields_ = [

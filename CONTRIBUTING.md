@@ -12,12 +12,12 @@ Never paste an API key, including inside a log excerpt.
 ## Development setup
 
 ```powershell
-git clone https://github.com/Maslitsa/SpeakIt.git
-cd SpeakIt
+git clone https://github.com/Maslitsa/HeySpeaky.git
+cd HeySpeaky
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -NoStart -NoAutostart
 ```
 
-`-NoStart -NoAutostart` builds the environment without registering SpeakIt to
+`-NoStart -NoAutostart` builds the environment without registering HeySpeaky to
 run at sign-in, which is usually what you want while working on it.
 
 Run it with a console so you can watch it:
@@ -32,13 +32,13 @@ Run it the way it ships, with no window:
 .venv\Scripts\pythonw.exe run.py
 ```
 
-Logs are in `logs\speakit.log`.
+Logs are in `logs\heyspeaky.log`.
 
 ## Before opening a pull request
 
 ```powershell
 .venv\Scripts\python.exe -m unittest discover -s tests
-.venv\Scripts\python.exe -m compileall -q speakit run.py tools
+.venv\Scripts\python.exe -m compileall -q heyspeaky run.py tools
 ```
 
 The tests are stdlib `unittest` plus numpy and run in about two seconds. They
@@ -55,7 +55,7 @@ a clean Windows runner, and scans for committed API keys.
 
 **Comments explain why, not what.** Several defaults here look arbitrary and
 are not. They came from a measurement, and the comment saying which one is the
-reason nobody undoes it later. `speakit/config.py` is the clearest example.
+reason nobody undoes it later. `heyspeaky/config.py` is the clearest example.
 
 **If you change a default that was chosen by measurement, include a
 measurement.** Otherwise the next person will change it back.
