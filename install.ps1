@@ -537,6 +537,15 @@ function Select-Backend {
     return 'cloud'
 }
 
+function Set-LocalModel {
+    # Which local model to fall back on is a hardware question. Measured on a
+    # laptop with no GPU: base answers in 1.2-1.7s, small takes 4-7s and
+    # large-v3-turbo 17-19s, which is far too long to wait after a sentence.
+    # With a CUDA card the big model is both fast and much better, so it wins.
+    $code = 'import sys; sys.path.insert(0, sys.argv[1]); from heyspeaky import config; from heyspeaky.hardware import resolve_hardware; c = config.load(); device, _ = resolve_hardware(''auto'', ''auto''); c[''model''][''final''] = ''large-v3-turbo'' if device == ''cuda'' else ''base''; config.save(c); print(''local model: '' + c[''model''][''final''])'
+    Invoke-Native 'Choosing the local model' $VenvPy @('-c', $code, $Root)
+}
+
 function Set-ConfigBackend([string]$Value) {
     # config.py is standard library only, so this runs before anything is
     # installed, and config.save() writes the file exactly as the app does.
@@ -942,6 +951,7 @@ function Invoke-Install {
 
     if ($choice) {
         Set-ConfigBackend $choice
+        Set-LocalModel
     }
 
     Write-Step 'Installing packages (about 1 GB and a few minutes the first time)'

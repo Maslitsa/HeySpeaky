@@ -34,10 +34,10 @@ DEMO = ROOT / "demo" / "four_languages.wav"
 # compares words and not scripts.
 DEMO_REFERENCE = ("I already sent the invoice, "
                   "aber ich warte noch auf eine Antwort, "
-                  "no klient do sih por ne otvetil, "
-                  "sondyktan erten konyrau shalamyn.")
+                  "но клиент до сих пор не ответил, "
+                  "сондықтан ертең қоңырау шаламын.")
 
-MODEL_LOAD_TIMEOUT = 300.0
+MODEL_LOAD_TIMEOUT = 900.0
 
 
 def _try_demo():
@@ -91,7 +91,7 @@ def run_cloud(cfg, clips, read_pcm):
         print("  no OpenAI key found, skipping the cloud", flush=True)
         return results
     for clip in clips:
-        pcm = read_pcm(clip, int(cfg["audio"]["sample_rate"]))
+        pcm, _ = read_pcm(clip, int(cfg["audio"]["sample_rate"]))
         started = time.monotonic()
         try:
             text = backend.transcribe(pcm, "")
@@ -127,7 +127,7 @@ def run_local(cfg, model_name, clips, read_pcm):
     backend = LocalBackend(engine, local_cfg)
     try:
         for clip in clips:
-            pcm = read_pcm(clip, int(local_cfg["audio"]["sample_rate"]))
+            pcm, _ = read_pcm(clip, int(local_cfg["audio"]["sample_rate"]))
             started = time.monotonic()
             try:
                 text = backend.transcribe(pcm, "")
