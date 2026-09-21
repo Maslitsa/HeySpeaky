@@ -27,6 +27,7 @@ import webrtcvad
 
 from . import config as config_module
 from . import diagnostics
+from . import usage
 from . import output
 from . import languages
 from .engine import TranscriptionEngine
@@ -154,6 +155,7 @@ class App:
             on_backend=self._on_tray_backend,
             backend=cfg["transcription"]["backend"],
             on_report=self._on_tray_report,
+            usage_text=lambda: usage.describe(self.cfg),
         )
 
     # -- speech detection --------------------------------------------------
@@ -505,6 +507,11 @@ class App:
                 "microphone driver lost part of the recording.",
                 stats["seconds"], held,
             )
+        if backend == "cloud" and stats["seconds"] > 0:
+            usage.record(stats["seconds"])
+            spent = usage.warning(self.cfg)
+            if spent:
+                self.post(self.overlay.flash, "done", "", spent, 3.0)
         self.recent.add({
             "time": time.strftime("%H:%M:%S"),
             "pcm": pcm,

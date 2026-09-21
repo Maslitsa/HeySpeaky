@@ -587,5 +587,56 @@ class GlassPill(unittest.TestCase):
         self.assertEqual(frame.size, self.window())
 
 
+from heyspeaky import usage  # noqa: E402
+
+
+class Spending(unittest.TestCase):
+    """The tally of what the OpenAI key is costing this month."""
+
+    def setUp(self):
+        import copy
+        import os
+        from unittest import mock
+
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        patcher = mock.patch.dict(os.environ, {"APPDATA": self.folder.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.cfg = copy.deepcopy(config_module.DEFAULTS)
+
+    def test_minutes_and_money_add_up(self):
+        usage.record(60.0)
+        usage.record(30.0)
+        figures = usage.summary(self.cfg)
+        self.assertEqual(figures["dictations"], 2)
+        self.assertAlmostEqual(figures["minutes"], 1.5)
+        self.assertAlmostEqual(figures["cost"], 1.5 * 0.006)
+        self.assertIn("about $0.01", usage.describe(self.cfg))
+
+    def test_nothing_sent_reads_plainly(self):
+        self.assertIn("nothing sent", usage.describe(self.cfg))
+
+    def test_the_warning_comes_once_a_month(self):
+        self.cfg["transcription"]["cloud"]["monthly_warning_usd"] = 0.01
+        usage.record(600.0)
+        first = usage.warning(self.cfg)
+        self.assertIsNotNone(first)
+        self.assertIn("$", first)
+        self.assertIsNone(usage.warning(self.cfg))
+
+    def test_no_warning_below_the_threshold_or_when_it_is_off(self):
+        usage.record(60.0)
+        self.assertIsNone(usage.warning(self.cfg))
+        self.cfg["transcription"]["cloud"]["monthly_warning_usd"] = 0
+        usage.record(100000.0)
+        self.assertIsNone(usage.warning(self.cfg))
+
+    def test_the_tally_never_lands_in_the_project(self):
+        usage.record(1.0)
+        self.assertTrue(str(usage.path()).startswith(self.folder.name))
+        self.assertTrue(usage.path().is_file())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

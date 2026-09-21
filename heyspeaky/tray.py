@@ -53,6 +53,7 @@ class Tray:
         on_backend=None,
         backend="local",
         on_report=None,
+        usage_text=None,
     ):
         self._config_path = config_path
         self._log_dir = log_dir
@@ -68,6 +69,8 @@ class Tray:
         self._on_backend = on_backend
         self._backend = backend or "local"
         self._on_report = on_report
+        # A callable, so the figure is current every time the menu opens.
+        self._usage_text = usage_text
 
         self._status = "Starting…"
         self._paused = False
@@ -98,6 +101,12 @@ class Tray:
             pystray.MenuItem("Transcribed by", self._backend_menu()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Edit settings", self._open_config),
+            pystray.MenuItem(
+                lambda _: self._usage_text() if self._usage_text else "",
+                None,
+                enabled=False,
+                visible=lambda _: bool(self._usage_text),
+            ),
             pystray.MenuItem("Open logs", self._open_logs),
             pystray.MenuItem("Save a problem report", self._report),
             pystray.Menu.SEPARATOR,

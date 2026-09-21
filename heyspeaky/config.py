@@ -160,6 +160,15 @@ DEFAULTS = {
             # If the API errors or times out, transcribe locally instead of
             # losing what you just said.
             "fallback_to_local": True,
+            # What a minute of audio costs, for the tally in the tray. OpenAI
+            # does not return a price with a transcription, so this is an
+            # estimate; check their pricing page if it changes.
+            "price_per_minute": 0.006,
+            # Once the month's estimate passes this, the app says so once.
+            # It does not switch to the local model: that one is much weaker
+            # on Russian and Kazakh, and a silent downgrade is worse than a
+            # bigger bill. 0 turns the warning off.
+            "monthly_warning_usd": 5.0,
         },
     },
     "hotkey": {

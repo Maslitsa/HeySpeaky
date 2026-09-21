@@ -175,6 +175,18 @@ def _microphones():
         pa.terminate()
 
 
+def _spent(cfg):
+    """The month's OpenAI tally, or why it is not known."""
+    try:
+        from . import usage
+
+        figures = usage.summary(cfg)
+        return "{:.0f} min over {} dictations, about ${:.2f} (estimate)".format(
+            figures["minutes"], figures["dictations"], figures["cost"])
+    except Exception as exc:
+        return "not known ({})".format(str(exc)[:40])
+
+
 def key_source(cfg):
     """Where the OpenAI key comes from. Never the key itself."""
     cloud = cfg["transcription"]["cloud"]
@@ -274,6 +286,7 @@ def report_text(cfg, entries, check_network=True):
         "  Split at pauses  {}".format(
             "on" if cfg["transcription"].get("per_segment_language") else "off"),
         "  OpenAI key       {}".format(key_source(cfg)),
+        "  Spent this month {}".format(_spent(cfg)),
         "  OpenAI reachable {}".format(
             _openai_reachable() if check_network else "not checked"),
         "",
