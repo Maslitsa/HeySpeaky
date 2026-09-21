@@ -58,10 +58,21 @@ without jargon, and say what you actually did and what you could not do.
 
 ## Before you push
 
+The first two of these run by themselves: `tools\precommit.py` is wired into
+`.claude\settings.json` as a check before every commit, and it also refuses a
+commit that carries a key, a recording or AI attribution. It takes about six
+seconds and it is the reason none of that reaches GitHub by accident.
+
+Running them by hand needs an interpreter that has the app's packages. **This
+working copy has no `.venv`** - the owner runs the installed app - so use the
+one the installer built, or set `HEYSPEAKY_PYTHON` to any environment that has
+them:
+
 ```powershell
-.venv\Scripts\python.exe -m unittest discover -s tests
-.venv\Scripts\python.exe -W error::SyntaxWarning -m compileall -q heyspeaky run.py tools
-.venv\Scripts\python.exe tools\ui_lab.py --out lab.png   # if the look changed
+$py = "$env:LOCALAPPDATA\Programs\HeySpeaky\.venv\Scripts\python.exe"
+& $py -m unittest discover -s tests
+& $py -W error::SyntaxWarning -m compileall -q heyspeaky run.py tools
+& $py tools\ui_lab.py --out lab.png   # if the look changed
 ```
 
 And in PowerShell, for either script you touched:

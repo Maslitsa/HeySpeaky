@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/precommit.py",
+            "timeout": 180,
+            "statusMessage": "Checking the commit"
+          }
+        ]
+      }
+    ]
+  }
+}
