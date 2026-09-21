@@ -103,6 +103,51 @@ def sprite(size, radius, colour):
     return coloured
 
 
+def button(size, kind, fill, glyph, dim=1.0):
+    """A round button with a cross or a tick drawn through it.
+
+    Drawn at four times the size and scaled down, because a thin diagonal
+    stroke is exactly where Tk's lack of antialiasing shows.
+    """
+    key = (size, kind, fill, glyph, round(dim, 2))
+    if key in _sprite_cache:
+        return _sprite_cache[key]
+    big = size * 4
+    face = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    drawing = ImageDraw.Draw(face)
+    drawing.ellipse((0, 0, big - 1, big - 1), fill=tuple(fill) + (255,))
+    width = max(2, int(round(theme.GLYPH_STROKE * 4)))
+    ink = tuple(glyph) + (255,)
+    if kind == "cancel":
+        drawing.line((big * 0.34, big * 0.34, big * 0.66, big * 0.66),
+                     fill=ink, width=width)
+        drawing.line((big * 0.66, big * 0.34, big * 0.34, big * 0.66),
+                     fill=ink, width=width)
+    else:
+        drawing.line((big * 0.30, big * 0.52, big * 0.45, big * 0.67),
+                     fill=ink, width=width)
+        drawing.line((big * 0.45, big * 0.67, big * 0.71, big * 0.35),
+                     fill=ink, width=width)
+    face = face.resize((size, size), Image.LANCZOS)
+    if dim < 1.0:
+        alpha = face.getchannel("A").point(lambda value: int(value * dim))
+        face.putalpha(alpha)
+    _sprite_cache[key] = face
+    return face
+
+
+def button_boxes(glass):
+    """Where the two buttons are, in window pixels, for hit testing."""
+    left, top, right, bottom = glass.box
+    size = max(10, int(round(theme.BUTTON * glass.scale)))
+    inset = int(round(theme.BUTTON_INSET * glass.scale))
+    y = (top + bottom) // 2 - size // 2
+    return {
+        "cancel": (left + inset, y, left + inset + size, y + size),
+        "accept": (right - inset - size, y, right - inset, y + size),
+    }
+
+
 def _fit(text, drawing, text_font, limit):
     """Shortens text with an ellipsis until it fits the space it has."""
     if drawing.textlength(text, font=text_font) <= limit:
@@ -133,13 +178,15 @@ def _rim_glow(size, radius):
 class Glass(object):
     """The parts of a frame that stay still while the pill is on screen."""
 
-    __slots__ = ("image", "box", "light", "scale")
+    __slots__ = ("image", "box", "light", "scale", "open_share")
 
-    def __init__(self, image, box, light, scale):
+    def __init__(self, image, box, light, scale, open_share=1.0):
         self.image = image
         self.box = box
         self.light = light
         self.scale = scale
+        # Below 1 the pill is still growing, and nothing is drawn inside it.
+        self.open_share = open_share
 
 
 def prepare(backdrop, width=theme.WIDTH, height=theme.HEIGHT, rim=False,
@@ -226,42 +273,62 @@ def prepare(backdrop, width=theme.WIDTH, height=theme.HEIGHT, rim=False,
     base.paste(layer, (box[0], box[1]), layer)
 
     plain_box = (box[0] // SS, box[1] // SS, box[2] // SS, box[3] // SS)
-    return Glass(base.resize(window, Image.LANCZOS), plain_box, light, scale)
+    return Glass(base.resize(window, Image.LANCZOS), plain_box, light, scale,
+                 open_share)
 
 
 def paint(glass, state="listening", levels=None, text="", status="",
           label=""):
     """One frame: the prepared glass, plus the parts that move."""
     frame = glass.image.copy()
+    if glass.open_share < 0.98:
+        # Still growing. An empty capsule opening is the whole effect; buttons
+        # drawn into a pill that is not its full width look broken.
+        return frame
     drawing = ImageDraw.Draw(frame)
     scale = glass.scale
-    ink = theme.TEXT_DARK if glass.light else theme.TEXT_LIGHT
-    muted_alpha = int(255 * theme.MUTED_STRENGTH)
+    # The pill is dark whatever is behind it, so the ink never changes.
+    ink = theme.TEXT_LIGHT
 
     left, top, right, bottom = glass.box
     middle = (top + bottom) // 2
-    pad = int(round(theme.PADDING * scale))
-    cursor = left + pad
+    boxes = button_boxes(glass)
+    size = boxes["cancel"][2] - boxes["cancel"][0]
 
-    dot = max(4, int(round(theme.DOT * scale)))
-    dot_sprite = sprite((dot, dot), dot // 2,
-                        theme.STATE_COLOURS.get(state,
-                                                theme.STATE_COLOURS["done"]))
-    frame.paste(dot_sprite, (cursor, middle - dot // 2), dot_sprite)
-    cursor += dot + int(round(12 * scale))
+    # Left: throw this recording away. Dimmed once there is nothing to throw.
+    cancel_dim = 1.0 if state in ("listening", "transcribing") \
+        else theme.BUTTON_DIM
+    cross = button(size, "cancel", theme.CANCEL_FILL, theme.CANCEL_GLYPH,
+                   cancel_dim)
+    frame.paste(cross, boxes["cancel"][:2], cross)
+
+    # Right: finish. It goes green for the moment before the pill leaves.
+    if state == "done":
+        tick = button(size, "accept", theme.DONE_FILL, theme.DONE_GLYPH)
+    elif state == "error":
+        tick = button(size, "accept", theme.ACCEPT_FILL, theme.ACCEPT_GLYPH,
+                      theme.BUTTON_DIM)
+    else:
+        tick = button(size, "accept", theme.ACCEPT_FILL, theme.ACCEPT_GLYPH)
+    frame.paste(tick, boxes["accept"][:2], tick)
+
+    inner_left = boxes["cancel"][2] + int(round(theme.PADDING * scale))
+    inner_right = boxes["accept"][0] - int(round(theme.PADDING * scale))
 
     if levels:
         bar_width = max(2, int(round(theme.BAR_WIDTH * scale)))
         pitch = bar_width + max(1, int(round(theme.BAR_GAP * scale)))
         tallest = max(4, int(round(theme.BAR_MAX * scale)))
+        # Centred between the buttons, whatever the bar count is.
+        span = len(levels) * pitch - (pitch - bar_width)
+        start = inner_left + max(0, (inner_right - inner_left - span) // 2)
         for index, level in enumerate(levels):
             if state == "listening":
                 reach = max(0.0, min(1.0, level))
                 bar_height = int(round(
                     (theme.BAR_MIN + (theme.BAR_MAX - theme.BAR_MIN) * reach)
                     * scale))
-                bar_colour = _siri_colour(
-                    index / float(max(1, len(levels) - 1)))
+                bar_colour = theme.BAR_LIVE
             else:
                 bar_height = max(2, int(round(theme.BAR_FLAT * scale)))
                 bar_colour = theme.BAR_QUIET
@@ -269,35 +336,22 @@ def paint(glass, state="listening", levels=None, text="", status="",
             if bar_height != tallest:
                 bar = bar.resize((bar_width, max(2, bar_height)),
                                  Image.LANCZOS)
-            frame.paste(bar, (cursor + index * pitch, middle - bar.height // 2),
+            frame.paste(bar, (start + index * pitch, middle - bar.height // 2),
                         bar)
-        cursor += len(levels) * pitch + int(round(12 * scale))
+        return frame
 
-    body = font(max(9, int(round(theme.FONT_SIZE * scale))))
-    small = font(max(8, int(round(theme.LABEL_SIZE * scale))))
-    text_right = right - pad
-    if label:
-        label_width = drawing.textlength(label, font=small)
-        drawing.text((text_right - label_width, middle), label, font=small,
-                     fill=ink + (muted_alpha,), anchor="lm")
-        text_right -= label_width + int(round(16 * scale))
-
+    # No waveform: the only thing worth saying here is what went wrong.
     message = text or status
-    if message:
-        message = _fit(message, drawing, body, max(10, text_right - cursor))
-        colour = ink
-        alpha = 255 if text else muted_alpha
-        if state == "error":
-            colour = theme.STATE_COLOURS["error"]
-            alpha = 255
-        if not glass.light:
-            # A dark halo keeps light text readable where the wallpaper
-            # underneath happens to be bright.
-            drawing.text((cursor, middle + 1), message, font=body,
-                         fill=(0, 0, 0, int(255 * theme.TEXT_SHADOW)),
-                         anchor="lm")
-        drawing.text((cursor, middle), message, font=body,
-                     fill=colour + (alpha,), anchor="lm")
+    if not message:
+        return frame
+    body = font(max(9, int(round(theme.FONT_SIZE * scale))))
+    message = _fit(message, drawing, body, max(10, inner_right - inner_left))
+    colour = theme.STATE_COLOURS["error"] if state == "error" else ink
+    centre = (inner_left + inner_right) // 2
+    drawing.text((centre, middle + 1), message, font=body,
+                 fill=(0, 0, 0, int(255 * theme.TEXT_SHADOW)), anchor="mm")
+    drawing.text((centre, middle), message, font=body, fill=colour + (255,),
+                 anchor="mm")
     return frame
 
 

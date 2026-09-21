@@ -16,10 +16,11 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/config.py` | defaults, and config.json loading |
 | `heyspeaky/theme.py` | every colour, size and timing of the pill |
 | `heyspeaky/glass.py` | draws the pill: glass over a photo of the desktop |
-| `heyspeaky/overlay.py` | the window: click-through, never focused |
+| `heyspeaky/overlay.py` | the window: never focused, and its two buttons |
 | `heyspeaky/engine.py` | RealtimeSTT: capture and voice activity detection |
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
 | `heyspeaky/languages.py` | the languages list and its tray grouping |
+| `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
 | `heyspeaky/diagnostics.py` | the problem report people send you |
 | `heyspeaky/tray.py` `hotkey.py` `mic.py` `output.py` `winjob.py` | the rest |
 | `install.ps1` `uninstall.ps1` | how everyone installs and removes it |
@@ -43,9 +44,16 @@ without jargon, and say what you actually did and what you could not do.
 - **There is no console.** Under pythonw.exe `print()` goes nowhere and can
   raise; use the logger.
 - **The look changes in `theme.py`**, and you look at the result with
-  `tools/ui_lab.py` before wiring it in.
-- **The pill must never take focus, never block clicks and never appear in
-  Alt+Tab.** That is what makes dictation feel invisible.
+  `tools/ui_lab.py` before wiring it in. The pill is small and dark: cross,
+  waveform, tick, and nothing else. It does not repeat the transcript back,
+  because the transcript is already in the window you were typing in.
+- **The pill must never take focus and never appear in Alt+Tab.** That is what
+  makes dictation feel invisible. It *does* take clicks now, because the cross
+  and the tick on it are real buttons and a window cannot be both clickable
+  and click-through; while it is on screen its own small rectangle above the
+  taskbar swallows clicks. `overlay.buttons_clickable: false` gives the old
+  behaviour back. WS_EX_NOACTIVATE stays either way, so a click on the pill
+  never moves the caret out of the window you were typing in.
 - **The transcription worker must die with the app** (`winjob.py`). Orphans
   once wrote 8.7 GB of the same traceback.
 - **Keys live outside the project**, in `%APPDATA%\HeySpeaky\openai.key`. The

@@ -14,6 +14,9 @@ Timeline of a press:
 
 Releasing before the engage delay does nothing at all, which is what keeps
 ordinary Ctrl+Alt+<key> shortcuts and AltGr from tripping the recorder.
+
+That tap window is narrow and easy to miss, so there is a second way into
+hands-free recording: hold Ctrl and tap Alt twice. Ctrl+Alt again ends it.
 """
 
 import ctypes
@@ -100,9 +103,11 @@ ALTGR_KEYS = {"alt gr", "altgr", "right alt gr"}
 class HotkeyListener:
     """Watches for the Ctrl+Alt chord and reports engage/tap/hold/cancel."""
 
-    def __init__(self, config, on_engage, on_tap, on_hold_release, on_cancel):
+    def __init__(self, config, on_engage, on_tap, on_hold_release, on_cancel,
+                 on_latch=None):
         self._engage_delay = float(config["engage_delay"])
         self._tap_max = float(config["tap_max"])
+        self._double_gap = float(config.get("double_alt_gap", 0.45))
         self._accept_altgr = bool(config["accept_altgr"])
         self._cancel_on_other_key = bool(config["cancel_on_other_key"])
 
@@ -110,12 +115,15 @@ class HotkeyListener:
         self._on_tap = on_tap
         self._on_hold_release = on_hold_release
         self._on_cancel = on_cancel
+        self._on_latch = on_latch
 
         self._lock = threading.RLock()
         self._pressed = set()
         self._combo_active = False
         self._engaged = False
         self._press_started = 0.0
+        self._alt_taps = []
+        self._gesture_latched = False
         self._timer = None
         self._hook = None
         self._paused = False
@@ -230,9 +238,7 @@ class HotkeyListener:
         with self._lock:
             self._paused = paused
             if paused:
-                self._cancel_timer()
-                self._combo_active = False
-                self._engaged = False
+                self._reset_locked()
         logger.info("Hotkey listener %s", "paused" if paused else "resumed")
 
     @property
@@ -243,6 +249,8 @@ class HotkeyListener:
         """Clears engaged state after the controller ends a recording."""
         with self._lock:
             self._engaged = False
+            self._gesture_latched = False
+            self._alt_taps = []
 
     # -- internals ---------------------------------------------------------
 
@@ -274,6 +282,9 @@ class HotkeyListener:
         kind = self._classify(name)
 
         with self._lock:
+            # Holding a key makes Windows repeat KEY_DOWN. A repeat is not a
+            # tap, and counting it as one would latch on a single long Alt.
+            repeat = name in self._pressed
             if event.event_type == keyboard.KEY_DOWN:
                 self._pressed.add(name)
             else:
@@ -301,6 +312,30 @@ class HotkeyListener:
                 self._fire(self._on_cancel)
                 return
 
+            if (
+                self._double_gap > 0
+                and self._on_latch is not None
+                and kind == "alt"
+                and event.event_type == keyboard.KEY_DOWN
+                and not repeat
+                and has_ctrl
+                and not has_other
+                and not self._engaged
+            ):
+                now = time.monotonic()
+                self._alt_taps = [when for when in self._alt_taps
+                                  if now - when <= self._double_gap]
+                self._alt_taps.append(now)
+                if len(self._alt_taps) >= 2:
+                    self._alt_taps = []
+                    self._cancel_timer()
+                    # Engaged from here on, so the release below does nothing
+                    # and the next Ctrl+Alt is read as "stop".
+                    self._engaged = True
+                    self._gesture_latched = True
+                    logger.info("Latched by two Alt taps")
+                    self._fire(self._on_latch)
+
             combo = has_ctrl and has_alt and not has_other
             if combo and not self._combo_active:
                 self._combo_active = True
@@ -312,6 +347,11 @@ class HotkeyListener:
                 held = time.monotonic() - self._press_started
                 if self._engaged:
                     self._engaged = False
+                    if self._gesture_latched:
+                        # Two Alt taps already started it; letting go of the
+                        # keys is not meant to stop anything.
+                        self._gesture_latched = False
+                        return
                     if held < self._tap_max:
                         self._fire(self._on_tap)
                     else:
@@ -321,6 +361,8 @@ class HotkeyListener:
         self._cancel_timer()
         self._combo_active = False
         self._engaged = False
+        self._gesture_latched = False
+        self._alt_taps = []
 
     def _start_timer(self):
         self._cancel_timer()

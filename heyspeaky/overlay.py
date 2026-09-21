@@ -8,6 +8,13 @@ properties:
   WS_EX_TRANSPARENT  clicks pass straight through it
   WS_EX_TOOLWINDOW   never appears in the taskbar or Alt+Tab
 
+The cross and the tick are real buttons, and a window cannot both be clicked
+and be clicked through. So WS_EX_TRANSPARENT is dropped while
+overlay.buttons_clickable is on, and for as long as the pill is on screen its
+own small rectangle - a few hundred pixels above the taskbar - takes clicks
+instead of passing them down. WS_EX_NOACTIVATE still holds, so clicking it
+never steals focus and never sends your text to the wrong window.
+
 The window itself is opaque. It looks like glass because it photographs the
 desktop underneath before it appears and draws that, blurred, as its own
 background - see glass.py for why Windows leaves no better option.
@@ -18,6 +25,7 @@ updates through a queue for exactly that reason.
 
 import ctypes
 import logging
+import threading
 import tkinter as tk
 from collections import deque
 
@@ -123,10 +131,13 @@ def _monitor_scale():
 class Overlay:
     """Draws the recording pill, its live waveform and the transcript."""
 
-    def __init__(self, root, config):
+    def __init__(self, root, config, on_cancel=None, on_accept=None):
         self._root = root
         self._cfg = config
         self._scale = _monitor_scale()
+        self._on_cancel = on_cancel
+        self._on_accept = on_accept
+        self._clickable = bool(config.get("buttons_clickable", True))
 
         self._state = "listening"
         self._text = ""
@@ -158,6 +169,8 @@ class Overlay:
 
         self._holder = tk.Label(root, bd=0, highlightthickness=0, bg="#000000")
         self._holder.pack()
+        if self._clickable:
+            self._holder.bind("<Button-1>", self._on_click)
         root.update_idletasks()
         self._apply_window_styles()
 
@@ -170,13 +183,35 @@ class Overlay:
             return
         user32 = ctypes.windll.user32
         style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-        style |= (
-            WS_EX_TOOLWINDOW
-            | WS_EX_NOACTIVATE
-            | WS_EX_TRANSPARENT
-            | WS_EX_LAYERED
-        )
+        style |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED
+        if not self._clickable:
+            style |= WS_EX_TRANSPARENT
         user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+
+    # -- the two buttons ---------------------------------------------------
+
+    def _on_click(self, event):
+        """Works out which button was hit, if either."""
+        if self._glass is None or not self._visible:
+            return
+        for name, box in glass.button_boxes(self._glass).items():
+            if box[0] <= event.x <= box[2] and box[1] <= event.y <= box[3]:
+                self._press(name)
+                return
+
+    def _press(self, name):
+        if name == "cancel":
+            callback = self._on_cancel
+            allowed = self._state in ("listening", "transcribing")
+        else:
+            callback = self._on_accept
+            allowed = self._state == "listening"
+        if callback is None or not allowed:
+            return
+        logger.info("Pill %s button clicked", name)
+        # Off the Tk thread: the controller takes locks and stops the
+        # recorder, and the window must keep drawing while it does.
+        threading.Thread(target=callback, daemon=True).start()
 
     def _window_size(self):
         margin = int(round(theme.SHADOW_MARGIN * self._scale))

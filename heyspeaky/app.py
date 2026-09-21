@@ -30,6 +30,7 @@ from . import diagnostics
 from . import updates
 from . import usage
 from . import output
+from . import sound
 from . import languages
 from .engine import TranscriptionEngine
 from .hotkey import HotkeyListener
@@ -101,7 +102,12 @@ class App:
 
         self.root = tk.Tk()
         self.root.title("HeySpeaky")
-        self.overlay = Overlay(self.root, cfg["overlay"])
+        self.overlay = Overlay(
+            self.root,
+            cfg["overlay"],
+            on_cancel=self._on_button_cancel,
+            on_accept=self._on_button_accept,
+        )
 
         self.engine = TranscriptionEngine(
             cfg,
@@ -138,6 +144,7 @@ class App:
             on_tap=self._on_tap,
             on_hold_release=self._on_hold_release,
             on_cancel=self._on_cancel,
+            on_latch=self._on_latch,
         )
         # A config.json edited by hand before the tray could add languages can
         # name a language in the menu and not in the list, or the other way.
@@ -318,6 +325,41 @@ class App:
         self.post(
             self.overlay.set_status, "Listening · tap Ctrl+Alt to stop"
         )
+
+    def _on_latch(self):
+        """Ctrl and two taps of Alt: start hands-free, without the hold."""
+        with self._transition_lock:
+            with self._state_lock:
+                if self.state != IDLE:
+                    return
+            if not self.engine.ready:
+                self.post(self.overlay.flash, "error", "",
+                          "Loading speech models, one moment…", 2.0)
+                return
+            self._begin_recording()
+            with self._state_lock:
+                if self.state != RECORDING_HOLD:
+                    return
+                self.state = RECORDING_LATCHED
+            self.engine.set_latched(True)
+            logger.info("Latched from the start (Ctrl + Alt Alt)")
+
+    # -- the pill's own buttons -------------------------------------------
+
+    def _on_button_cancel(self):
+        """The cross on the pill: throw this recording away."""
+        self._on_cancel()
+
+    def _on_button_accept(self):
+        """The tick on the pill: finish now, whichever way it was started."""
+        with self._transition_lock:
+            with self._state_lock:
+                if self.state not in (RECORDING_HOLD, RECORDING_LATCHED):
+                    return
+            # A push-to-talk recording is still holding the keys down; tell
+            # the listener not to act on the release that follows.
+            self._consume_release = True
+            self._finish_recording()
 
     def _on_hold_release(self):
         with self._transition_lock:
@@ -551,6 +593,10 @@ class App:
             # silent downgrade reads as the app having got worse by itself.
             label += " · local ({})".format(self.router.last_fallback)
         state = "done" if status in ("inserted", "copied") else "error"
+        if state == "done":
+            settings = self.cfg.get("sound", {})
+            sound.play(settings.get("finish", sound.DEFAULT),
+                       float(settings.get("volume", sound.VOLUME)))
         self.post(self.overlay.flash, state, text, label)
 
     def _start_max_timer(self):

@@ -178,6 +178,10 @@ DEFAULTS = {
         # Released before this (measured from first press) = tap -> latched
         # recording. Held longer = push-to-talk, stops on release.
         "tap_max": 0.7,
+        # Hands free without having to hit that window: hold Ctrl and tap Alt
+        # twice. Ctrl+Alt again ends it. This is how long the two Alt taps may
+        # be apart. 0 turns the gesture off.
+        "double_alt_gap": 0.45,
         # Right Alt reports as "alt gr" on some layouts. Off by default so
         # typing accented characters never starts a recording.
         "accept_altgr": False,
@@ -273,6 +277,20 @@ DEFAULTS = {
         "margin_bottom": 14,
         "opacity": 0.97,
         "hide_delay": 1.6,
+        # The two round buttons on the pill can be clicked: the cross throws
+        # the recording away, the tick finishes it. While the pill is on
+        # screen those two small circles swallow clicks instead of passing
+        # them to whatever is underneath. Set to false to make the whole pill
+        # untouchable again.
+        "buttons_clickable": True,
+    },
+    "sound": {
+        # Played when the text has been inserted. One of drop, rise, wood, or
+        # "none" for silence. The files are built on this machine the first
+        # time they are needed; nothing is downloaded.
+        "finish": "drop",
+        # 0 to 1. Deliberately quiet.
+        "volume": 0.22,
     },
     "log_level": "INFO",
 }

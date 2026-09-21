@@ -12,8 +12,10 @@ They use only the standard library plus numpy, so CI can run them on a machine
 with no sound card.
 """
 
+import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -671,6 +673,148 @@ class Updates(unittest.TestCase):
         updates._write({"checked": 1000.0, "latest": "99.0"})
         # A network call here would raise, since the time has not passed.
         self.assertEqual(updates.check(now=1000.0 + 60), "99.0")
+
+
+class PillButtons(unittest.TestCase):
+    """The cross and the tick, and where a click has to land to hit them."""
+
+    def window(self):
+        return (theme.WIDTH, theme.HEIGHT + theme.SHADOW_MARGIN * 2)
+
+    def prepared(self, **kwargs):
+        return glass.prepare(Image.new("RGB", self.window(), (30, 30, 40)),
+                             **kwargs)
+
+    def test_both_buttons_sit_inside_the_pill(self):
+        boxes = glass.button_boxes(self.prepared())
+        left, top, right, bottom = self.prepared().box
+        for box in boxes.values():
+            self.assertGreaterEqual(box[0], left)
+            self.assertLessEqual(box[2], right)
+            self.assertGreaterEqual(box[1], top)
+            self.assertLessEqual(box[3], bottom)
+
+    def test_the_two_buttons_do_not_overlap(self):
+        boxes = glass.button_boxes(self.prepared())
+        self.assertLess(boxes["cancel"][2], boxes["accept"][0])
+
+    def test_buttons_are_square_and_the_size_the_theme_asks_for(self):
+        box = glass.button_boxes(self.prepared())["cancel"]
+        self.assertEqual(box[2] - box[0], box[3] - box[1])
+        self.assertEqual(box[2] - box[0], theme.BUTTON)
+
+    def test_a_pill_that_is_still_opening_draws_nothing_inside_it(self):
+        opening = self.prepared(open_share=0.34)
+        painted = glass.paint(opening, state="listening",
+                              levels=[0.5] * theme.BARS)
+        self.assertEqual(painted.tobytes(), opening.image.tobytes())
+
+    def test_a_fully_open_pill_does_draw_something(self):
+        full = self.prepared()
+        painted = glass.paint(full, state="listening",
+                              levels=[0.5] * theme.BARS)
+        self.assertNotEqual(painted.tobytes(), full.image.tobytes())
+
+
+from heyspeaky import sound  # noqa: E402
+
+
+class FinishSound(unittest.TestCase):
+    """The small sound at the end, which is arithmetic rather than a file."""
+
+    def test_every_voice_writes_a_playable_wav(self):
+        import wave
+
+        folder = tempfile.mkdtemp()
+        for name in sound.VOICES:
+            path = sound.write(name, os.path.join(folder, name + ".wav"))
+            with wave.open(path, "rb") as handle:
+                self.assertEqual(handle.getnchannels(), 1)
+                self.assertEqual(handle.getsampwidth(), 2)
+                self.assertEqual(handle.getframerate(), sound.RATE)
+                self.assertGreater(handle.getnframes(), sound.RATE // 10)
+
+    def test_the_sound_is_not_silence(self):
+        folder = tempfile.mkdtemp()
+        path = sound.write("drop", os.path.join(folder, "drop.wav"))
+        with open(path, "rb") as handle:
+            body = handle.read()[44:]
+        self.assertTrue(any(byte for byte in body))
+
+    def test_silence_is_never_played(self):
+        self.assertFalse(sound.play("none"))
+        self.assertFalse(sound.play("drop", volume=0.0))
+
+
+from heyspeaky.hotkey import HotkeyListener  # noqa: E402
+
+
+class _Event(object):
+    """What the keyboard library hands the hook."""
+
+    def __init__(self, name, event_type):
+        self.name = name
+        self.event_type = event_type
+        self.scan_code = 1
+
+
+class DoubleAltGesture(unittest.TestCase):
+    """Hold Ctrl, tap Alt twice, and recording starts hands-free."""
+
+    def listener(self):
+        self.latched = threading.Event()
+        self.tapped = threading.Event()
+        return HotkeyListener(
+            {
+                "engage_delay": 10.0,      # long, so nothing engages by itself
+                "tap_max": 0.7,
+                "accept_altgr": False,
+                "cancel_on_other_key": True,
+                "double_alt_gap": 0.45,
+                "health_check_seconds": 0,
+                "min_reinstall_seconds": 60,
+            },
+            on_engage=lambda: None,
+            on_tap=self.tapped.set,
+            on_hold_release=lambda: None,
+            on_cancel=lambda: None,
+            on_latch=self.latched.set,
+        )
+
+    def send(self, listener, *events):
+        for name, kind in events:
+            listener._on_key_event(_Event(name, kind))
+
+    def test_two_alt_taps_while_ctrl_is_held_latch(self):
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"), ("alt", "up"),
+                  ("alt", "down"))
+        self.assertTrue(self.latched.wait(2.0))
+
+    def test_one_alt_tap_does_nothing(self):
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"), ("alt", "up"))
+        self.assertFalse(self.latched.wait(0.3))
+
+    def test_holding_alt_down_is_not_two_taps(self):
+        """Windows repeats KEY_DOWN while a key is held."""
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                  ("alt", "down"), ("alt", "down"))
+        self.assertFalse(self.latched.wait(0.3))
+
+    def test_alt_without_ctrl_does_nothing(self):
+        listener = self.listener()
+        self.send(listener, ("alt", "down"), ("alt", "up"), ("alt", "down"))
+        self.assertFalse(self.latched.wait(0.3))
+
+    def test_letting_go_after_the_gesture_does_not_report_a_tap(self):
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"), ("alt", "up"),
+                  ("alt", "down"))
+        self.assertTrue(self.latched.wait(2.0))
+        self.send(listener, ("alt", "up"), ("ctrl", "up"))
+        self.assertFalse(self.tapped.wait(0.3))
 
 
 if __name__ == "__main__":

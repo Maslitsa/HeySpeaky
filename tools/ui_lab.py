@@ -84,13 +84,12 @@ def desktop(size):
 
 def states():
     return [
-        ("listening", dict(state="listening", levels=wave(theme.BARS),
-                           status="Listening", label="OpenAI")),
-        ("transcribing", dict(state="transcribing", levels=wave(theme.BARS),
-                              status="Transcribing")),
-        ("done", dict(state="done", text=SENTENCE, label="OpenAI")),
+        ("listening", dict(state="listening", levels=wave(theme.BARS))),
+        ("transcribing", dict(state="transcribing", levels=wave(theme.BARS))),
+        ("done", dict(state="done")),
         ("error", dict(state="error", status="Nothing heard")),
-        ("opening", dict(state="listening", levels=wave(8), open_share=0.34)),
+        ("opening", dict(state="listening", levels=wave(theme.BARS),
+                         open_share=0.34)),
     ]
 
 
