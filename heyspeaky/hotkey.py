@@ -8,15 +8,17 @@ Timeline of a press:
 
     t0            press Ctrl+Alt
     t0 + 0.25s    engage  -> recording starts, overlay appears
-    release
-      before t0+0.7s   -> tap:  recording latches (hands free)
-      after  t0+0.7s   -> hold: recording stops (push to talk)
+    release       -> recording stops (push to talk)
 
 Releasing before the engage delay does nothing at all, which is what keeps
 ordinary Ctrl+Alt+<key> shortcuts and AltGr from tripping the recorder.
 
-That tap window is narrow and easy to miss, so there is a second way into
-hands-free recording: hold Ctrl and tap Alt twice. Ctrl+Alt again ends it.
+That tap window is narrow and easy to miss, so hands-free is a separate
+gesture, done the way Wispr Flow does it: tap the whole chord twice inside
+half a second. Each tap is shorter than the engage delay, so on its own it
+does nothing at all - two of them in a row is a deliberate thing to do, which
+is what makes it safe to act on. While a latched recording is running a
+single tap ends it, and so does a hold, as before.
 """
 
 import ctypes
@@ -107,7 +109,7 @@ class HotkeyListener:
                  on_latch=None):
         self._engage_delay = float(config["engage_delay"])
         self._tap_max = float(config["tap_max"])
-        self._double_gap = float(config.get("double_alt_gap", 0.45))
+        self._double_gap = float(config.get("double_tap_gap", 0.5))
         self._accept_altgr = bool(config["accept_altgr"])
         self._cancel_on_other_key = bool(config["cancel_on_other_key"])
 
@@ -122,8 +124,13 @@ class HotkeyListener:
         self._combo_active = False
         self._engaged = False
         self._press_started = 0.0
-        self._alt_taps = []
-        self._gesture_latched = False
+        self._chord_taps = []
+        # True while another key was pressed during the current chord, which
+        # makes it a shortcut someone was typing rather than a tap at us.
+        self._chord_dirty = False
+        # Set by the controller, so a single tap can mean "stop" while a
+        # hands-free recording is running.
+        self._latched = False
         self._timer = None
         self._hook = None
         self._paused = False
@@ -249,8 +256,9 @@ class HotkeyListener:
         """Clears engaged state after the controller ends a recording."""
         with self._lock:
             self._engaged = False
-            self._gesture_latched = False
-            self._alt_taps = []
+            self._latched = False
+            self._chord_dirty = False
+            self._chord_taps = []
 
     # -- internals ---------------------------------------------------------
 
@@ -312,57 +320,70 @@ class HotkeyListener:
                 self._fire(self._on_cancel)
                 return
 
-            if (
-                self._double_gap > 0
-                and self._on_latch is not None
-                and kind == "alt"
-                and event.event_type == keyboard.KEY_DOWN
-                and not repeat
-                and has_ctrl
-                and not has_other
-                and not self._engaged
-            ):
-                now = time.monotonic()
-                self._alt_taps = [when for when in self._alt_taps
-                                  if now - when <= self._double_gap]
-                self._alt_taps.append(now)
-                if len(self._alt_taps) >= 2:
-                    self._alt_taps = []
-                    self._cancel_timer()
-                    # Engaged from here on, so the release below does nothing
-                    # and the next Ctrl+Alt is read as "stop".
-                    self._engaged = True
-                    self._gesture_latched = True
-                    logger.info("Latched by two Alt taps")
-                    self._fire(self._on_latch)
+            if has_other and self._combo_active:
+                # Ctrl+Alt+something is a shortcut being typed. Whatever
+                # happens to the chord after this, it was not aimed at us.
+                self._chord_dirty = True
 
             combo = has_ctrl and has_alt and not has_other
             if combo and not self._combo_active:
                 self._combo_active = True
+                self._chord_dirty = repeat and kind == "other"
                 self._press_started = time.monotonic()
                 self._start_timer()
             elif not combo and self._combo_active:
                 self._combo_active = False
                 self._cancel_timer()
                 held = time.monotonic() - self._press_started
+                dirty = self._chord_dirty
+                self._chord_dirty = False
                 if self._engaged:
                     self._engaged = False
-                    if self._gesture_latched:
-                        # Two Alt taps already started it; letting go of the
-                        # keys is not meant to stop anything.
-                        self._gesture_latched = False
-                        return
                     if held < self._tap_max:
                         self._fire(self._on_tap)
                     else:
                         self._fire(self._on_hold_release)
+                elif not dirty and held < self._engage_delay:
+                    self._chord_tapped()
+
+    def _chord_tapped(self):
+        """A press of Ctrl+Alt too short to have started anything.
+
+        On its own that is nothing - which is the point, since it is also what
+        the start of every Ctrl+Alt+<key> shortcut looks like. Two in a row is
+        a decision, and that is what hands-free is bound to.
+        """
+        if self._double_gap <= 0:
+            return
+        if self._latched:
+            # Already recording hands-free: one tap is how you end it.
+            self._chord_taps = []
+            logger.info("Tap while latched: ending the recording")
+            self._fire(self._on_engage)
+            return
+        if self._on_latch is None:
+            return
+        now = time.monotonic()
+        self._chord_taps = [when for when in self._chord_taps
+                            if now - when <= self._double_gap]
+        self._chord_taps.append(now)
+        if len(self._chord_taps) >= 2:
+            self._chord_taps = []
+            logger.info("Double tap: recording hands-free")
+            self._fire(self._on_latch)
+
+    def set_recording_latched(self, latched):
+        """Told by the controller, so a single tap can mean "stop"."""
+        with self._lock:
+            self._latched = bool(latched)
+            self._chord_taps = []
 
     def _reset_locked(self):
         self._cancel_timer()
         self._combo_active = False
         self._engaged = False
-        self._gesture_latched = False
-        self._alt_taps = []
+        self._chord_dirty = False
+        self._chord_taps = []
 
     def _start_timer(self):
         self._cancel_timer()

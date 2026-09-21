@@ -1,20 +1,30 @@
 """The small sound at the end of a dictation.
 
-There is no sound file in this repository. The tones are arithmetic, built
-once into `%APPDATA%\\HeySpeaky\\sounds` the first time they are needed, so
+There is no sound file in this repository. Every voice is arithmetic, built
+once into `%APPDATA%\\HeySpeaky\\sounds` the first time it is needed, so
 nothing binary has to be shipped, reviewed or kept in sync with the installer.
+
+The first version of this was pure sine tones, which is what a notification
+sounds like: bright, hard-edged, and in a hurry. None of that is restful. What
+makes a sound feel close and soft is the opposite - a slow attack so nothing
+clicks, most of the energy low down, filtered noise rather than a clean pitch,
+and a tail that fades out instead of stopping. So each voice here is a few
+quiet tones plus a burst of noise pushed through a low-pass filter whose
+cutoff falls as the sound decays, the way a real object dulls as it stops
+moving.
 
 Playing is `winsound`, which is part of Python on Windows, so this adds no
 dependency. It is asynchronous: the sound never delays the text landing in
 your document.
 
-    python -m heyspeaky.sound --preview <folder>   # write every voice to listen to
+    python -m heyspeaky.sound --preview <folder>   # write every voice to hear
 """
 
 import array
 import logging
 import math
 import os
+import random
 import struct
 import sys
 import wave
@@ -23,69 +33,113 @@ logger = logging.getLogger("heyspeaky.sound")
 
 RATE = 44100
 
-# Each voice is a list of partials: (frequency, how loud, how fast it dies,
-# when it starts, how far the pitch falls by the end).
+# A tone is: where the pitch starts and ends, how long that slide takes, how
+# loud it is, how fast it dies away, when it begins, and how gently it starts.
+# Noise is: how loud, its attack and decay, and the low-pass cutoff at the
+# start and at the end.
 VOICES = {
-    # A drop of water into a bowl. Soft, round, no edge to it.
-    "drop": {
+    # A drop of water into a bowl. The pitch of a real drop rises as the
+    # cavity it makes closes up, which is the whole character of the sound.
+    "drip": {
         "seconds": 0.55,
-        "partials": [
-            (880.0, 1.00, 0.10, 0.000, -90.0),
-            (1760.0, 0.14, 0.05, 0.000, -180.0),
+        "tones": [
+            (430.0, 880.0, 0.055, 0.85, 0.15, 0.000, 0.008),
+            (176.0, 168.0, 0.300, 0.40, 0.090, 0.000, 0.010),
         ],
+        "noise": (0.22, 0.003, 0.030, 2400.0, 420.0),
     },
-    # Two notes upward, the way a phone says "done".
-    "rise": {
-        "seconds": 0.60,
-        "partials": [
-            (659.25, 0.80, 0.09, 0.000, 0.0),
-            (987.77, 0.90, 0.16, 0.095, 0.0),
-            (1975.5, 0.08, 0.10, 0.095, 0.0),
+    # A quiet exhale. No pitch at all, only filtered noise swelling and
+    # falling away. The most restful of the four, and the least like an alert.
+    "breath": {
+        "seconds": 0.95,
+        "tones": [
+            (150.0, 120.0, 0.700, 0.16, 0.320, 0.000, 0.120),
         ],
+        "noise": (0.70, 0.130, 0.330, 1100.0, 260.0),
     },
-    # A wooden bar struck softly. Warmest of the three.
-    "wood": {
-        "seconds": 0.70,
-        "partials": [
-            (523.25, 1.00, 0.16, 0.000, 0.0),
-            (1570.0, 0.22, 0.07, 0.000, 0.0),
-            (2616.0, 0.07, 0.04, 0.000, 0.0),
+    # A fingertip on a wooden table. Short, low, dry.
+    "tap": {
+        "seconds": 0.40,
+        "tones": [
+            (142.0, 132.0, 0.120, 0.90, 0.080, 0.000, 0.006),
+            (268.0, 250.0, 0.120, 0.30, 0.045, 0.000, 0.006),
         ],
+        "noise": (0.35, 0.002, 0.022, 1600.0, 300.0),
+    },
+    # A small bowl, struck as softly as it can be. The longest tail.
+    "bowl": {
+        "seconds": 1.40,
+        "tones": [
+            (318.0, 316.0, 1.000, 0.80, 0.620, 0.000, 0.030),
+            (861.0, 856.0, 1.000, 0.22, 0.330, 0.000, 0.030),
+            (159.0, 158.0, 1.000, 0.35, 0.700, 0.000, 0.040),
+        ],
+        "noise": (0.10, 0.004, 0.055, 1800.0, 400.0),
     },
 }
-DEFAULT = "drop"
+DEFAULT = "drip"
 # Quiet on purpose. This is meant to be noticed, not heard.
-VOLUME = 0.22
+VOLUME = 0.18
+
+
+def _envelope(age, attack, decay):
+    """Raised-cosine in, exponential out. Never starts or stops abruptly."""
+    if age < 0:
+        return 0.0
+    out = math.exp(-age / decay)
+    if attack > 0 and age < attack:
+        # A straight ramp still leaves a corner you can hear; this does not.
+        out *= 0.5 - 0.5 * math.cos(math.pi * age / attack)
+    return out
+
+
+def _tones(voice, total):
+    out = [0.0] * total
+    for start_hz, end_hz, slide, loud, decay, begins, attack in voice["tones"]:
+        first = int(RATE * begins)
+        phase = 0.0
+        for index in range(first, total):
+            age = (index - first) / float(RATE)
+            level = _envelope(age, attack, decay)
+            if level < 0.0004 and age > attack:
+                break
+            share = min(1.0, age / slide) if slide > 0 else 1.0
+            hz = start_hz + (end_hz - start_hz) * share
+            phase += 2.0 * math.pi * hz / RATE
+            out[index] += loud * level * math.sin(phase)
+    return out
+
+
+def _noise(voice, total):
+    """Noise through a one-pole low-pass whose cutoff falls as it decays."""
+    if not voice.get("noise"):
+        return [0.0] * total
+    loud, attack, decay, cutoff, cutoff_end = voice["noise"]
+    # Seeded, so the same voice is always the same file.
+    source = random.Random(20260921)
+    out = [0.0] * total
+    carried = 0.0
+    for index in range(total):
+        age = index / float(RATE)
+        level = _envelope(age, attack, decay)
+        share = min(1.0, age / max(1e-6, decay * 3))
+        hz = cutoff + (cutoff_end - cutoff) * share
+        weight = 1.0 - math.exp(-2.0 * math.pi * hz / RATE)
+        carried += weight * (source.uniform(-1.0, 1.0) - carried)
+        out[index] = loud * level * carried
+    return out
 
 
 def _samples(voice, volume):
     """Builds the waveform. Pure arithmetic, no numpy, no files."""
-    seconds = voice["seconds"]
-    total = int(RATE * seconds)
-    out = array.array("h", [0]) * total
-    peak = 0.0
-    raw = [0.0] * total
+    total = int(RATE * voice["seconds"])
+    tones = _tones(voice, total)
+    noise = _noise(voice, total)
+    raw = [tones[i] + noise[i] for i in range(total)]
 
-    for freq, loud, decay, start, drift in voice["partials"]:
-        begin = int(RATE * start)
-        phase = 0.0
-        for index in range(begin, total):
-            age = (index - begin) / float(RATE)
-            envelope = math.exp(-age / decay)
-            if envelope < 0.0005:
-                break
-            # A few milliseconds of fade-in, or the start clicks.
-            if age < 0.004:
-                envelope *= age / 0.004
-            share = (index - begin) / float(max(1, total - begin))
-            phase += 2.0 * math.pi * (freq + drift * share) / RATE
-            raw[index] += loud * envelope * math.sin(phase)
-
-    for value in raw:
-        peak = max(peak, abs(value))
-    if peak <= 0:
-        peak = 1.0
+    peak = max((abs(value) for value in raw), default=0.0) or 1.0
     gain = volume / peak
+    out = array.array("h", [0]) * total
     for index, value in enumerate(raw):
         out[index] = int(max(-32767, min(32767, value * gain * 32767)))
     return out

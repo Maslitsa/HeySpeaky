@@ -9,7 +9,8 @@ document.
     .venv\Scripts\python.exe tools\ui_lab.py --desktop --out lab.png
 
 --desktop uses a picture of your actual screen as the backdrop, which is the
-honest test.
+honest test. --gif PATH animates the waveform instead, because a still
+picture cannot show whether the pill looks alive or frozen.
 """
 
 import argparse
@@ -118,12 +119,45 @@ def sheet(backdrops, out):
     return out
 
 
+def animate(path, seconds=4.0, tick=1 / 30.0):
+    """A GIF of the pill: quiet, then spoken to, then quiet again.
+
+    The quiet stretches matter as much as the loud one - they are where a
+    frozen row of bars would show.
+    """
+    size = (theme.WIDTH, theme.HEIGHT + theme.SHADOW_MARGIN * 2)
+    prepared = glass.prepare(colourful(size), rim=True)
+    levels = [0.0] * theme.BARS
+    frames = []
+    for index in range(int(seconds / tick)):
+        now = index * tick
+        # The same idle wave the overlay uses when nothing is being said.
+        swing = 0.5 - 0.5 * math.cos(now * theme.IDLE_SPEED * math.pi)
+        level = theme.IDLE_WAVE * swing
+        if 1.2 < now < 2.8:
+            # Someone talking: louder, and less regular.
+            level = max(level, 0.35 + 0.45 * abs(math.sin(now * 9.0))
+                        * abs(math.cos(now * 3.7)))
+        levels = levels[1:] + [level]
+        frame = glass.paint(prepared, state="listening", levels=levels)
+        frames.append(frame.convert("P", palette=Image.ADAPTIVE))
+    frames[0].save(path, save_all=True, append_images=frames[1:],
+                   duration=int(tick * 1000), loop=0, optimize=True)
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description="Draw the pill to a PNG")
     parser.add_argument("--out", default="ui-lab.png")
     parser.add_argument("--desktop", action="store_true",
                         help="use a picture of this screen as the backdrop")
+    parser.add_argument("--gif", metavar="PATH",
+                        help="animate the waveform to a GIF instead")
     args = parser.parse_args()
+
+    if args.gif:
+        print(animate(args.gif))
+        return 0
 
     backdrops = [("colour", colourful), ("light", light), ("dark", dark)]
     if args.desktop:

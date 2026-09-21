@@ -175,13 +175,16 @@ DEFAULTS = {
         # Hold Ctrl+Alt this long before recording engages. Also what stops
         # ordinary Ctrl+Alt+<key> shortcuts and AltGr from triggering us.
         "engage_delay": 0.25,
-        # Released before this (measured from first press) = tap -> latched
-        # recording. Held longer = push-to-talk, stops on release.
-        "tap_max": 0.7,
-        # Hands free without having to hit that window: hold Ctrl and tap Alt
-        # twice. Ctrl+Alt again ends it. This is how long the two Alt taps may
-        # be apart. 0 turns the gesture off.
-        "double_alt_gap": 0.45,
+        # There used to be a third behaviour here: release between the engage
+        # delay and this, and the recording latched. Nobody could hit a window
+        # that narrow on purpose, so it is off (0) and hands-free has its own
+        # gesture below. Set it to e.g. 0.7 to have the old behaviour back.
+        "tap_max": 0.0,
+        # Hands free, the way Wispr Flow does it: tap Ctrl+Alt twice within
+        # this many seconds. Each tap on its own is too short to start
+        # anything, which is what makes two of them safe to act on. While it
+        # is recording hands-free, one more tap ends it. 0 turns this off.
+        "double_tap_gap": 0.5,
         # Right Alt reports as "alt gr" on some layouts. Off by default so
         # typing accented characters never starts a recording.
         "accept_altgr": False,
@@ -285,12 +288,12 @@ DEFAULTS = {
         "buttons_clickable": True,
     },
     "sound": {
-        # Played when the text has been inserted. One of drop, rise, wood, or
-        # "none" for silence. The files are built on this machine the first
-        # time they are needed; nothing is downloaded.
-        "finish": "drop",
+        # Played when the text has been inserted. One of drip, breath, tap,
+        # bowl, or "none" for silence. The files are built on this machine the
+        # first time they are needed; nothing is downloaded.
+        "finish": "drip",
         # 0 to 1. Deliberately quiet.
-        "volume": 0.22,
+        "volume": 0.18,
     },
     "log_level": "INFO",
 }

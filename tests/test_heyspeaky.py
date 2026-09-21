@@ -16,6 +16,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -766,25 +767,26 @@ class _Event(object):
 
 
 @unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
-class DoubleAltGesture(unittest.TestCase):
-    """Hold Ctrl, tap Alt twice, and recording starts hands-free."""
+class DoubleTapGesture(unittest.TestCase):
+    """Tap Ctrl+Alt twice and recording starts hands-free, as Wispr does."""
 
-    def listener(self):
+    def listener(self, engage_delay=10.0):
         self.latched = threading.Event()
-        self.tapped = threading.Event()
+        self.engaged = threading.Event()
+        self.released = threading.Event()
         return HotkeyListener(
             {
-                "engage_delay": 10.0,      # long, so nothing engages by itself
-                "tap_max": 0.7,
+                "engage_delay": engage_delay,
+                "tap_max": 0.0,
                 "accept_altgr": False,
                 "cancel_on_other_key": True,
-                "double_alt_gap": 0.45,
+                "double_tap_gap": 0.5,
                 "health_check_seconds": 0,
                 "min_reinstall_seconds": 60,
             },
-            on_engage=lambda: None,
-            on_tap=self.tapped.set,
-            on_hold_release=lambda: None,
+            on_engage=self.engaged.set,
+            on_tap=lambda: None,
+            on_hold_release=self.released.set,
             on_cancel=lambda: None,
             on_latch=self.latched.set,
         )
@@ -793,36 +795,61 @@ class DoubleAltGesture(unittest.TestCase):
         for name, kind in events:
             listener._on_key_event(_Event(name, kind))
 
-    def test_two_alt_taps_while_ctrl_is_held_latch(self):
-        listener = self.listener()
-        self.send(listener, ("ctrl", "down"), ("alt", "down"), ("alt", "up"),
-                  ("alt", "down"))
-        self.assertTrue(self.latched.wait(2.0))
-
-    def test_one_alt_tap_does_nothing(self):
-        listener = self.listener()
-        self.send(listener, ("ctrl", "down"), ("alt", "down"), ("alt", "up"))
-        self.assertFalse(self.latched.wait(0.3))
-
-    def test_holding_alt_down_is_not_two_taps(self):
-        """Windows repeats KEY_DOWN while a key is held."""
-        listener = self.listener()
+    def tap(self, listener):
+        """Press and release the whole chord, faster than the engage delay."""
         self.send(listener, ("ctrl", "down"), ("alt", "down"),
-                  ("alt", "down"), ("alt", "down"))
-        self.assertFalse(self.latched.wait(0.3))
+                  ("alt", "up"), ("ctrl", "up"))
 
-    def test_alt_without_ctrl_does_nothing(self):
+    def test_two_taps_of_the_chord_go_hands_free(self):
         listener = self.listener()
-        self.send(listener, ("alt", "down"), ("alt", "up"), ("alt", "down"))
-        self.assertFalse(self.latched.wait(0.3))
-
-    def test_letting_go_after_the_gesture_does_not_report_a_tap(self):
-        listener = self.listener()
-        self.send(listener, ("ctrl", "down"), ("alt", "down"), ("alt", "up"),
-                  ("alt", "down"))
+        self.tap(listener)
+        self.tap(listener)
         self.assertTrue(self.latched.wait(2.0))
+
+    def test_one_tap_does_nothing(self):
+        listener = self.listener()
+        self.tap(listener)
+        self.assertFalse(self.latched.wait(0.3))
+        self.assertFalse(self.engaged.is_set())
+
+    def test_two_taps_too_far_apart_do_nothing(self):
+        listener = self.listener()
+        listener._double_gap = 0.05
+        self.tap(listener)
+        time.sleep(0.12)
+        self.tap(listener)
+        self.assertFalse(self.latched.wait(0.3))
+
+    def test_a_shortcut_being_typed_is_not_a_tap(self):
+        """Ctrl+Alt+C twice is someone using their editor, not us."""
+        listener = self.listener()
+        for _ in range(2):
+            self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                      ("c", "down"), ("c", "up"),
+                      ("alt", "up"), ("ctrl", "up"))
+        self.assertFalse(self.latched.wait(0.3))
+
+    def test_a_hold_is_not_a_tap(self):
+        listener = self.listener(engage_delay=0.05)
+        self.send(listener, ("ctrl", "down"), ("alt", "down"))
+        self.assertTrue(self.engaged.wait(2.0))
         self.send(listener, ("alt", "up"), ("ctrl", "up"))
-        self.assertFalse(self.tapped.wait(0.3))
+        self.assertTrue(self.released.wait(2.0))
+        self.assertFalse(self.latched.is_set())
+
+    def test_one_tap_ends_a_hands_free_recording(self):
+        listener = self.listener()
+        listener.set_recording_latched(True)
+        self.tap(listener)
+        self.assertTrue(self.engaged.wait(2.0))
+        self.assertFalse(self.latched.is_set())
+
+    def test_the_gesture_can_be_turned_off(self):
+        listener = self.listener()
+        listener._double_gap = 0
+        self.tap(listener)
+        self.tap(listener)
+        self.assertFalse(self.latched.wait(0.3))
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ updates through a queue for exactly that reason.
 
 import ctypes
 import logging
+import math
 import threading
 import tkinter as tk
 from collections import deque
@@ -146,6 +147,7 @@ class Overlay:
         self._level = 0.0
         self._shown_level = 0.0
         self._levels = deque([0.0] * theme.BARS, maxlen=theme.BARS)
+        self._frame = 0
 
         self._glass = None
         self._photo = None
@@ -279,9 +281,24 @@ class Overlay:
         else:
             self._shown_level += (target - self._shown_level) * 0.25
         if self._state == "listening":
-            self._levels.append(self._shown_level)
+            self._levels.append(max(self._shown_level, self._idle_wave()))
         self._paint()
         self._anim_job = self._root.after(TICK_MS, self._tick)
+
+    def _idle_wave(self):
+        """A slow wave for when nobody is saying anything.
+
+        Bars frozen at their minimum read as a hung program. One value is
+        appended per frame and the row scrolls, so a sine of the clock here
+        becomes a wave travelling along the pill. Borrowed from the CSS
+        loaders, where each bar animates on its own delay.
+        """
+        if theme.IDLE_WAVE <= 0:
+            return 0.0
+        self._frame += 1
+        seconds = self._frame * TICK_MS / 1000.0
+        swing = 0.5 - 0.5 * math.cos(seconds * theme.IDLE_SPEED * math.pi)
+        return theme.IDLE_WAVE * swing
 
     def _start_animation(self):
         if self._anim_job is None:
@@ -333,6 +350,7 @@ class Overlay:
         self._text = ""
         if state == "listening":
             self._levels = deque([0.0] * theme.BARS, maxlen=theme.BARS)
+            self._frame = 0
             self._level = 0.0
             self._shown_level = 0.0
 

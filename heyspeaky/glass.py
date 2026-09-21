@@ -103,6 +103,50 @@ def sprite(size, radius, colour):
     return coloured
 
 
+def glowing_bar(width, height, tallest, colour, fade=1.0):
+    """One waveform bar with a bloom around it.
+
+    The idea is borrowed from a CSS loader, where the bars carry a wide
+    box-shadow in their own colour. There is no box-shadow here, so the bar is
+    drawn twice: once blurred underneath, once sharp on top. Both are baked
+    into one sprite and cached, because bar heights are whole pixels and there
+    are only ever a couple of dozen of them.
+    """
+    height = max(2, int(height))
+    key = ("bar", width, height, tallest, colour, round(fade, 2))
+    if key in _sprite_cache:
+        return _sprite_cache[key]
+    spread = max(1, int(round(theme.BAR_GLOW)))
+    size = (width + spread * 2, tallest + spread * 2)
+    bar = sprite((width, height), width // 2, colour)
+
+    face = Image.new("RGBA", size, (0, 0, 0, 0))
+    where = (spread, spread + (tallest - height) // 2)
+    face.paste(bar, where, bar)
+
+    bloom = face.filter(ImageFilter.GaussianBlur(spread / 1.6))
+    strength = theme.BAR_GLOW_ALPHA * fade
+    bloom.putalpha(bloom.getchannel("A").point(
+        lambda value: int(value * strength)))
+    bloom.alpha_composite(face)
+    if fade < 1.0:
+        bloom.putalpha(bloom.getchannel("A").point(
+            lambda value: int(value * fade)))
+    _sprite_cache[key] = bloom
+    return bloom
+
+
+def _bar_fade(index, count):
+    """How solid a bar is, so the waveform dissolves at both ends."""
+    steps = theme.BAR_EDGE_FADE
+    if not steps or count <= len(steps) * 2:
+        return 1.0
+    from_edge = min(index, count - 1 - index)
+    if from_edge < len(steps):
+        return steps[from_edge]
+    return 1.0
+
+
 def button(size, kind, fill, glyph, dim=1.0):
     """A round button with a cross or a tick drawn through it.
 
@@ -113,22 +157,54 @@ def button(size, kind, fill, glyph, dim=1.0):
     if key in _sprite_cache:
         return _sprite_cache[key]
     big = size * 4
-    face = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    pad = big // 8
+    canvas = (big + pad * 2, big + pad * 2)
+    face = Image.new("RGBA", canvas, (0, 0, 0, 0))
+
+    # A soft shadow under the whole circle, so it sits on the glass rather
+    # than in it. From the Teenage Engineering button set.
+    shadow = Image.new("L", canvas, 0)
+    ImageDraw.Draw(shadow).ellipse(
+        (pad, pad + pad // 2, pad + big - 1, pad + pad // 2 + big - 1),
+        fill=int(255 * theme.BUTTON_SHADOW))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(pad / 1.5))
+    face.paste((0, 0, 0, 255), (0, 0), shadow)
+
+    disc = Image.new("L", canvas, 0)
+    ImageDraw.Draw(disc).ellipse((pad, pad, pad + big - 1, pad + big - 1),
+                                 fill=255)
+    face.paste(tuple(fill) + (255,), (0, 0), disc)
+
+    # Lit from the top left: a highlight just inside that edge, and a shade
+    # inside the opposite one. Both are clipped to the circle.
+    lift = max(2, big // 22)
+    for offset, tone, alpha in (
+        (-lift, (255, 255, 255), theme.BUTTON_INNER_LIGHT),
+        (lift, (0, 0, 0), theme.BUTTON_INNER_SHADE),
+    ):
+        ring = Image.new("L", canvas, 0)
+        ImageDraw.Draw(ring).ellipse(
+            (pad + offset, pad + offset,
+             pad + big - 1 + offset, pad + big - 1 + offset),
+            outline=int(255 * alpha), width=max(2, big // 18))
+        ring = Image.composite(ring, Image.new("L", canvas, 0), disc)
+        face.paste(tone + (255,), (0, 0),
+                   ring.filter(ImageFilter.GaussianBlur(lift * 0.9)))
+
     drawing = ImageDraw.Draw(face)
-    drawing.ellipse((0, 0, big - 1, big - 1), fill=tuple(fill) + (255,))
     width = max(2, int(round(theme.GLYPH_STROKE * 4)))
     ink = tuple(glyph) + (255,)
+    def at(fx, fy):
+        return (pad + big * fx, pad + big * fy)
+
     if kind == "cancel":
-        drawing.line((big * 0.34, big * 0.34, big * 0.66, big * 0.66),
-                     fill=ink, width=width)
-        drawing.line((big * 0.66, big * 0.34, big * 0.34, big * 0.66),
-                     fill=ink, width=width)
+        drawing.line(at(0.34, 0.34) + at(0.66, 0.66), fill=ink, width=width)
+        drawing.line(at(0.66, 0.34) + at(0.34, 0.66), fill=ink, width=width)
     else:
-        drawing.line((big * 0.30, big * 0.52, big * 0.45, big * 0.67),
-                     fill=ink, width=width)
-        drawing.line((big * 0.45, big * 0.67, big * 0.71, big * 0.35),
-                     fill=ink, width=width)
-    face = face.resize((size, size), Image.LANCZOS)
+        drawing.line(at(0.30, 0.52) + at(0.45, 0.67), fill=ink, width=width)
+        drawing.line(at(0.45, 0.67) + at(0.71, 0.35), fill=ink, width=width)
+    scaled = max(1, int(round(size * canvas[0] / float(big))))
+    face = face.resize((scaled, scaled), Image.LANCZOS)
     if dim < 1.0:
         alpha = face.getchannel("A").point(lambda value: int(value * dim))
         face.putalpha(alpha)
@@ -300,7 +376,10 @@ def paint(glass, state="listening", levels=None, text="", status="",
         else theme.BUTTON_DIM
     cross = button(size, "cancel", theme.CANCEL_FILL, theme.CANCEL_GLYPH,
                    cancel_dim)
-    frame.paste(cross, boxes["cancel"][:2], cross)
+    # The sprite is wider than the button: it carries its own shadow.
+    bleed = (cross.size[0] - size) // 2
+    frame.paste(cross, (boxes["cancel"][0] - bleed, boxes["cancel"][1] - bleed),
+                cross)
 
     # Right: finish. It goes green for the moment before the pill leaves.
     if state == "done":
@@ -310,7 +389,8 @@ def paint(glass, state="listening", levels=None, text="", status="",
                       theme.BUTTON_DIM)
     else:
         tick = button(size, "accept", theme.ACCEPT_FILL, theme.ACCEPT_GLYPH)
-    frame.paste(tick, boxes["accept"][:2], tick)
+    frame.paste(tick, (boxes["accept"][0] - bleed, boxes["accept"][1] - bleed),
+                tick)
 
     inner_left = boxes["cancel"][2] + int(round(theme.PADDING * scale))
     inner_right = boxes["accept"][0] - int(round(theme.PADDING * scale))
@@ -332,12 +412,11 @@ def paint(glass, state="listening", levels=None, text="", status="",
             else:
                 bar_height = max(2, int(round(theme.BAR_FLAT * scale)))
                 bar_colour = theme.BAR_QUIET
-            bar = sprite((bar_width, tallest), bar_width // 2, bar_colour)
-            if bar_height != tallest:
-                bar = bar.resize((bar_width, max(2, bar_height)),
-                                 Image.LANCZOS)
-            frame.paste(bar, (start + index * pitch, middle - bar.height // 2),
-                        bar)
+            bar = glowing_bar(bar_width, bar_height, tallest, bar_colour,
+                              _bar_fade(index, len(levels)))
+            spread = (bar.size[0] - bar_width) // 2
+            frame.paste(bar, (start + index * pitch - spread,
+                              middle - bar.size[1] // 2), bar)
         return frame
 
     # No waveform: the only thing worth saying here is what went wrong.

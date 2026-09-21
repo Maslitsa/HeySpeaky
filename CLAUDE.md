@@ -1,6 +1,7 @@
 # HeySpeaky, for whoever picks this up next
 
-Hold Ctrl+Alt, talk, and the text lands in whatever window you were typing in.
+Hold Ctrl+Alt, talk, and the text lands in whatever window you were typing in;
+or tap Ctrl+Alt twice to keep recording with nothing held down.
 Windows only. It transcribes through OpenAI by default and can fall back to a
 local Whisper model. It was called VoiceType, then SpeakIt, now HeySpeaky.
 
@@ -25,7 +26,7 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/tray.py` `hotkey.py` `mic.py` `output.py` `winjob.py` | the rest |
 | `install.ps1` `uninstall.ps1` | how everyone installs and removes it |
 | `tools/doctor.py` | the check-up; the installer runs it with `--install` |
-| `tools/ui_lab.py` | draws every state of the pill to a PNG |
+| `tools/ui_lab.py` | draws every state to a PNG, or `--gif` to animate it |
 | `tools/benchmark.py` | measures models against real recordings |
 | `tools/try_demo.py` | runs a recording through both backends |
 
@@ -54,6 +55,12 @@ without jargon, and say what you actually did and what you could not do.
   taskbar swallows clicks. `overlay.buttons_clickable: false` gives the old
   behaviour back. WS_EX_NOACTIVATE stays either way, so a click on the pill
   never moves the caret out of the window you were typing in.
+- **Hands-free is a double tap of the whole chord**, half a second apart, the
+  way Wispr Flow does it. The owner asked for that specifically. It works
+  because a single tap is shorter than the engage delay and so does nothing at
+  all, which is also what the start of every Ctrl+Alt+<key> shortcut looks
+  like. The old latch - release between 0.25s and 0.7s - is off by default
+  (`hotkey.tap_max: 0`) because nobody can hit a window that narrow.
 - **The transcription worker must die with the app** (`winjob.py`). Orphans
   once wrote 8.7 GB of the same traceback.
 - **Keys live outside the project**, in `%APPDATA%\HeySpeaky\openai.key`. The

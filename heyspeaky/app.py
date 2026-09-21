@@ -321,13 +321,14 @@ class App:
                 return
             self.state = RECORDING_LATCHED
         self.engine.set_latched(True)
+        self.hotkey.set_recording_latched(True)
         logger.info("Switched to latched recording")
         self.post(
             self.overlay.set_status, "Listening · tap Ctrl+Alt to stop"
         )
 
     def _on_latch(self):
-        """Ctrl and two taps of Alt: start hands-free, without the hold."""
+        """Two taps of Ctrl+Alt: start hands-free, without the hold."""
         with self._transition_lock:
             with self._state_lock:
                 if self.state != IDLE:
@@ -342,7 +343,8 @@ class App:
                     return
                 self.state = RECORDING_LATCHED
             self.engine.set_latched(True)
-            logger.info("Latched from the start (Ctrl + Alt Alt)")
+            self.hotkey.set_recording_latched(True)
+            logger.info("Latched from the start (double tap)")
 
     # -- the pill's own buttons -------------------------------------------
 
@@ -636,6 +638,7 @@ class App:
                 with self._state_lock:
                     self.state = RECORDING_LATCHED
                 self.engine.set_latched(True)
+                self.hotkey.set_recording_latched(True)
                 self.post(
                     self.overlay.set_status,
                     "Listening · tap Ctrl+Alt to stop",

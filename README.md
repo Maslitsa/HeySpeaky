@@ -124,9 +124,10 @@ downloaded speech models. A folder that is a git clone is left where it is.
 
 | Gesture | What happens |
 | --- | --- |
-| Hold Ctrl+Alt for longer than 0.7s | Records while held. Release to transcribe and insert. |
-| Tap Ctrl+Alt and release under 0.7s | Latches on for hands-free dictation. Tap again to finish, or stop talking and it ends after 2.5s of silence. |
-| Any other key while recording | Cancels. Nothing is inserted. |
+| Hold Ctrl+Alt | Records while held. Release to transcribe and insert. |
+| Tap Ctrl+Alt twice, quickly | Hands-free: it keeps recording with nothing held down. Tap once more to finish, or stop talking and it ends after 2.5s of silence. |
+| Click the tick on the pill | Finishes now. |
+| Click the cross on the pill, or press any other key | Cancels. Nothing is inserted. |
 | Tray icon | Status, add or remove your languages, OpenAI or local, pause the hotkey, edit settings, save a problem report, quit. |
 
 <div align="center">

@@ -80,6 +80,24 @@ BAR_MAX = 24
 BAR_FLAT = 3
 BAR_LIVE = (245, 245, 247)
 BAR_QUIET = (120, 120, 128)
+# Each bar carries a soft bloom, so the waveform glows rather than sitting
+# flat on the glass.
+BAR_GLOW = 7
+BAR_GLOW_ALPHA = 0.55
+# The waveform fades out at both ends instead of stopping at a hard edge.
+# One value per bar inwards from each side; the rest are full strength.
+BAR_EDGE_FADE = (0.30, 0.65)
+
+# When nothing is being said the bars would sit still, which reads as frozen.
+# A slow wave travels along them instead. 0 turns it off.
+IDLE_WAVE = 0.20
+IDLE_SPEED = 2.0
+
+# The buttons are lit like real ones: a highlight along the top left, a
+# shadow inside the bottom right, and a soft shadow under the whole circle.
+BUTTON_SHADOW = 0.38
+BUTTON_INNER_LIGHT = 0.50
+BUTTON_INNER_SHADE = 0.34
 
 # Motion, in seconds.
 SPRING_IN = 0.28
