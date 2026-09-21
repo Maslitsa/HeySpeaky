@@ -746,7 +746,14 @@ class FinishSound(unittest.TestCase):
         self.assertFalse(sound.play("drop", volume=0.0))
 
 
-from heyspeaky.hotkey import HotkeyListener  # noqa: E402
+try:
+    from heyspeaky.hotkey import HotkeyListener  # noqa: E402
+except Exception:
+    # The hook needs the keyboard package, which is not only sometimes absent
+    # but can also fail to start on a machine with no real keyboard. Either
+    # way that should skip the tests below, not stop the whole file from
+    # importing and take the other eighty with it.
+    HotkeyListener = None
 
 
 class _Event(object):
@@ -758,6 +765,7 @@ class _Event(object):
         self.scan_code = 1
 
 
+@unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
 class DoubleAltGesture(unittest.TestCase):
     """Hold Ctrl, tap Alt twice, and recording starts hands-free."""
 
