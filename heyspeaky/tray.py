@@ -54,6 +54,7 @@ class Tray:
         backend="local",
         on_report=None,
         usage_text=None,
+        on_update=None,
     ):
         self._config_path = config_path
         self._log_dir = log_dir
@@ -71,6 +72,8 @@ class Tray:
         self._on_report = on_report
         # A callable, so the figure is current every time the menu opens.
         self._usage_text = usage_text
+        self._on_update = on_update
+        self._update_version = ""
 
         self._status = "Starting…"
         self._paused = False
@@ -100,6 +103,11 @@ class Tray:
             pystray.MenuItem("Language", self._language_menu()),
             pystray.MenuItem("Transcribed by", self._backend_menu()),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                lambda _: "Update to {}".format(self._update_version),
+                self._update,
+                visible=lambda _: bool(self._update_version),
+            ),
             pystray.MenuItem("Edit settings", self._open_config),
             pystray.MenuItem(
                 lambda _: self._usage_text() if self._usage_text else "",
@@ -231,6 +239,15 @@ class Tray:
 
     def _open_logs(self, _icon=None, _item=None):
         self._open(str(self._log_dir))
+
+    def _update(self, _icon=None, _item=None):
+        if self._on_update:
+            self._on_update()
+
+    def offer_update(self, version):
+        """Shows the update item once a newer version has been seen."""
+        self._update_version = version or ""
+        self.refresh()
 
     def _report(self, _icon=None, _item=None):
         if self._on_report:

@@ -638,5 +638,40 @@ class Spending(unittest.TestCase):
         self.assertTrue(usage.path().is_file())
 
 
+from heyspeaky import updates  # noqa: E402
+
+
+class Updates(unittest.TestCase):
+    """Noticing that a newer HeySpeaky exists."""
+
+    def setUp(self):
+        import os
+        from unittest import mock
+
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        patcher = mock.patch.dict(os.environ, {"APPDATA": self.folder.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_version_order_is_by_number_not_by_text(self):
+        self.assertTrue(updates.is_newer("1.10", "1.9"))
+        self.assertTrue(updates.is_newer("v2.0", "1.9.9"))
+        self.assertFalse(updates.is_newer("1.0.9", "1.1.0"))
+        self.assertFalse(updates.is_newer("1.1.0", "1.1.0"))
+
+    def test_nothing_is_offered_before_a_check(self):
+        self.assertEqual(updates.known_newer(), "")
+
+    def test_a_remembered_answer_is_offered_without_asking_again(self):
+        updates._write({"checked": 0.0, "latest": "99.0"})
+        self.assertEqual(updates.known_newer(), "99.0")
+
+    def test_a_check_is_not_repeated_within_a_day(self):
+        updates._write({"checked": 1000.0, "latest": "99.0"})
+        # A network call here would raise, since the time has not passed.
+        self.assertEqual(updates.check(now=1000.0 + 60), "99.0")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

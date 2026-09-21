@@ -40,6 +40,16 @@ git push origin main --tags
 
 The commit message carries no AI attribution. Ever.
 
+Then publish the release itself:
+
+```powershell
+gh release create v1.2 --title "HeySpeaky 1.2" --notes-file release-notes.md
+```
+
+This step is not optional. The app asks GitHub for
+`releases/latest` once a day to offer the update in the tray; a tag with no
+release means nobody is ever told a fix exists.
+
 ## 4. Watch CI
 
 ```powershell

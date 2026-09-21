@@ -27,6 +27,7 @@ import webrtcvad
 
 from . import config as config_module
 from . import diagnostics
+from . import updates
 from . import usage
 from . import output
 from . import languages
@@ -156,6 +157,7 @@ class App:
             backend=cfg["transcription"]["backend"],
             on_report=self._on_tray_report,
             usage_text=lambda: usage.describe(self.cfg),
+            on_update=self._on_tray_update,
         )
 
     # -- speech detection --------------------------------------------------
@@ -236,6 +238,10 @@ class App:
     def _on_ready(self):
         self.tray.set_status("Ready · hold Ctrl+Alt to dictate")
         logger.info("Engine ready")
+        # Once a day at most, and never in the way: people install by pasting
+        # a command and would otherwise never learn that a fix exists.
+        updates.check_in_background(
+            lambda version: self.post(self.tray.offer_update, version))
 
     def _on_error(self, message):
         logger.error("Engine error: %s", message)
@@ -648,6 +654,18 @@ class App:
         self.post(
             self.overlay.flash, "done", "", "Using {}".format(label), 1.4
         )
+
+    def _on_tray_update(self):
+        """Runs the installer in the folder, which replaces this copy."""
+        try:
+            updates.install(config_module.ROOT_DIR)
+        except Exception as exc:
+            logger.exception("Could not start the update")
+            self.post(self.overlay.flash, "error", "",
+                      "Update failed: {}".format(str(exc)[:60]), 3.0)
+            return
+        self.post(self.overlay.flash, "done", "",
+                  "Updating. HeySpeaky will restart.", 4.0)
 
     def _on_tray_report(self):
         """Saves a problem report to the Desktop, off the tray thread."""
