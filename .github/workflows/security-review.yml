@@ -5,6 +5,9 @@ name: Security review
 # Settings > Secrets and variables > Actions. Without it every step is
 # skipped and the job passes, so the repository still works for anyone who
 # forks it.
+#
+# The secret is copied into an environment variable first: GitHub does not
+# allow the secrets context inside an "if", but it does allow env.
 
 on:
   pull_request:
@@ -17,16 +20,18 @@ jobs:
   review:
     name: Read the diff for security bugs
     runs-on: ubuntu-latest
+    env:
+      HAVE_KEY: ${{ secrets.CLAUDE_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v7
-        if: ${{ secrets.CLAUDE_API_KEY != '' }}
+        if: env.HAVE_KEY == 'true'
         with:
           fetch-depth: 2
       - uses: anthropics/claude-code-security-review@main
-        if: ${{ secrets.CLAUDE_API_KEY != '' }}
+        if: env.HAVE_KEY == 'true'
         with:
           comment-pr: true
           claude-api-key: ${{ secrets.CLAUDE_API_KEY }}
       - name: Say why nothing ran
-        if: ${{ secrets.CLAUDE_API_KEY == '' }}
+        if: env.HAVE_KEY != 'true'
         run: echo "No CLAUDE_API_KEY secret, so the security review was skipped."
