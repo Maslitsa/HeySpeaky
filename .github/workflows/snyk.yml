@@ -1,0 +1,39 @@
+name: Snyk
+
+# Checks the pinned dependencies for known vulnerabilities. Needs one secret,
+# SNYK_TOKEN, from the account settings at snyk.io. Without it the job is
+# skipped and passes, so a fork is not left with a permanently red tick.
+#
+# requirements.lock is what the installer actually installs, so that is the
+# file worth scanning.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "30 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: Known vulnerabilities in what we install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        if: ${{ secrets.SNYK_TOKEN != '' }}
+      - uses: actions/setup-python@v7
+        if: ${{ secrets.SNYK_TOKEN != '' }}
+        with:
+          python-version: "3.12"
+      - uses: snyk/actions/python-3.10@master
+        if: ${{ secrets.SNYK_TOKEN != '' }}
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --file=requirements.lock --package-manager=pip --severity-threshold=high
+      - name: Say why nothing ran
+        if: ${{ secrets.SNYK_TOKEN == '' }}
+        run: echo "No SNYK_TOKEN secret, so the dependency scan was skipped."
