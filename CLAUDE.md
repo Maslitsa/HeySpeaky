@@ -30,6 +30,7 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/ui_lab.py` | draws every state to a PNG, or `--gif` to animate it |
 | `tools/benchmark.py` | measures models against real recordings |
 | `tools/language_drill.py` | measures sentences that change language halfway |
+| `tools/live_check.py` | shows the pill on the real screen and photographs it |
 | `tools/try_demo.py` | runs a recording through both backends |
 
 ## Rules that cost something to learn
@@ -129,6 +130,11 @@ And in PowerShell, for either script you touched:
 ```powershell
 [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path .\install.ps1), [ref]$null, [ref]$errors)
 ```
+
+Every fault the owner has found in the pill was invisible to the tests and to
+`ui_lab.py`, because both draw it over a backdrop that holds still. Run
+`tools\live_check.py` when the look changes: it puts the real window on the
+real screen and photographs it.
 
 A real install is the only proof the installer works. CI does one on a clean
 Windows runner for every push, including the uninstall.
