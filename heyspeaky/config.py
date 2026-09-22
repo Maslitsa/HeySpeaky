@@ -211,15 +211,15 @@ DEFAULTS = {
         # How often to check the keyboard hook is still alive. Windows drops
         # low-level hooks silently, after a sleep or if a callback ever
         # overruns its timeout, and the only symptom is that Ctrl+Alt stops
-        # working while the app carries on looking healthy. When nothing has
-        # been typed for this long we inject a key bound to nothing and check
-        # our own hook sees it, reinstalling if it does not. 0 disables.
+        # working while the app carries on looking healthy. When our hook has
+        # seen nothing for this long but Windows has seen input, the hook is
+        # replaced - unless the pointer moved, which explains the input
+        # without a dead hook. 0 disables the check entirely.
         "health_check_seconds": 20,
-        # Moving the mouse also counts as input to Windows but never reaches a
-        # keyboard hook, so the check above cannot tell a dead hook from an
-        # idle one. This caps how often the hook is actually replaced, which
-        # turns that ambiguity into a harmless refresh when you return to the
-        # machine instead of constant churn while you use the mouse.
+        # A mouse click that moves no pixel still looks like a keypress we
+        # missed, so the pointer test above cannot catch everything. This caps
+        # how often the hook can actually be replaced, which keeps the rest
+        # down to a refresh nobody feels.
         "min_reinstall_seconds": 60,
     },
     "recording": {

@@ -814,12 +814,14 @@ class FinishSound(unittest.TestCase):
 
 
 try:
+    from heyspeaky import hotkey                 # noqa: E402
     from heyspeaky.hotkey import HotkeyListener  # noqa: E402
 except Exception:
     # The hook needs the keyboard package, which is not only sometimes absent
     # but can also fail to start on a machine with no real keyboard. Either
     # way that should skip the tests below, not stop the whole file from
     # importing and take the other eighty with it.
+    hotkey = None
     HotkeyListener = None
 
 
@@ -1005,6 +1007,110 @@ class LanguagePriority(unittest.TestCase):
         languages.toggle(self.cfg, before[1])
         after = self.cfg["transcription"]["cloud"]["languages"]
         self.assertEqual(after, [c for c in before if c != before[1]])
+
+
+@unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
+class HookWatchdog(unittest.TestCase):
+    """When the watchdog may replace the hook, and when it must not.
+
+    The app's own log is the reason these exist: 455 refreshes in three days,
+    every one of them a mouse being moved rather than a hook that had died.
+    A refresh unhooks and rehooks, so each is a moment where Ctrl+Alt can land
+    on nothing.
+    """
+
+    def listener(self):
+        listener = HotkeyListener(
+            {
+                "engage_delay": 10.0,
+                "tap_max": 0.0,
+                "accept_altgr": False,
+                "cancel_on_other_key": True,
+                "double_tap_gap": 0.5,
+                "health_check_seconds": 20,
+                "min_reinstall_seconds": 60,
+            },
+            on_engage=lambda: None,
+            on_tap=lambda: None,
+            on_hold_release=lambda: None,
+            on_cancel=lambda: None,
+        )
+        # Nothing has reached the hook for a long time, and the hook was never
+        # replaced: the state every test below starts from.
+        listener._last_event = time.monotonic() - 300
+        listener._last_reinstall = time.monotonic() - 300
+        return listener
+
+    def system_idle(self, seconds):
+        """Pretends Windows last saw input this many seconds ago."""
+        original = hotkey._system_idle_seconds
+        hotkey._system_idle_seconds = lambda: seconds
+        self.addCleanup(setattr, hotkey, "_system_idle_seconds", original)
+
+    def test_a_moving_mouse_is_not_a_dead_hook(self):
+        """The 455 refreshes. Windows saw input, but it was the pointer."""
+        listener = self.listener()
+        self.system_idle(1)
+        self.assertIsNone(listener._dead_hook_reason(moved=True,
+                                                     resumed=False))
+
+    def test_input_with_a_still_mouse_means_keys_we_missed(self):
+        listener = self.listener()
+        self.system_idle(1)
+        self.assertIsNotNone(listener._dead_hook_reason(moved=False,
+                                                        resumed=False))
+
+    def test_waking_from_sleep_is_checked_even_with_the_mouse_moving(self):
+        """Waking the screen moves the pointer, and a hook lost to sleep is
+        exactly what this watchdog was written for."""
+        listener = self.listener()
+        self.system_idle(1)
+        self.assertIsNotNone(listener._dead_hook_reason(moved=True,
+                                                        resumed=True))
+
+    def test_an_idle_machine_is_left_alone(self):
+        """Both stale by the same amount: nothing is wrong, and the laptop is
+        allowed to go to sleep."""
+        listener = self.listener()
+        self.system_idle(300)
+        self.assertIsNone(listener._dead_hook_reason(moved=False,
+                                                     resumed=False))
+
+    def test_a_hook_that_is_seeing_keys_is_left_alone(self):
+        listener = self.listener()
+        listener._last_event = time.monotonic()
+        self.system_idle(0)
+        self.assertIsNone(listener._dead_hook_reason(moved=False,
+                                                     resumed=False))
+
+    def test_refreshes_stay_a_minute_apart(self):
+        listener = self.listener()
+        listener._last_reinstall = time.monotonic()
+        self.system_idle(1)
+        self.assertIsNone(listener._dead_hook_reason(moved=False,
+                                                     resumed=False))
+
+    def test_an_unreadable_pointer_falls_back_to_leaving_it_alone(self):
+        """GetCursorPos can fail. Then nothing has moved as far as we know,
+        and the old behaviour - trust the idle timer - is what is left."""
+        listener = self.listener()
+        original = hotkey._cursor_position
+        hotkey._cursor_position = lambda: None
+        self.addCleanup(setattr, hotkey, "_cursor_position", original)
+        listener._last_cursor = (10, 10)
+        self.assertFalse(listener._cursor_moved())
+        self.assertIsNone(listener._last_cursor)
+
+    def test_the_first_check_of_all_reports_no_movement(self):
+        """With nothing to compare against, a position is not a movement."""
+        listener = self.listener()
+        original = hotkey._cursor_position
+        hotkey._cursor_position = lambda: (5, 5)
+        self.addCleanup(setattr, hotkey, "_cursor_position", original)
+        self.assertFalse(listener._cursor_moved())
+        self.assertTrue(listener._cursor_moved() is False)
+        hotkey._cursor_position = lambda: (6, 5)
+        self.assertTrue(listener._cursor_moved())
 
 
 if __name__ == "__main__":

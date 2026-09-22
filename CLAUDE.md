@@ -78,6 +78,19 @@ without jargon, and say what you actually did and what you could not do.
   all, which is also what the start of every Ctrl+Alt+<key> shortcut looks
   like. The old latch - release between 0.25s and 0.7s - is off by default
   (`hotkey.tap_max: 0`) because nobody can hit a window that narrow.
+- **The keyboard hook has a watchdog, and it must not fire on a moving
+  mouse.** Windows drops a low-level hook silently - after sleep, or if the
+  callback ever overruns - and the only symptom is that Ctrl+Alt stops
+  working. There is no API for "is my hook alive", so `hotkey.py` compares
+  when Windows last saw input against when the hook last saw a key. A moving
+  mouse looks identical to a dead hook through that pair, and the first
+  version believed it: the owner's log held 455 refreshes in three days, one a
+  minute for as long as he used the mouse, with no dead hook behind any of
+  them. Each refresh unhooks and rehooks, so each is a window where a press
+  lands on nothing. `_dead_hook_reason` now asks `GetCursorPos` as well and
+  stays quiet when the pointer moved, except just after a resume. Do not go
+  back to injecting a key to probe: `SendInput` resets the idle timer, so a
+  scheduled probe stops the laptop ever sleeping.
 - **The transcription worker must die with the app** (`winjob.py`). Orphans
   once wrote 8.7 GB of the same traceback.
 - **Keys live outside the project**, in `%APPDATA%\HeySpeaky\openai.key`. The

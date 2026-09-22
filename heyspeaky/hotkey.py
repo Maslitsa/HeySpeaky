@@ -97,6 +97,27 @@ def _system_idle_seconds():
         return None
 
 
+class _POINT(ctypes.Structure):
+    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+
+def _cursor_position():
+    """Where the pointer is, or None if Windows will not say.
+
+    This is what separates a dead hook from a moving mouse: both look the same
+    to GetLastInputInfo. Reading it is free and, unlike injecting a key, it
+    does not reset the idle timer.
+    """
+    try:
+        point = _POINT()
+        if not ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+            return None
+        return (point.x, point.y)
+    except Exception:
+        logger.debug("GetCursorPos unavailable", exc_info=True)
+        return None
+
+
 CTRL_KEYS = {"ctrl", "left ctrl", "right ctrl"}
 ALT_KEYS = {"alt", "left alt", "right alt"}
 ALTGR_KEYS = {"alt gr", "altgr", "right alt gr"}
@@ -141,6 +162,8 @@ class HotkeyListener:
             config.get("min_reinstall_seconds", 60)
         )
         self._last_reinstall = 0.0
+        self._last_cursor = None
+        self._last_tick_wall = 0.0
         self._watchdog = None
         self._stop_watchdog = threading.Event()
         self.reinstalls = 0
@@ -194,43 +217,43 @@ class HotkeyListener:
         There is no API to ask whether a hook is still alive, so we infer it:
         Windows tracks when it last saw *any* input, and we track when our hook
         last saw one. If the system has had input much more recently than we
-        have, events are being delivered somewhere we are not.
+        have, events are being delivered somewhere we are not - unless that
+        input was the mouse, which no keyboard hook ever sees, so we ask where
+        the pointer is before believing it.
 
         A genuinely idle machine reports both as equally stale, so nothing
         happens and it can still go to sleep.
         """
+        self._last_cursor = _cursor_position()
+        self._last_tick_wall = time.time()
         while not self._stop_watchdog.wait(self._health_interval):
+            # Both of these have to be sampled on every tick, before anything
+            # that can skip the rest of one, so that each comparison is
+            # against the tick just gone and not against whenever we last got
+            # this far.
+            moved = self._cursor_moved()
+            wall = time.time()
+            # The thread is frozen while the machine is suspended, so a wall
+            # clock that jumped much further than the interval we just waited
+            # says it slept. That is the case this watchdog was written for.
+            resumed = wall - self._last_tick_wall > self._health_interval * 3
+            self._last_tick_wall = wall
+
             if self._paused:
                 continue
             with self._lock:
                 busy = self._combo_active or self._engaged
             if busy:
                 continue          # never swap the hook mid-chord
-            quiet_for = time.monotonic() - self._last_event
-            if quiet_for < self._health_interval:
-                continue          # traffic is flowing; it is fine
-            idle_for = _system_idle_seconds()
-            if idle_for is None or idle_for + 2.0 >= quiet_for:
-                continue          # the whole machine is idle; nothing is wrong
 
-            # Windows has seen input we have not. Usually that just means the
-            # mouse moved. GetLastInputInfo counts mouse events and a keyboard
-            # hook never sees them, so this is not proof of a dead hook, and
-            # reinstalling on every mouse twitch would churn the hook all day.
-            # Rate limiting keeps it to a refresh whenever you come back to the
-            # machine, which is exactly when a hook lost to sleep needs
-            # replacing, while staying quiet during continuous mouse use.
-            since_last = time.monotonic() - self._last_reinstall
-            if since_last < self._min_reinstall_gap:
+            reason = self._dead_hook_reason(moved, resumed)
+            if reason is None:
                 continue
 
             self._last_reinstall = time.monotonic()
             self.reinstalls += 1
-            logger.info(
-                "Keyboard hook saw nothing for %.0fs while Windows saw input "
-                "%.0fs ago; refreshing the hook (#%d)",
-                quiet_for, idle_for, self.reinstalls,
-            )
+            logger.info("Keyboard hook %s; refreshing the hook (#%d)",
+                        reason, self.reinstalls)
             with self._lock:
                 self._reset_locked()
                 self._pressed.clear()
@@ -239,6 +262,54 @@ class HotkeyListener:
                 self._install()
             except Exception:
                 logger.exception("Could not reinstall the keyboard hook")
+
+    def _cursor_moved(self):
+        """Whether the pointer has moved since the previous check."""
+        where = _cursor_position()
+        moved = (where is not None and self._last_cursor is not None
+                 and where != self._last_cursor)
+        self._last_cursor = where
+        return moved
+
+    def _dead_hook_reason(self, moved, resumed):
+        """Why the hook looks dead, or None if it looks fine.
+
+        Kept apart from the loop above so the decision can be tested without a
+        thread, a real hook or a real mouse - which matters, because getting it
+        wrong is expensive in both directions: too eager and the hook is torn
+        down and rebuilt all day under the user's fingers, too shy and Ctrl+Alt
+        stays dead until the app is restarted.
+        """
+        quiet_for = time.monotonic() - self._last_event
+        if quiet_for < self._health_interval:
+            return None           # traffic is flowing; it is fine
+        idle_for = _system_idle_seconds()
+        if idle_for is None or idle_for + 2.0 >= quiet_for:
+            return None           # the whole machine is idle; nothing is wrong
+
+        # Windows has seen input we have not, and the usual reason is that the
+        # mouse moved: GetLastInputInfo counts mouse events and a keyboard hook
+        # never sees them. So ask where the pointer is. If it moved, the input
+        # is accounted for and the hook is not on trial. If it did not, the
+        # input was almost certainly a key we should have seen, which is the
+        # evidence we actually wanted.
+        #
+        # Measured before this test existed: 455 refreshes in three days on the
+        # owner's machine, one a minute for as long as he used the mouse, none
+        # of which had a dead hook behind it. A refresh unhooks and rehooks, so
+        # each one is a window, however small, where a Ctrl+Alt press lands on
+        # nothing.
+        if moved and not resumed:
+            return None
+
+        # A backstop for the rest: a click that moves no pixel looks the same
+        # as a key, so the hook can still be replaced without cause. Once a
+        # minute at worst is churn nobody feels.
+        if time.monotonic() - self._last_reinstall < self._min_reinstall_gap:
+            return None
+
+        return ("saw nothing for %.0fs while Windows saw input %.0fs ago"
+                % (quiet_for, idle_for))
 
     def set_paused(self, paused):
         """Suspends recognition without removing the hook."""
