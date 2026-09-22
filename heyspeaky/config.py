@@ -126,7 +126,25 @@ DEFAULTS = {
             # A single 21.8s utterance that went English -> German -> Russian
             # -> Kazakh came back correct in all four, across three scripts, in
             # 3.4s, with Kazakh not even in the list at the time.
-            "languages": ["en", "ru", "de", "kk"],
+            #
+            # **The order is not decoration.** Measured with
+            # tools/language_drill.py over 24 recordings of sentences that
+            # change language mid-clause:
+            #
+            #   ["en","ru","de","kk"]   17% of words wrong, 35% of the
+            #                           Cyrillic came back as Latin
+            #   ["kk","ru","en","de"]   11% of words wrong, 22% Cyrillic lost
+            #
+            # A language near the end of the list is effectively ignored on a
+            # short stretch of speech. "Ertengh kezdesemiz" came back as "You
+            # think is the same" with Kazakh fourth, and correctly with Kazakh
+            # first - and pinning language="kk" by hand recovered it too,
+            # which is how we know the audio was never the problem.
+            #
+            # English does not go first. The model already leans that way
+            # without being told, so the place at the front is worth more to
+            # the language it is most likely to mishear.
+            "languages": ["kk", "ru", "en", "de"],
             # Literal terms you expect it to hear: names, jargon, product
             # names. e.g. ["Kubernetes", "RealtimeSTT", "Grafana"].
             #

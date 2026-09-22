@@ -118,7 +118,13 @@ def toggle(cfg, code):
             cfg["model"]["language"] = ""
         result = "removed"
     else:
-        languages.append(code)
+        # At the front, not the end. The order of this list is a priority
+        # order to the model: a language near the end of it is effectively
+        # ignored on a short stretch of speech, which would mean a language
+        # you just went and enabled did nothing. Measured in
+        # tools/language_drill.py; the numbers are in config.py next to the
+        # default list.
+        languages.insert(0, code)
         result = "added"
     cfg["model"]["language_menu"] = menu_for(languages)
     return result
@@ -138,7 +144,9 @@ def reconcile(cfg):
     named.append(cfg["model"].get("language") or "")
     for code in named:
         if code and code not in languages:
-            languages.append(code)
+            # Same reason as in toggle(): the front of the list is where a
+            # language actually counts.
+            languages.insert(0, code)
     if not languages:
         languages.append("en")
     menu = menu_for(languages)

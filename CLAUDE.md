@@ -29,6 +29,7 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/doctor.py` | the check-up; the installer runs it with `--install` |
 | `tools/ui_lab.py` | draws every state to a PNG, or `--gif` to animate it |
 | `tools/benchmark.py` | measures models against real recordings |
+| `tools/language_drill.py` | measures sentences that change language halfway |
 | `tools/try_demo.py` | runs a recording through both backends |
 
 ## Rules that cost something to learn
@@ -87,6 +88,18 @@ without jargon, and say what you actually did and what you could not do.
   to 24x - the old ceiling of 8 was not enough - and an empty transcript from
   quiet audio says "Too quiet" rather than "Nothing heard", because the second
   one sends people looking for the wrong fault.
+- **The order of `cloud.languages` is a priority order, not a list.** A
+  language near the end of it is effectively ignored on a short stretch of
+  speech. Measured over 24 recordings that change language mid-clause:
+  `["en","ru","de","kk"]` got 17% of words wrong and lost 35% of the Cyrillic
+  to Latin; `["kk","ru","en","de"]` got 11% and 22%, twice in a row. Kazakh
+  fourth turned "Ertengh kezdesemiz" into "You think is the same"; Kazakh
+  first, or `language="kk"` pinned by hand, brought it back whole - which is
+  how we know the audio was never at fault. **English never goes first**: the
+  model leans that way unasked, so the front of the list is worth more to
+  whichever language it is most likely to mishear. A language switched on from
+  the tray is inserted at the front for the same reason.
+  `tools/language_drill.py` is how any of this gets re-measured.
 - **OpenAI is the default and local is a fallback.** Measured on the owner's
   laptop: OpenAI got a four-language clip completely right; local `base` lost
   most of the Russian and Kazakh, `small` took 4-7 s, `large-v3-turbo` 17-19 s.

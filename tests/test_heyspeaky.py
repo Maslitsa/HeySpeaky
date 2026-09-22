@@ -359,8 +359,10 @@ class LanguageList(unittest.TestCase):
     def test_adding_updates_both_lists(self):
         cfg = self._cfg(["en"])
         self.assertEqual(languages.toggle(cfg, "fr"), "added")
+        # First, not last: see LanguagePriority below for why the order of
+        # this list decides whether a language does anything at all.
         self.assertEqual(cfg["transcription"]["cloud"]["languages"],
-                         ["en", "fr"])
+                         ["fr", "en"])
         self.assertEqual(cfg["model"]["language_menu"],
                          {"Auto-detect": "", "English": "en", "French": "fr"})
 
@@ -382,7 +384,7 @@ class LanguageList(unittest.TestCase):
         held = cfg["transcription"]["cloud"]["languages"]
         languages.toggle(cfg, "kk")
         self.assertIs(held, cfg["transcription"]["cloud"]["languages"])
-        self.assertEqual(held, ["en", "kk"])
+        self.assertEqual(held, ["kk", "en"])
 
     def test_reconcile_keeps_what_either_list_named(self):
         cfg = self._cfg(["en"], pinned="es")
@@ -390,7 +392,7 @@ class LanguageList(unittest.TestCase):
             "Auto-detect": "", "English": "en", "French": "fr"}
         self.assertTrue(languages.reconcile(cfg))
         self.assertEqual(cfg["transcription"]["cloud"]["languages"],
-                         ["en", "fr", "es"])
+                         ["es", "fr", "en"])
         self.assertFalse(languages.reconcile(cfg))
 
     def test_the_defaults_already_agree(self):
@@ -971,6 +973,38 @@ class QuietAudio(unittest.TestCase):
         self.assertEqual(
             levels.normalise(pcm, {"normalize_for_transcription": False}),
             pcm)
+
+
+class LanguagePriority(unittest.TestCase):
+    """The order of the languages list is a priority order to the model.
+
+    Measured over 24 recordings that change language mid-sentence: Kazakh
+    fourth in the list gave 17% of words wrong and lost 35% of the Cyrillic;
+    Kazakh first gave 11% and 22%. A language added from the tray used to go
+    to the end, which is the place where it does the least.
+    """
+
+    def setUp(self):
+        import copy
+        self.cfg = copy.deepcopy(config_module.DEFAULTS)
+
+    def test_a_language_added_from_the_tray_goes_first(self):
+        languages.toggle(self.cfg, "fr")
+        self.assertEqual(
+            self.cfg["transcription"]["cloud"]["languages"][0], "fr")
+
+    def test_the_shipped_default_does_not_lead_with_english(self):
+        """The model leans English unasked; the front is worth more to
+        whichever language it is most likely to mishear."""
+        shipped = config_module.DEFAULTS["transcription"]["cloud"]["languages"]
+        self.assertNotEqual(shipped[0], "en")
+        self.assertIn("en", shipped)
+
+    def test_removing_a_language_leaves_the_rest_in_order(self):
+        before = list(self.cfg["transcription"]["cloud"]["languages"])
+        languages.toggle(self.cfg, before[1])
+        after = self.cfg["transcription"]["cloud"]["languages"]
+        self.assertEqual(after, [c for c in before if c != before[1]])
 
 
 if __name__ == "__main__":
