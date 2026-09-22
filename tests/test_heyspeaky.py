@@ -565,28 +565,35 @@ class GlassPill(unittest.TestCase):
         return (theme.WIDTH, theme.HEIGHT + theme.SHADOW_MARGIN * 2)
 
     def test_a_frame_is_the_size_of_the_window(self):
-        backdrop = Image.new("RGB", self.window(), (30, 30, 40))
-        frame = glass.render(backdrop, state="listening",
-                             levels=[0.5] * theme.BARS, status="Listening")
+        frame = glass.render(state="listening", levels=[0.5] * theme.BARS)
         self.assertEqual(frame.size, self.window())
 
-    def test_dark_desktop_gets_light_text_and_light_gets_dark(self):
-        dark = glass.prepare(Image.new("RGB", self.window(), (12, 12, 16)))
-        light = glass.prepare(Image.new("RGB", self.window(), (240, 240, 245)))
-        self.assertFalse(dark.light)
-        self.assertTrue(light.light)
+    def test_a_frame_carries_an_alpha_channel(self):
+        """Windows composites it over the live desktop through this."""
+        frame = glass.render(state="listening", levels=[0.5] * theme.BARS)
+        self.assertEqual(frame.mode, "RGBA")
+
+    def test_the_corners_are_see_through(self):
+        """Or the pill shows as a rectangle, which is the bug this fixes."""
+        frame = glass.render(state="listening", levels=[0.5] * theme.BARS)
+        self.assertEqual(frame.getpixel((0, 0))[3], 0)
+        self.assertEqual(frame.getpixel((frame.width - 1, 0))[3], 0)
+
+    def test_the_middle_of_the_pill_is_nearly_solid(self):
+        frame = glass.render(state="listening", levels=[0.5] * theme.BARS)
+        middle = frame.getpixel((frame.width // 2, frame.height // 2))
+        self.assertGreater(middle[3], 200)
 
     def test_the_glass_is_built_once_and_painted_many_times(self):
-        prepared = glass.prepare(Image.new("RGB", self.window(), (60, 60, 70)))
+        prepared = glass.prepare()
         first = glass.paint(prepared, state="done", text="hello")
         second = glass.paint(prepared, state="done", text="hello again")
         self.assertEqual(first.size, second.size)
         self.assertIsNot(first, prepared.image)
 
     def test_long_text_is_shortened_rather_than_spilling(self):
-        backdrop = Image.new("RGB", self.window(), (20, 20, 24))
         sentence = "word " * 200
-        frame = glass.render(backdrop, state="done", text=sentence)
+        frame = glass.render(state="error", status=sentence)
         self.assertEqual(frame.size, self.window())
 
 
@@ -683,8 +690,7 @@ class PillButtons(unittest.TestCase):
         return (theme.WIDTH, theme.HEIGHT + theme.SHADOW_MARGIN * 2)
 
     def prepared(self, **kwargs):
-        return glass.prepare(Image.new("RGB", self.window(), (30, 30, 40)),
-                             **kwargs)
+        return glass.prepare(**kwargs)
 
     def test_both_buttons_sit_inside_the_pill(self):
         boxes = glass.button_boxes(self.prepared())
@@ -850,6 +856,63 @@ class DoubleTapGesture(unittest.TestCase):
         self.tap(listener)
         self.tap(listener)
         self.assertFalse(self.latched.wait(0.3))
+
+
+from heyspeaky import levels  # noqa: E402
+
+
+class QuietAudio(unittest.TestCase):
+    """Speaking at arm's length from a laptop is what broke this.
+
+    Recordings that came back empty from OpenAI peaked at 0.018 to 0.035 of
+    full scale. The old ceiling of eight times left them at a quarter, which
+    was still too quiet to hear.
+    """
+
+    def buffer(self, peak, seconds=1.0, rate=16000):
+        t = np.arange(int(seconds * rate)) / rate
+        wave = np.sin(2 * np.pi * 180 * t) * peak
+        return (wave * 32767).astype(np.int16).tobytes()
+
+    def peak_of(self, pcm):
+        return float(np.max(np.abs(np.frombuffer(pcm, dtype=np.int16))))            / 32768.0
+
+    def test_a_recording_like_the_ones_that_failed_is_made_audible(self):
+        """The ceiling of 24 turns the quietest of them into -7 dB."""
+        for quiet in (0.018, 0.029, 0.035):
+            out = levels.normalise(self.buffer(quiet))
+            self.assertGreater(self.peak_of(out), 0.35,
+                               "%.3f was left too quiet" % quiet)
+
+    def test_the_old_ceiling_would_not_have_been_enough(self):
+        out = levels.normalise(self.buffer(0.018), {"normalize_max_gain": 8.0})
+        self.assertLess(self.peak_of(out), 0.2)
+
+    def test_a_loud_recording_is_left_alone(self):
+        pcm = self.buffer(0.95)
+        self.assertEqual(levels.normalise(pcm), pcm)
+
+    def test_nothing_is_ever_driven_into_the_ceiling(self):
+        out = levels.normalise(self.buffer(0.02))
+        self.assertLessEqual(self.peak_of(out), 1.0)
+
+    def test_one_loud_click_does_not_stop_the_boost(self):
+        """A chair creak used to convince it the recording was loud."""
+        quiet = np.frombuffer(self.buffer(0.02), dtype=np.int16).copy()
+        quiet[len(quiet) // 2] = 30000
+        before = self.peak_of(quiet.tobytes())
+        out = levels.normalise(quiet.tobytes())
+        self.assertGreater(self.peak_of(out), before)
+
+    def test_silence_is_never_amplified(self):
+        pcm = silence(1.0)
+        self.assertEqual(levels.normalise(pcm), pcm)
+
+    def test_it_can_be_turned_off(self):
+        pcm = self.buffer(0.02)
+        self.assertEqual(
+            levels.normalise(pcm, {"normalize_for_transcription": False}),
+            pcm)
 
 
 if __name__ == "__main__":

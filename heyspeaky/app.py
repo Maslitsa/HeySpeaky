@@ -32,6 +32,7 @@ from . import usage
 from . import output
 from . import sound
 from . import languages
+from . import levels
 from .engine import TranscriptionEngine
 from .hotkey import HotkeyListener
 from .mic import Microphone
@@ -97,6 +98,9 @@ class App:
         self._recording_started = 0.0
         self._peak_level = 0.0
         self._consume_release = False
+        # How loud the last recording was, so an empty transcript can say
+        # whether the microphone or the speaking was the problem.
+        self._last_peak_db = None
         self._max_timer = None
         self._quitting = False
 
@@ -479,28 +483,10 @@ class App:
     def _normalise(self, pcm):
         """Boosts a quiet recording before it is transcribed.
 
-        Only ever called after the speech test has passed, because scaling the
-        audio up scales the noise floor with it. Run the VAD on this and
-        silence reads as continuous speech.
+        Only ever called after the speech test has passed; see levels.py for
+        why that order matters.
         """
-        cfg = self.cfg["recording"]
-        if not cfg.get("normalize_for_transcription", True) or not pcm:
-            return pcm
-        samples = np.frombuffer(pcm, dtype=np.int16)
-        if samples.size == 0:
-            return pcm
-        peak = float(np.max(np.abs(samples))) / 32768.0
-        if peak <= 0.001:
-            return pcm
-        target = float(cfg.get("normalize_target_peak", 0.9))
-        gain = min(target / peak, float(cfg.get("normalize_max_gain", 8.0)))
-        if gain <= 1.05:
-            return pcm
-        boosted = np.clip(
-            samples.astype(np.float32) * gain, -32768, 32767
-        ).astype(np.int16)
-        logger.info("Boosted quiet audio: peak %.3f x%.1f", peak, gain)
-        return boosted.tobytes()
+        return levels.normalise(pcm, self.cfg["recording"])
 
     def _transcribe_and_deliver(self):
         """Transcribes the captured audio, tidies it, and inserts it."""
@@ -544,6 +530,8 @@ class App:
         """
         held = self._held_seconds
         stats = diagnostics.audio_stats(pcm, self._sample_rate)
+        # Kept so an empty transcript can say which kind of empty it was.
+        self._last_peak_db = stats["peak_db"]
         logger.info(
             "Dictation: held %.1fs, captured %.1fs, peak %.0f dB, average "
             "%.0f dB, clipped %.1f%%, speech run %d, %s%s in %.1fs",
@@ -576,10 +564,24 @@ class App:
             "text": text,
         })
 
+    # Below this the microphone is the problem, not the speaking. Measured:
+    # every recording of the owner's that came back empty peaked under -27 dB,
+    # and every one that worked was louder.
+    QUIET_DB = -27.0
+
     def _deliver(self, text, backend):
+        peak_db = self._last_peak_db
         self._reset_to_idle()
         if not text:
-            self.post(self.overlay.flash, "error", "", "Nothing heard", 1.4)
+            if peak_db is not None and peak_db < self.QUIET_DB:
+                # "Nothing heard" sends people looking for the wrong fault.
+                logger.info("Empty transcript from quiet audio: %.0f dB",
+                            peak_db)
+                self.post(self.overlay.flash, "error", "",
+                          "Too quiet - check the microphone", 2.4)
+            else:
+                self.post(self.overlay.flash, "error", "", "Nothing heard",
+                          1.4)
             return
 
         status = output.deliver(text, self.cfg["output"])

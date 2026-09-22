@@ -99,7 +99,7 @@ def sheet(backdrops, out):
     for name, make in backdrops:
         for label, options in states():
             window = (theme.WIDTH, theme.HEIGHT + theme.SHADOW_MARGIN * 2)
-            frame = glass.render(make(window), **options)
+            frame = glass.render(backdrop=make(window), **options)
             rows.append(("{} / {}".format(name, label), frame))
 
     gap = 18
@@ -113,7 +113,7 @@ def sheet(backdrops, out):
     for title, frame in rows:
         drawing.text((gap, y), title, font=text_font, fill=(90, 90, 96))
         y += caption
-        page.paste(frame, (gap, y))
+        page.paste(frame.convert("RGB"), (gap, y))
         y += frame.height + gap
     page.save(out)
     return out
@@ -126,7 +126,8 @@ def animate(path, seconds=4.0, tick=1 / 50.0):
     frozen row of bars would show.
     """
     size = (theme.WIDTH, theme.HEIGHT + theme.SHADOW_MARGIN * 2)
-    prepared = glass.prepare(colourful(size), rim=True)
+    behind = colourful(size).convert("RGBA")
+    prepared = glass.prepare(rim=True)
     levels = [0.0] * theme.BARS
     frames = []
     shown = 0.0
@@ -141,8 +142,10 @@ def animate(path, seconds=4.0, tick=1 / 50.0):
         level = level ** 0.62
         shown += (level - shown) * (0.42 if level > shown else 0.16)
         levels = levels[1:] + [shown]
-        frame = glass.paint(prepared, state="listening", levels=levels)
-        frames.append(frame.convert("P", palette=Image.ADAPTIVE))
+        over = behind.copy()
+        over.alpha_composite(glass.paint(prepared, state="listening",
+                                         levels=levels))
+        frames.append(over.convert("P", palette=Image.ADAPTIVE))
     frames[0].save(path, save_all=True, append_images=frames[1:],
                    duration=int(tick * 1000), loop=0, optimize=True)
     return path

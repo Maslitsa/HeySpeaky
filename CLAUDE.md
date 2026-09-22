@@ -21,6 +21,7 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/engine.py` | RealtimeSTT: capture and voice activity detection |
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
 | `heyspeaky/languages.py` | the languages list and its tray grouping |
+| `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
 | `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
 | `heyspeaky/diagnostics.py` | the problem report people send you |
 | `heyspeaky/tray.py` `hotkey.py` `mic.py` `output.py` `winjob.py` | the rest |
@@ -54,13 +55,21 @@ without jargon, and say what you actually did and what you could not do.
   An idle animation was tried and removed: it invented activity where there
   was none, and a waveform that moves when the room is quiet is a lie about
   what the microphone can hear.
+- **The pill is a layered window with a real alpha channel**, drawn by
+  `UpdateLayeredWindow`, not by Tk. Never call `root.attributes("-alpha")` on
+  it: that is `SetLayeredWindowAttributes`, and a window given one of those
+  can never be updated the other way again. The fade uses the blend function.
+  It used to photograph the desktop and draw the picture as its background;
+  that looked like glass until anything underneath moved, and then the pill
+  showed as a bright rectangle full of somebody else's pixels. A screenshot
+  from the owner is what finally proved it.
 - **The pill must never take focus and never appear in Alt+Tab.** That is what
-  makes dictation feel invisible. It *does* take clicks now, because the cross
-  and the tick on it are real buttons and a window cannot be both clickable
-  and click-through; while it is on screen its own small rectangle above the
-  taskbar swallows clicks. `overlay.buttons_clickable: false` gives the old
-  behaviour back. WS_EX_NOACTIVATE stays either way, so a click on the pill
-  never moves the caret out of the window you were typing in.
+  makes dictation feel invisible. Clicks land on its own pixels - the cross
+  and the tick are real buttons - and pass straight through everywhere else,
+  because Windows hit-tests a layered window through its alpha.
+  `overlay.buttons_clickable: false` makes the whole thing click-through
+  again. WS_EX_NOACTIVATE stays either way, so a click never moves the caret
+  out of the window you were typing in.
 - **Hands-free is a double tap of the whole chord**, half a second apart, the
   way Wispr Flow does it. The owner asked for that specifically. It works
   because a single tap is shorter than the engage delay and so does nothing at
@@ -72,6 +81,12 @@ without jargon, and say what you actually did and what you could not do.
 - **Keys live outside the project**, in `%APPDATA%\HeySpeaky\openai.key`. The
   SpeakIt and VoiceType paths are read as a fallback. Never log one, never
   print one, never put one in config.json.
+- **Quiet audio comes back as an empty string, not an error.** Measured on
+  the owner's machine: every recording OpenAI returned nothing for peaked
+  below -27 dB, and every one that worked was louder. `levels.py` boosts by up
+  to 24x - the old ceiling of 8 was not enough - and an empty transcript from
+  quiet audio says "Too quiet" rather than "Nothing heard", because the second
+  one sends people looking for the wrong fault.
 - **OpenAI is the default and local is a fallback.** Measured on the owner's
   laptop: OpenAI got a four-language clip completely right; local `base` lost
   most of the Russian and Kazakh, `small` took 4-7 s, `large-v3-turbo` 17-19 s.

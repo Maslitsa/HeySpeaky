@@ -250,7 +250,16 @@ DEFAULTS = {
         "normalize_for_transcription": True,
         "normalize_target_peak": 0.9,
         # Do not amplify beyond this, or near-silence becomes loud noise.
-        "normalize_max_gain": 8.0,
+        # Measured on the owner's laptop: recordings that came back empty had
+        # peaks of 0.018 to 0.035, which the old ceiling of 8 left at a
+        # quarter of full scale, and OpenAI heard nothing in them. The guard
+        # against amplifying a silent room is the speech test that runs
+        # first, not this number.
+        "normalize_max_gain": 24.0,
+        # The loudest sample is one sample, and a chair creak is enough to
+        # make a whole quiet sentence look loud. The level is taken at this
+        # percentile of the recording instead. 100 is the old behaviour.
+        "normalize_percentile": 99.0,
         "silero_sensitivity": 0.4,
         "webrtc_sensitivity": 3,
     },

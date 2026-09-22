@@ -18,10 +18,13 @@ PADDING = 10
 # tinted with TINT, which is what gives the dark pill some depth instead of
 # looking like a flat sticker.
 BLUR = 22
-TINT = (10, 10, 12)
+TINT = (14, 14, 17)
+# How solid the capsule is. Windows composites the pill over the live desktop
+# through its alpha channel, so this is real translucency, not a picture of
+# the wallpaper taken a moment ago.
+PILL_ALPHA = 0.90
+# Kept because config and older code still name them.
 TINT_STRENGTH = 0.82
-# Over a bright desktop it needs to be a shade more solid, or the wallpaper
-# shows through the buttons.
 TINT_STRENGTH_LIGHT = 0.91
 SHADOW_OFFSET = 8
 SHADOW_BLUR = 22

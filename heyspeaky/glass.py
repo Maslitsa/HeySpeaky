@@ -254,31 +254,36 @@ def _rim_glow(size, radius):
 class Glass(object):
     """The parts of a frame that stay still while the pill is on screen."""
 
-    __slots__ = ("image", "box", "light", "scale", "open_share")
+    __slots__ = ("image", "box", "scale", "open_share")
 
-    def __init__(self, image, box, light, scale, open_share=1.0):
+    def __init__(self, image, box, scale, open_share=1.0):
         self.image = image
         self.box = box
-        self.light = light
         self.scale = scale
         # Below 1 the pill is still growing, and nothing is drawn inside it.
         self.open_share = open_share
 
 
-def prepare(backdrop, width=theme.WIDTH, height=theme.HEIGHT, rim=False,
+def prepare(width=theme.WIDTH, height=theme.HEIGHT, rim=False,
             open_share=1.0, scale=1.0):
-    """Builds the glass over a picture of the desktop. Once per appearance."""
+    """Builds the capsule on a transparent canvas. Once per appearance.
+
+    Everything outside the capsule stays fully transparent, and the capsule
+    itself is only mostly opaque, so the desktop behind shows through live.
+    Windows composites it for us through UpdateLayeredWindow.
+
+    This used to photograph the desktop and draw the picture as the window's
+    own background, because a click-through window cannot ask Windows to blur
+    what is behind it. The picture went stale the moment anything underneath
+    moved, and then the window showed as a bright rectangle with somebody
+    else's pixels in it. A real alpha channel has none of that problem.
+    """
     margin = int(round(theme.SHADOW_MARGIN * scale))
     window = (int(round(width * scale)),
               int(round(height * scale)) + margin * 2)
     big = (window[0] * SS, window[1] * SS)
 
-    if backdrop is None:
-        backdrop = Image.new("RGB", window, (24, 24, 28))
-    backdrop = backdrop.convert("RGB")
-    if backdrop.size != window:
-        backdrop = backdrop.resize(window, Image.LANCZOS)
-    base = backdrop.resize(big, Image.LANCZOS)
+    base = Image.new("RGBA", big, (0, 0, 0, 0))
 
     full_width = window[0] - margin * 2
     capsule_width = int(round(full_width * max(0.2, min(1.0, open_share))))
@@ -289,43 +294,30 @@ def prepare(backdrop, width=theme.WIDTH, height=theme.HEIGHT, rim=False,
     radius = capsule_size[1] // 2
     mask = _rounded(capsule_size, radius)
 
-    # The shadow, so the glass sits above the desktop rather than in it.
+    # The shadow, so the pill sits above the desktop rather than on it.
     shadow = Image.new("L", big, 0)
     shadow.paste(mask, (box[0], box[1] + int(theme.SHADOW_OFFSET * scale) * SS))
     shadow = shadow.filter(
         ImageFilter.GaussianBlur(theme.SHADOW_BLUR * scale * SS / 2.0))
     shadow = shadow.point(lambda value: int(value * theme.SHADOW_ALPHA))
-    base = Image.composite(Image.new("RGB", big, (0, 0, 0)), base, shadow)
+    base.paste((0, 0, 0, 255), (0, 0), shadow)
 
-    # How bright the desktop is under the pill decides three things: how much
-    # milk the glass needs, how the rim light is blended, and the colour of
-    # the text. All three are measured here rather than guessed.
-    under = backdrop.crop((box[0] // SS, box[1] // SS,
-                           box[2] // SS, box[3] // SS)).convert("L")
-    sample = under.resize((16, 4), Image.BILINEAR)
-    light = (sum(sample.getdata()) / float(len(sample.getdata()))
-             > theme.LIGHT_BACKDROP)
-
-    # The rim light, only while it is listening to you. Adding light to a
-    # white document does nothing, so over a light desktop the colours are
-    # laid on instead of screened in.
+    # Siri's colours around the rim, only while it is listening to you.
     if rim:
-        glow = Image.new("RGB", big, (0, 0, 0))
-        glow.paste(_rim_glow(capsule_size, radius), (box[0], box[1]))
+        glow = Image.new("RGBA", big, (0, 0, 0, 0))
+        ring = _rim_glow(capsule_size, radius)
+        glow.paste(ring, (box[0], box[1]))
+        glow.putalpha(glow.convert("L").point(
+            lambda value: int(value * theme.RIM_ALPHA)))
         glow = glow.filter(
             ImageFilter.GaussianBlur(theme.RIM_BLUR * scale * SS / 2.0))
-        strength = glow.convert("L").point(
-            lambda value: int(value * theme.RIM_ALPHA))
-        top = glow if light else ImageChops.screen(base, glow)
-        base = Image.composite(top, base, strength)
+        base.alpha_composite(glow)
 
-    # The glass itself: the desktop behind, blurred and lightened.
-    blurred = backdrop.resize(big, Image.LANCZOS).filter(
-        ImageFilter.GaussianBlur(theme.BLUR * scale * SS / 2.0))
-    milk = theme.TINT_STRENGTH_LIGHT if light else theme.TINT_STRENGTH
-    tinted = Image.blend(blurred, Image.new("RGB", big, theme.TINT), milk)
-    glass = tinted.crop(box)
-    base.paste(glass, (box[0], box[1]), mask)
+    # The capsule: dark, and not quite opaque, so the wallpaper shows through.
+    body = Image.new("RGBA", capsule_size,
+                     tuple(theme.TINT) + (int(255 * theme.PILL_ALPHA),))
+    body.putalpha(ImageChops.multiply(body.getchannel("A"), mask))
+    base.alpha_composite(body, (box[0], box[1]))
 
     layer = Image.new("RGBA", capsule_size, (0, 0, 0, 0))
 
@@ -346,10 +338,12 @@ def prepare(backdrop, width=theme.WIDTH, height=theme.HEIGHT, rim=False,
         fill=int(255 * theme.SPECULAR_ALPHA))
     layer.paste((255, 255, 255, 255), (0, 0),
                 specular.filter(ImageFilter.GaussianBlur(6 * scale * SS)))
-    base.paste(layer, (box[0], box[1]), layer)
+    # Clipped to the capsule, or the highlight spills into thin air.
+    layer.putalpha(ImageChops.multiply(layer.getchannel("A"), mask))
+    base.alpha_composite(layer, (box[0], box[1]))
 
     plain_box = (box[0] // SS, box[1] // SS, box[2] // SS, box[3] // SS)
-    return Glass(base.resize(window, Image.LANCZOS), plain_box, light, scale,
+    return Glass(base.resize(window, Image.LANCZOS), plain_box, scale,
                  open_share)
 
 
@@ -440,12 +434,20 @@ def paint(glass, state="listening", levels=None, text="", status="",
     return frame
 
 
-def render(backdrop, state="listening", levels=None, text="", status="",
-           label="", width=theme.WIDTH, height=theme.HEIGHT, open_share=1.0,
-           scale=1.0):
-    """Prepare and paint together. For tools and tests, not for every frame."""
-    glass = prepare(backdrop, width=width, height=height,
-                    rim=(state == "listening"), open_share=open_share,
-                    scale=scale)
-    return paint(glass, state=state, levels=levels, text=text, status=status,
-                 label=label)
+def render(state="listening", levels=None, text="", status="", label="",
+           width=theme.WIDTH, height=theme.HEIGHT, open_share=1.0, scale=1.0,
+           backdrop=None):
+    """Prepare and paint together. For tools and tests, not for every frame.
+
+    With a backdrop it returns the pill composited over it, which is what
+    ui_lab wants; without one it returns the pill with its alpha intact.
+    """
+    glass = prepare(width=width, height=height, rim=(state == "listening"),
+                    open_share=open_share, scale=scale)
+    frame = paint(glass, state=state, levels=levels, text=text, status=status,
+                  label=label)
+    if backdrop is None:
+        return frame
+    out = backdrop.convert("RGBA").resize(frame.size, Image.LANCZOS)
+    out.alpha_composite(frame)
+    return out
