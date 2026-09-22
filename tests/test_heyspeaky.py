@@ -580,6 +580,61 @@ from PIL import Image  # noqa: E402
 from heyspeaky import glass, theme  # noqa: E402
 
 
+class GlassCard(unittest.TestCase):
+    """The correction box's background, out of the pill's own materials.
+
+    The box itself needs Tk and a screen, so CI cannot open it; the picture
+    behind it is plain PIL and can be checked anywhere. tools/correction_check.py
+    is what looks at the real window.
+    """
+
+    WELL = (16, 70, 404, 110)
+
+    def card(self, width=420, height=150, scale=1.0):
+        return glass.card(width, height, self.WELL, scale)
+
+    def test_it_is_the_size_it_was_asked_for(self):
+        self.assertEqual(self.card(420, 150).size, (420, 150))
+
+    def test_it_has_no_alpha_channel(self):
+        """Unlike the pill. This window hosts a text field, so Windows clips
+        its corners with a region and per-pixel alpha would be thrown away."""
+        self.assertEqual(self.card().mode, "RGB")
+
+    def test_the_body_is_the_pill_s_tint(self):
+        card = self.card()
+        self.assertEqual(card.load()[210, 145], tuple(theme.TINT))
+
+    def test_the_top_edge_is_brighter_than_the_bottom(self):
+        """The bright edge is what makes it read as glass rather than paper,
+        and it is strongest along the top on both windows."""
+        card = self.card()
+        top = sum(card.load()[210, 1])
+        bottom = sum(card.load()[210, 148])
+        self.assertGreater(top, bottom + 30)
+
+    def test_the_well_is_lighter_than_the_card(self):
+        card = self.card()
+        self.assertGreater(sum(card.load()[210, 90]), sum(theme.TINT))
+
+    def test_the_accent_runs_the_waveform_s_colours(self):
+        """Cold at the left and warm at the right, which is the order the
+        bars use. A line that came out one colour means the gradient was
+        collapsed, and that has happened before elsewhere."""
+        card = self.card()
+        row = self.WELL[3] - 2
+        left = card.load()[self.WELL[0] + 6, row]
+        right = card.load()[self.WELL[2] - 6, row]
+        self.assertGreater(left[2], left[0])      # blue side
+        self.assertGreater(right[0], right[2])    # warm side
+
+    def test_it_survives_the_owner_s_screen_scale(self):
+        for scale in (1.0, 1.25, 1.5, 2.0):
+            card = glass.card(int(420 * scale), int(150 * scale),
+                              [v * scale for v in self.WELL], scale)
+            self.assertEqual(card.size, (int(420 * scale), int(150 * scale)))
+
+
 class GlassPill(unittest.TestCase):
     """The pill draws itself over a photograph of the desktop."""
 

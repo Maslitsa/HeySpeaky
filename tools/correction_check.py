@@ -31,7 +31,9 @@ for stream in (sys.stdout, sys.stderr):
         pass
 
 from heyspeaky.correct import CorrectionBox                  # noqa: E402
-from heyspeaky.overlay import enable_dpi_awareness           # noqa: E402
+from heyspeaky.overlay import (                              # noqa: E402
+    _monitor_scale, enable_dpi_awareness,
+)
 
 HEARD = "Маржан"               # Marzhan
 MEANT = "Мағжан"               # Magzhan
@@ -56,6 +58,10 @@ def main():
                         help="the shape with nothing selected")
     parser.add_argument("--hold", type=float, default=1.2,
                         help="seconds to leave it up before answering")
+    parser.add_argument("--scale", type=float,
+                        help="pretend the screen is at this DPI scale; the "
+                             "owner's is at 1.25 and geometry has broken "
+                             "there before")
     args = parser.parse_args()
 
     enable_dpi_awareness()
@@ -64,7 +70,9 @@ def main():
 
     answers = []
     heard = "" if args.empty else HEARD
-    box = CorrectionBox(root, heard, answers.append)
+    scale = args.scale or _monitor_scale()
+    print("scale {:.2f}".format(scale))
+    box = CorrectionBox(root, heard, answers.append, scale=scale)
 
     root.update()
     time.sleep(args.hold)
@@ -88,6 +96,22 @@ def main():
     print("box  {}x{} at {},{}".format(width, height, x, y))
     print("text {!r}".format(box.entry.get()))
 
+    class _Drag(object):
+        def __init__(self, x, y):
+            self.x_root, self.y_root = x, y
+
+    start = (box.top.winfo_x(), box.top.winfo_y())
+    box._grab(_Drag(start[0] + 40, start[1] + 10))
+    box._drag(_Drag(start[0] + 140, start[1] + 10))
+    box._drop()
+    root.update()
+    moved = box.top.winfo_x() - start[0]
+    print("drag moved it {}px".format(moved))
+    if moved < 50:
+        problems.append("dragging did not move it")
+    box._move(*start)
+    root.update()
+
     if args.out:
         saved = shoot(args.out)
         print("shot {}".format(saved or "not taken: Pillow is missing"))
@@ -101,7 +125,7 @@ def main():
         problems.append("Enter returned {!r}".format(answers))
 
     answers[:] = []
-    second = CorrectionBox(root, heard, answers.append)
+    second = CorrectionBox(root, heard, answers.append, scale=scale)
     root.update()
     second._cancel()
     root.update()

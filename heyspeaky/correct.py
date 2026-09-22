@@ -4,7 +4,15 @@ The owner asked for this in so many words: mark the part that came out wrong,
 type the right version over it, and stop having to do it again. What it can
 and cannot teach is in `dictionary.py`; this is the gesture.
 
-Three things about it are deliberate.
+Four things about it are deliberate.
+
+**It is made of the pill's materials.** The tint, the bright edge along the
+top, the specular inside it, and the waveform's own colours as a line under
+the field - `glass.card` builds all of that out of the code the capsule is
+drawn with. The one thing it does not share is transparency: the pill is a
+layered window with a real alpha channel, and this one has to host a text
+field, so its corners are clipped by a region and the whole window is made
+slightly translucent at once.
 
 **It takes the selection through the clipboard**, because there is no way to
 read another program's selection directly, and it puts the clipboard back
@@ -28,7 +36,9 @@ import logging
 import tkinter as tk
 from ctypes import wintypes
 
-from . import dictionary, theme
+from PIL import ImageTk
+
+from . import dictionary, glass, theme
 
 logger = logging.getLogger("heyspeaky.correct")
 
@@ -43,20 +53,16 @@ _user32.SetWindowRgn.restype = ctypes.c_int
 _gdi32.CreateRoundRectRgn.argtypes = [ctypes.c_int] * 6
 _gdi32.CreateRoundRectRgn.restype = wintypes.HANDLE
 
-WIDTH = 420
-PAD = 14
-# A card, not a capsule. The pill is rounded to half its height because it is
-# one; a box with a line of type in it wants the softer corner of everything
-# else on the desktop.
-RADIUS = 14
+# Moved this far before it counts as a drag rather than a click that wobbled.
+DRAG_SLOP = 3
 
 
-def _round_corners(window, width, height, radius=RADIUS):
+def _round_corners(window, width, height, radius):
     """Clips a Tk window to rounded corners.
 
     Windows 10 does not round a window with no frame, and an
-    `overrideredirect` box is exactly that, so it comes out as a hard
-    rectangle next to a pill that is all curves. Windows owns the region
+    `overrideredirect` box is exactly that, so without this it comes out as a
+    hard rectangle next to a pill that is all curves. Windows owns the region
     once it is set, which is why it is never freed here.
     """
     try:
@@ -95,72 +101,107 @@ def _rgb(colour):
     return "#{:02x}{:02x}{:02x}".format(*colour)
 
 
+def _muted(colour, strength=theme.MUTED_STRENGTH):
+    """A dimmer version of a colour, the way the pill dims its labels."""
+    return tuple(int(round(channel * strength)) for channel in colour)
+
+
 class CorrectionBox(object):
     """Asks what the selected words should have been.
 
     Built on the app's existing Tk root as a Toplevel, because a second Tk
     instance in one process is a way to hang the interpreter, and because
     everything here has to run on the thread that owns the root anyway.
+
+    The background is one image from `glass.card`, with the text field placed
+    over the well that image already has sunk into it. Laying the same thing
+    out twice - once in pixels for the picture, once in widgets - is why every
+    size below is computed once and used by both.
     """
 
-    def __init__(self, root, heard, on_done):
+    def __init__(self, root, heard, on_done, scale=1.0):
         self._on_done = on_done
         self._answered = False
+        self._drag_from = None
+        self._dragged = False
+
+        self.scale = max(0.5, float(scale))
+        pad = self._px(theme.BOX_PAD)
+        gap = self._px(theme.BOX_GAP)
+        self.width = self._px(theme.BOX_WIDTH)
+
+        title = ("What should it have said?" if heard
+                 else "A word to remember")
+        under = ("heard: " + heard if heard else
+                 "Nothing was selected. Type a word to declare it.")
+
+        line = self._px(theme.FONT_SIZE) + self._px(6)
+        small = self._px(theme.LABEL_SIZE) + self._px(6)
+        well_height = self._px(theme.WELL_HEIGHT)
+
+        title_y = pad
+        under_y = title_y + line + self._px(2)
+        well_y = under_y + small + gap
+        hint_y = well_y + well_height + gap
+        self.height = hint_y + small + pad
+        self.well = (pad, well_y, self.width - pad, well_y + well_height)
 
         self.top = tk.Toplevel(root)
         self.top.withdraw()
         self.top.title("HeySpeaky")
         self.top.overrideredirect(True)
         self.top.attributes("-topmost", True)
+        # One value for the whole window, which an ordinary window is allowed
+        # to have. The pill must never be given one: see overlay.py.
+        self.top.attributes("-alpha", theme.BOX_ALPHA)
         self.top.configure(bg=_rgb(theme.TINT))
 
-        frame = tk.Frame(self.top, bg=_rgb(theme.TINT),
-                         padx=PAD, pady=PAD, highlightthickness=1,
-                         highlightbackground=_rgb(theme.CANCEL_FILL))
-        frame.pack(fill="both", expand=True)
+        self.canvas = tk.Canvas(self.top, width=self.width,
+                                height=self.height, highlightthickness=0,
+                                bd=0, bg=_rgb(theme.TINT))
+        self.canvas.pack(fill="both", expand=True)
+        self._background = ImageTk.PhotoImage(
+            glass.card(self.width, self.height, self.well, self.scale))
+        self.canvas.create_image(0, 0, image=self._background, anchor="nw")
 
-        tk.Label(
-            frame,
-            text=("What should it have said?" if heard
-                  else "A word to remember"),
-            bg=_rgb(theme.TINT), fg=_rgb(theme.TEXT_LIGHT),
-            font=("Segoe UI", theme.FONT_SIZE),
-            anchor="w",
-        ).pack(fill="x")
-
-        if heard:
-            tk.Label(
-                frame, text="heard: " + heard,
-                bg=_rgb(theme.TINT), fg=_rgb(theme.CANCEL_GLYPH),
-                font=("Segoe UI", theme.LABEL_SIZE), anchor="w",
-                wraplength=WIDTH - 2 * PAD, justify="left",
-            ).pack(fill="x", pady=(2, 8))
-        else:
-            tk.Label(
-                frame,
-                text="Nothing was selected. Type a word to declare it.",
-                bg=_rgb(theme.TINT), fg=_rgb(theme.CANCEL_GLYPH),
-                font=("Segoe UI", theme.LABEL_SIZE), anchor="w",
-            ).pack(fill="x", pady=(2, 8))
+        self.canvas.create_text(
+            pad, title_y, text=title, anchor="nw",
+            fill=_rgb(theme.TEXT_LIGHT),
+            font=("Segoe UI Semibold", theme.FONT_SIZE))
+        self.canvas.create_text(
+            pad, under_y, text=under, anchor="nw",
+            fill=_rgb(_muted(theme.TEXT_LIGHT)),
+            font=("Segoe UI", theme.LABEL_SIZE))
+        self.canvas.create_text(
+            pad, hint_y,
+            text="Enter saves it · Esc leaves it · drag to move",
+            anchor="nw", fill=_rgb(_muted(theme.TEXT_LIGHT, 0.5)),
+            font=("Segoe UI", theme.LABEL_SIZE))
 
         self.entry = tk.Entry(
-            frame, bg=_rgb(theme.CANCEL_FILL), fg=_rgb(theme.TEXT_LIGHT),
-            insertbackground=_rgb(theme.TEXT_LIGHT), relief="flat",
-            font=("Segoe UI", theme.FONT_SIZE + 1),
-        )
-        self.entry.pack(fill="x", ipady=6)
+            self.canvas, bg=_rgb(theme.WELL_FILL), fg=_rgb(theme.TEXT_LIGHT),
+            insertbackground=_rgb(theme.TEXT_LIGHT), relief="flat", bd=0,
+            highlightthickness=0,
+            font=("Segoe UI", theme.FONT_SIZE + 1))
+        inset = self._px(10)
+        self.canvas.create_window(
+            self.well[0] + inset, (self.well[1] + self.well[3]) // 2,
+            window=self.entry, anchor="w",
+            width=self.well[2] - self.well[0] - inset * 2,
+            height=well_height - self._px(theme.WELL_ACCENT) - self._px(6))
         self.entry.insert(0, heard)
         self.entry.select_range(0, "end")
 
-        tk.Label(
-            frame, text="Enter saves it · Esc leaves it alone",
-            bg=_rgb(theme.TINT), fg=_rgb(theme.CANCEL_GLYPH),
-            font=("Segoe UI", theme.LABEL_SIZE), anchor="w",
-        ).pack(fill="x", pady=(8, 0))
-
-        self.top.bind("<Return>", self._accept)
-        self.top.bind("<KP_Enter>", self._accept)
-        self.top.bind("<Escape>", self._cancel)
+        for widget in (self.top, self.entry, self.canvas):
+            widget.bind("<Return>", self._accept)
+            widget.bind("<KP_Enter>", self._accept)
+            widget.bind("<Escape>", self._cancel)
+        # Anywhere on the card that is not the field is a handle. A box that
+        # lands on top of the words you are trying to read is the one thing
+        # that would make this worse than editing the file by hand.
+        self.canvas.bind("<Button-1>", self._grab)
+        self.canvas.bind("<B1-Motion>", self._drag)
+        self.canvas.bind("<ButtonRelease-1>", self._drop)
         # Clicking away is the third way people close a box like this, and
         # leaving it floating over everything when they do is the fastest way
         # to make somebody hate a feature.
@@ -172,20 +213,52 @@ class CorrectionBox(object):
         self.top.focus_force()
         self.entry.focus_set()
 
+    def _px(self, value):
+        return max(1, int(round(value * self.scale)))
+
+    # -- placing and dragging ---------------------------------------------
+
     def _place(self):
         """Near the pointer, and always fully on the screen it is on."""
         self.top.update_idletasks()
-        width = max(WIDTH, self.top.winfo_reqwidth())
-        height = self.top.winfo_reqheight()
-        x = self.top.winfo_pointerx() - width // 2
-        y = self.top.winfo_pointery() + 24
-        limit_x = self.top.winfo_screenwidth() - width - 8
-        limit_y = self.top.winfo_screenheight() - height - 8
-        x = max(8, min(x, limit_x))
-        y = max(8, min(y, limit_y))
-        self.top.geometry("{}x{}+{}+{}".format(width, height, x, y))
+        self._move(self.top.winfo_pointerx() - self.width // 2,
+                   self.top.winfo_pointery() + self._px(24))
+
+    def _move(self, x, y):
+        limit_x = self.top.winfo_screenwidth() - self.width - 8
+        limit_y = self.top.winfo_screenheight() - self.height - 8
+        x = max(8, min(int(x), max(8, limit_x)))
+        y = max(8, min(int(y), max(8, limit_y)))
+        self.top.geometry("{}x{}+{}+{}".format(self.width, self.height, x, y))
         self.top.update_idletasks()
-        _round_corners(self.top, width, height)
+        _round_corners(self.top, self.width, self.height,
+                       self._px(theme.BOX_RADIUS))
+
+    def _grab(self, event):
+        self._drag_from = (event.x_root - self.top.winfo_x(),
+                           event.y_root - self.top.winfo_y())
+        self._dragged = False
+
+    def _drag(self, event):
+        if self._drag_from is None:
+            return
+        x = event.x_root - self._drag_from[0]
+        y = event.y_root - self._drag_from[1]
+        if not self._dragged:
+            moved = abs(x - self.top.winfo_x()) + abs(y - self.top.winfo_y())
+            if moved < DRAG_SLOP:
+                return
+            self._dragged = True
+        self._move(x, y)
+
+    def _drop(self, _event=None):
+        self._drag_from = None
+        # A click on the card rather than a drag should still leave the caret
+        # somewhere it can be typed at.
+        if not self._dragged:
+            self.entry.focus_set()
+
+    # -- answering ---------------------------------------------------------
 
     def _focus_left(self, _event=None):
         """Closes the box when focus leaves it, and only then.

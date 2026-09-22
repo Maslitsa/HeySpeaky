@@ -474,3 +474,65 @@ def render(state="listening", levels=None, text="", status="", label="",
     out = backdrop.convert("RGBA").resize(frame.size, Image.LANCZOS)
     out.alpha_composite(frame)
     return out
+
+
+def card(width, height, well, scale=1.0):
+    """The correction box's background, out of the pill's own materials.
+
+    The tint, the bright edge strongest along the top, the specular just
+    inside it: the same three layers `prepare` builds the capsule from, over a
+    fixed radius instead of half the height, because this one is a card.
+
+    It is returned as RGB rather than RGBA on purpose. The pill is a layered
+    window with a real alpha channel and can be genuinely see-through; this is
+    an ordinary window that has to host a text field, so Windows clips its
+    corners with a region and the whole thing is made translucent at once. A
+    per-pixel alpha here would be thrown away.
+
+    `well` is the rectangle the typing field will sit in, in the same
+    coordinates, so the sunken part and the widget on top of it agree.
+    """
+    size = (max(1, int(width)) * SS, max(1, int(height)) * SS)
+    radius = int(round(theme.BOX_RADIUS * scale)) * SS
+    base = Image.new("RGB", size, theme.TINT)
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+
+    # The bright edge, strongest along the top. Inset by a pixel so the curve
+    # drawn here and the one Windows clips to line up.
+    edge = Image.new("L", size, 0)
+    ImageDraw.Draw(edge).rounded_rectangle(
+        (SS, SS, size[0] - 1 - SS, size[1] - 1 - SS), radius=radius,
+        outline=255, width=max(1, int(theme.EDGE_WIDTH * scale * SS)))
+    ramp = _vertical_gradient(size, theme.EDGE_TOP, theme.EDGE_BOTTOM)
+    layer.paste((255, 255, 255, 255), (0, 0),
+                Image.composite(ramp, Image.new("L", size, 0), edge))
+
+    # A soft highlight just inside the top edge.
+    specular = Image.new("L", size, 0)
+    ImageDraw.Draw(specular).ellipse(
+        (size[0] * 0.18, 2 * SS, size[0] * 0.82, size[1] * 0.34),
+        fill=int(255 * theme.SPECULAR_ALPHA))
+    layer.paste((255, 255, 255, 255), (0, 0),
+                specular.filter(ImageFilter.GaussianBlur(8 * scale * SS)))
+
+    base.paste(Image.new("RGB", size, (255, 255, 255)), (0, 0),
+               layer.getchannel("A"))
+
+    # The well the text sits in, and the waveform's colours underneath it.
+    left, top, right, bottom = [int(round(v)) * SS for v in well]
+    sunk = sprite((right - left, bottom - top),
+                  int(round(theme.WELL_RADIUS * scale)) * SS, theme.WELL_FILL)
+    base.paste(sunk.convert("RGB"), (left, top), sunk.getchannel("A"))
+
+    thickness = max(1, int(round(theme.WELL_ACCENT * scale)) * SS)
+    accent = Image.new("RGB", (max(1, right - left), thickness))
+    pixels = accent.load()
+    for x in range(accent.size[0]):
+        colour = _siri_colour(x / float(max(1, accent.size[0] - 1)))
+        for y in range(thickness):
+            pixels[x, y] = colour
+    mask = sprite(accent.size, thickness, (255, 255, 255)).getchannel("A")
+    base.paste(accent, (left, bottom - thickness), mask)
+
+    return base.resize((max(1, int(width)), max(1, int(height))),
+                       Image.LANCZOS)

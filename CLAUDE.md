@@ -160,9 +160,21 @@ without jargon, and say what you actually did and what you could not do.
   opposite windows and both are right: dictation is worthless if it steals
   the caret, and a box you cannot type into is worthless too. The box is an
   ordinary `Toplevel`, not a layered surface, so none of the pill's rules
-  apply to it - but Windows 10 will not round a window with no frame, so it
-  clips itself with `SetWindowRgn` or it looks like a grey rectangle next to
-  a pill made of curves. Look at it with `tools/correction_check.py`.
+  apply to it - `-alpha` is fine here and fatal there - but Windows 10 will
+  not round a window with no frame, so it clips itself with `SetWindowRgn`.
+  Look at it with `tools/correction_check.py`, which also drags it and runs
+  it at several screen scales.
+- **Both windows are drawn by the same code, and that is the point.**
+  `glass.card` builds the box's background out of the three layers
+  `glass.prepare` builds the capsule from: the tint, the bright edge
+  strongest along the top, the specular just inside it. The one piece of
+  colour in either window is the waveform's palette, which runs as a line
+  under the field you type in. Sizes live in `theme.py` with everything else
+  about the look. The box lays the same thing out twice - once as pixels in
+  the picture, once as widgets over it - so every size is computed once in
+  `CorrectionBox.__init__` and used by both, and the well in the picture is
+  where the entry is placed. Change one without the other and the field
+  floats off its own slot.
 - **Reading somebody's selection means borrowing the clipboard.** There is no
   API for another program's selection. `output.copy_selection` empties the
   clipboard first - otherwise a Ctrl+C that copies nothing, because nothing

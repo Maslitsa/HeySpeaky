@@ -9,6 +9,24 @@ button. Nothing else. Whatever you said lands in the window you were typing
 in, so the pill has no reason to repeat it back at you.
 """
 
+# The correction box, Ctrl+Alt+Space. Same materials as the pill - the tint,
+# the bright top edge, the specular - so the two read as one app. It is a card
+# rather than a capsule, so its corner is a fixed radius instead of half its
+# height, and it is a window you type into, so it is nearly opaque where the
+# pill is not.
+BOX_WIDTH = 420
+BOX_RADIUS = 16
+BOX_PAD = 16
+BOX_ALPHA = 0.97
+BOX_GAP = 10
+# The field you type in: a darker well sunk into the card, with the waveform's
+# own colours running under it. That line is the one piece of colour in either
+# window, and having it in both is what ties them together.
+WELL_HEIGHT = 40
+WELL_RADIUS = 10
+WELL_FILL = (38, 38, 45)
+WELL_ACCENT = 2
+
 # The pill itself.
 WIDTH = 248
 HEIGHT = 54

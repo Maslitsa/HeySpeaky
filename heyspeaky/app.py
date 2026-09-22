@@ -385,6 +385,7 @@ class App:
             correct.CorrectionBox(
                 self.root, heard,
                 lambda meant: self._correction_given(heard, meant, came_from),
+                scale=self.overlay.scale,
             )
         except Exception:
             logger.exception("Could not open the correction box")

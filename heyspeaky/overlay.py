@@ -384,6 +384,11 @@ class Overlay:
         return (int(round(theme.WIDTH * self._scale)),
                 int(round(theme.HEIGHT * self._scale)) + margin * 2)
 
+    @property
+    def scale(self):
+        """The monitor's DPI scale, so other windows can match the pill."""
+        return self._scale
+
     def _place(self, lift=0):
         """Docks the pill to the bottom centre of the monitor with the mouse."""
         width, height = self._window_size()
