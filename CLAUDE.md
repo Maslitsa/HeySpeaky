@@ -21,6 +21,7 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/engine.py` | RealtimeSTT: capture and voice activity detection |
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
 | `heyspeaky/languages.py` | the languages list and its tray grouping |
+| `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
 | `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
 | `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
 | `heyspeaky/diagnostics.py` | the problem report people send you |
@@ -131,6 +132,22 @@ without jargon, and say what you actually did and what you could not do.
   moved it from "Marzhan" to "Magzhan" but the Kazakh letter did not survive
   into Russian text, so priming narrows the gap and does not always close it.
   That remainder is what a spelling fix applied after transcription is for.
+- **The model cannot be taught how somebody sounds, and `dictionary.py` is
+  what to do instead.** There is no fine-tuning here: the model is OpenAI's.
+  What a correction can do is name the word in the request, which primes the
+  decoder, and fix the spelling afterwards, which is certain. Both, together,
+  is the whole feature, and it lives in `%APPDATA%\HeySpeaky\dictionary.json`
+  next to the key - personal, growing, and not something to put in
+  config.json. `Router.transcribe` applies it, so local transcription gets it
+  too. Two things to keep: the words go out newest-first and capped, because
+  the steering text has a budget; and a replacement never fires on a word
+  that is itself in the dictionary as something meant, because "Marzhan" is a
+  real name belonging to somebody else and eating it every time it is said
+  would be worse than the mistake being fixed. That is also why only the
+  owner's own corrections are ever applied, never a guess. The suite points
+  `dictionary.PATH` at an empty file for the whole run, because that file is
+  read fresh on every transcription: without it the keyword tests pass on a
+  clean CI runner and fail on any machine that has actually used the feature.
 - **OpenAI is the default and local is a fallback.** Measured on the owner's
   laptop: OpenAI got a four-language clip completely right; local `base` lost
   most of the Russian and Kazakh, `small` took 4-7 s, `large-v3-turbo` 17-19 s.

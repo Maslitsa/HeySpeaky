@@ -26,10 +26,30 @@ sys.path.insert(0, str(ROOT))
 import numpy as np  # noqa: E402
 
 from heyspeaky import config as config_module          # noqa: E402
+from heyspeaky import dictionary as dictionary_module   # noqa: E402
 from heyspeaky.transcribe import (                     # noqa: E402
     CloudBackend, _default_keywords, _default_prompt, _join_segments,
     _merge_spans, pcm_to_float, pcm_to_wav,
 )
+
+_real_dictionary = dictionary_module.PATH
+
+
+def setUpModule():
+    """Points the personal dictionary somewhere empty for the whole run.
+
+    A request carries whatever words the person running the tests has had to
+    correct, because that file is read fresh on every transcription. Left
+    alone, the keyword tests pass on a clean CI runner and fail on the
+    owner's machine - which is how this was found.
+    """
+    global _real_dictionary
+    _real_dictionary = dictionary_module.PATH
+    dictionary_module.PATH = os.path.join(tempfile.mkdtemp(), "none.json")
+
+
+def tearDownModule():
+    dictionary_module.PATH = _real_dictionary
 
 RATE = 16000
 
@@ -1007,6 +1027,103 @@ class LanguagePriority(unittest.TestCase):
         languages.toggle(self.cfg, before[1])
         after = self.cfg["transcription"]["cloud"]["languages"]
         self.assertEqual(after, [c for c in before if c != before[1]])
+
+
+dictionary = dictionary_module
+
+
+class PersonalDictionary(unittest.TestCase):
+    """The words one person keeps having to correct.
+
+    The model cannot be taught how somebody sounds, so this is the substitute:
+    the words go out with the audio as keywords, and what priming does not
+    reach is replaced afterwards. The tests that matter most are the ones
+    about what it must NOT replace - a dictionary that eats a real word is
+    worse than the mistake it was written for.
+    """
+
+    NAME = "Мағжан"       # Magzhan
+    WRONG = "Маржан"      # Marzhan
+
+    def setUp(self):
+        folder = tempfile.mkdtemp()
+        self.path = os.path.join(folder, "dictionary.json")
+
+    def test_a_correction_survives_a_round_trip(self):
+        entries = dictionary.add(self.WRONG, self.NAME, entries=[])
+        dictionary.save(entries, self.path)
+        back = dictionary.load(self.path)
+        self.assertEqual(back[0]["meant"], self.NAME)
+        self.assertEqual(back[0]["heard"], self.WRONG)
+
+    def test_the_word_is_offered_to_the_model(self):
+        entries = dictionary.add(self.WRONG, self.NAME, entries=[])
+        self.assertEqual(dictionary.words(entries), [self.NAME])
+
+    def test_what_was_heard_is_replaced_by_what_was_meant(self):
+        entries = dictionary.add(self.WRONG, self.NAME, entries=[])
+        said = "{}, мен сені "               "сүйем.".format(self.WRONG)
+        self.assertIn(self.NAME, dictionary.apply(said, entries))
+        self.assertNotIn(self.WRONG, dictionary.apply(said, entries))
+
+    def test_only_whole_words_are_replaced(self):
+        entries = dictionary.add("cat", "cot", entries=[])
+        self.assertEqual(dictionary.apply("concatenate", entries),
+                         "concatenate")
+        self.assertEqual(dictionary.apply("the cat.", entries), "the cot.")
+
+    def test_a_word_somebody_meant_is_never_replaced_away(self):
+        """Two names that sound alike, both real. Correcting one must not
+        destroy the other every time it is said."""
+        entries = dictionary.add(self.WRONG, self.NAME, entries=[])
+        entries = dictionary.add("", self.WRONG, entries=entries)
+        self.assertIn(self.WRONG, dictionary.apply(self.WRONG, entries))
+
+    def test_a_word_can_be_declared_without_ever_being_wrong(self):
+        entries = dictionary.add("", self.NAME, entries=[])
+        self.assertEqual(dictionary.words(entries), [self.NAME])
+        self.assertEqual(dictionary.apply("anything", entries), "anything")
+
+    def test_correcting_the_same_thing_twice_does_not_duplicate_it(self):
+        entries = dictionary.add(self.WRONG, self.NAME, entries=[])
+        entries = dictionary.add(self.WRONG, self.NAME, entries=entries)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["hits"], 2)
+
+    def test_the_newest_correction_leads(self):
+        """What someone is fixing today is what they are saying today, and
+        only the first so many words fit in a request."""
+        entries = dictionary.add("", "first", entries=[])
+        entries = dictionary.add("", "second", entries=entries)
+        self.assertEqual(dictionary.words(entries), ["second", "first"])
+
+    def test_the_number_of_words_sent_is_capped(self):
+        entries = []
+        for index in range(dictionary.KEYWORD_LIMIT + 10):
+            entries = dictionary.add("", "word%d" % index, entries=entries)
+        self.assertEqual(len(dictionary.words(entries)),
+                         dictionary.KEYWORD_LIMIT)
+
+    def test_a_capital_stays_a_capital(self):
+        entries = dictionary.add("marzhan", "magzhan", entries=[])
+        self.assertEqual(dictionary.apply("Marzhan said so", entries),
+                         "Magzhan said so")
+
+    def test_a_broken_file_does_not_stop_dictation(self):
+        with open(self.path, "w", encoding="utf-8") as handle:
+            handle.write("{ this is not json")
+        self.assertEqual(dictionary.load(self.path), [])
+
+    def test_a_missing_file_is_empty_rather_than_an_error(self):
+        self.assertEqual(dictionary.load(self.path + ".nope"), [])
+
+    def test_an_entry_with_no_meaning_is_ignored(self):
+        dictionary.save([{"heard": "x"}, {"meant": "y"}], self.path)
+        self.assertEqual(dictionary.words(dictionary.load(self.path)), ["y"])
+
+    def test_empty_text_is_left_alone(self):
+        entries = dictionary.add(self.WRONG, self.NAME, entries=[])
+        self.assertEqual(dictionary.apply("", entries), "")
 
 
 class OldConfigsMoveForward(unittest.TestCase):

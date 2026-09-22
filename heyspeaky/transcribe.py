@@ -31,6 +31,7 @@ import wave
 import numpy as np
 import webrtcvad
 
+from . import dictionary
 from .languages import NAMES
 
 logger = logging.getLogger("heyspeaky.transcribe")
@@ -365,11 +366,15 @@ class CloudBackend:
         """
         codes = ([language] if language
                  else [str(c) for c in self._cloud.get("languages") or []])
-        # Configured keywords come first, then the glue words for the
-        # languages in use. Merged rather than replaced: someone adding their
-        # own name should not silently lose the fix for reduced German.
+        # Configured keywords come first, then the words this person has had
+        # to correct, then the glue words for the languages in use. Merged
+        # rather than replaced at every step: someone adding their own name
+        # should not silently lose the fix for reduced German.
         codes_for_glue = [str(c) for c in self._cloud.get("languages") or []]
         keywords = [str(w) for w in self._cloud.get("keywords") or []]
+        for word in dictionary.words():
+            if word not in keywords:
+                keywords.append(word)
         for word in _default_keywords(codes_for_glue):
             if word not in keywords:
                 keywords.append(word)
@@ -497,7 +502,21 @@ class Router:
         return self._cfg["transcription"]["backend"]
 
     def transcribe(self, pcm_bytes, language):
-        """Returns (text, backend_name_used)."""
+        """Returns (text, backend_name_used), with corrections applied.
+
+        The user's dictionary is applied here rather than inside a backend, so
+        it reaches local transcription too - which needs it more, being the
+        weaker of the two on exactly the words people end up correcting.
+        """
+        text, backend = self._transcribe(pcm_bytes, language)
+        # Naming the words in the request gets most of the way and not always
+        # all of it: the measurement that put them there also showed a Kazakh
+        # letter failing to survive into a Russian sentence. What the user has
+        # spelled out is applied after the model has had its say. See
+        # heyspeaky/dictionary.py.
+        return dictionary.apply(text), backend
+
+    def _transcribe(self, pcm_bytes, language):
         self.last_fallback = ""
         if self.preferred == "cloud":
             if not self.cloud.available():

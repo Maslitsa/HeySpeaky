@@ -12,6 +12,7 @@ import threading
 import pystray
 from PIL import Image, ImageDraw
 
+from . import dictionary
 from . import languages as language_names
 
 logger = logging.getLogger("heyspeaky.tray")
@@ -109,6 +110,7 @@ class Tray:
                 visible=lambda _: bool(self._update_version),
             ),
             pystray.MenuItem("Edit settings", self._open_config),
+            pystray.MenuItem("Edit your words", self._open_dictionary),
             pystray.MenuItem(
                 lambda _: self._usage_text() if self._usage_text else "",
                 None,
@@ -236,6 +238,18 @@ class Tray:
 
     def _open_config(self, _icon=None, _item=None):
         self._open(str(self._config_path))
+
+    def _open_dictionary(self, _icon=None, _item=None):
+        """Opens the words this person has had to correct.
+
+        The file is created empty on the way, with a line saying what it is
+        for, because an explorer window that opens on nothing looks broken and
+        is the fastest way to make somebody stop using a feature.
+        """
+        path = os.path.expandvars(dictionary.PATH)
+        if not os.path.exists(path):
+            dictionary.save([])
+        self._open(path)
 
     def _open_logs(self, _icon=None, _item=None):
         self._open(str(self._log_dir))
