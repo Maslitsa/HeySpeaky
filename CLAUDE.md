@@ -48,6 +48,12 @@ without jargon, and say what you actually did and what you could not do.
   `tools/ui_lab.py` before wiring it in. The pill is small and dark: cross,
   waveform, tick, and nothing else. It does not repeat the transcript back,
   because the transcript is already in the window you were typing in.
+- **Silence is drawn as dots, not as motion.** Many thin round-capped bars,
+  newest on the right, scrolling left, falling to dots when nothing is heard -
+  which is how ChatGPT and every other voice composer worth copying does it.
+  An idle animation was tried and removed: it invented activity where there
+  was none, and a waveform that moves when the room is quiet is a lie about
+  what the microphone can hear.
 - **The pill must never take focus and never appear in Alt+Tab.** That is what
   makes dictation feel invisible. It *does* take clicks now, because the cross
   and the tick on it are real buttons and a window cannot be both clickable

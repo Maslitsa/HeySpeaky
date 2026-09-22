@@ -119,7 +119,7 @@ def sheet(backdrops, out):
     return out
 
 
-def animate(path, seconds=4.0, tick=1 / 30.0):
+def animate(path, seconds=4.0, tick=1 / 50.0):
     """A GIF of the pill: quiet, then spoken to, then quiet again.
 
     The quiet stretches matter as much as the loud one - they are where a
@@ -129,16 +129,18 @@ def animate(path, seconds=4.0, tick=1 / 30.0):
     prepared = glass.prepare(colourful(size), rim=True)
     levels = [0.0] * theme.BARS
     frames = []
+    shown = 0.0
     for index in range(int(seconds / tick)):
         now = index * tick
-        # The same idle wave the overlay uses when nothing is being said.
-        swing = 0.5 - 0.5 * math.cos(now * theme.IDLE_SPEED * math.pi)
-        level = theme.IDLE_WAVE * swing
+        # Silence is silence: the bars fall to dots, and stay there.
+        level = 0.0
         if 1.2 < now < 2.8:
-            # Someone talking: louder, and less regular.
-            level = max(level, 0.35 + 0.45 * abs(math.sin(now * 9.0))
-                        * abs(math.cos(now * 3.7)))
-        levels = levels[1:] + [level]
+            level = (0.35 + 0.45 * abs(math.sin(now * 9.0))
+                     * abs(math.cos(now * 3.7)))
+        # The same curve and easing the overlay uses.
+        level = level ** 0.62
+        shown += (level - shown) * (0.42 if level > shown else 0.16)
+        levels = levels[1:] + [shown]
         frame = glass.paint(prepared, state="listening", levels=levels)
         frames.append(frame.convert("P", palette=Image.ADAPTIVE))
     frames[0].save(path, save_all=True, append_images=frames[1:],

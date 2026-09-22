@@ -19,7 +19,7 @@ PADDING = 10
 # looking like a flat sticker.
 BLUR = 22
 TINT = (10, 10, 12)
-TINT_STRENGTH = 0.86
+TINT_STRENGTH = 0.82
 # Over a bright desktop it needs to be a shade more solid, or the wallpaper
 # shows through the buttons.
 TINT_STRENGTH_LIGHT = 0.91
@@ -49,8 +49,8 @@ LABEL_SIZE = 11
 
 # The two round buttons. Left cancels and throws the recording away, right
 # finishes it. Both are real buttons: you can click them.
-BUTTON = 34
-BUTTON_INSET = 10
+BUTTON = 30
+BUTTON_INSET = 12
 CANCEL_FILL = (68, 68, 74)
 CANCEL_GLYPH = (238, 238, 243)
 ACCEPT_FILL = (245, 245, 247)
@@ -71,33 +71,32 @@ STATE_COLOURS = {
     "error": (255, 69, 58),
 }
 
-# The waveform.
-BARS = 15
+# The waveform. Many thin round-capped bars rather than a few fat ones, the
+# newest on the right, scrolling left - which is how every voice composer
+# worth copying draws it.
+BARS = 23
 BAR_WIDTH = 3
-BAR_GAP = 4
-BAR_MIN = 4
+BAR_GAP = 3
+# A silent bar is as tall as it is wide, so it is a dot. That is what silence
+# should look like: nothing was heard, and the pill says so honestly instead
+# of animating to look busy.
+BAR_MIN = 3
 BAR_MAX = 24
 BAR_FLAT = 3
 BAR_LIVE = (245, 245, 247)
 BAR_QUIET = (120, 120, 128)
-# Each bar carries a soft bloom, so the waveform glows rather than sitting
-# flat on the glass.
-BAR_GLOW = 7
-BAR_GLOW_ALPHA = 0.55
+# A soft bloom, kept subtle. Neon looks cheap at this size.
+BAR_GLOW = 5
+BAR_GLOW_ALPHA = 0.38
 # The waveform fades out at both ends instead of stopping at a hard edge.
 # One value per bar inwards from each side; the rest are full strength.
-BAR_EDGE_FADE = (0.30, 0.65)
-
-# When nothing is being said the bars would sit still, which reads as frozen.
-# A slow wave travels along them instead. 0 turns it off.
-IDLE_WAVE = 0.20
-IDLE_SPEED = 2.0
+BAR_EDGE_FADE = (0.25, 0.55, 0.80)
 
 # The buttons are lit like real ones: a highlight along the top left, a
 # shadow inside the bottom right, and a soft shadow under the whole circle.
-BUTTON_SHADOW = 0.38
-BUTTON_INNER_LIGHT = 0.50
-BUTTON_INNER_SHADE = 0.34
+BUTTON_SHADOW = 0.34
+BUTTON_INNER_LIGHT = 0.42
+BUTTON_INNER_SHADE = 0.28
 
 # Motion, in seconds.
 SPRING_IN = 0.28

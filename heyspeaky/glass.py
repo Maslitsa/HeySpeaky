@@ -395,6 +395,12 @@ def paint(glass, state="listening", levels=None, text="", status="",
     inner_left = boxes["cancel"][2] + int(round(theme.PADDING * scale))
     inner_right = boxes["accept"][0] - int(round(theme.PADDING * scale))
 
+    if levels is None and state == "done":
+        # A quiet row of dots, so the finished pill is composed rather than
+        # empty. Nothing was heard since it stopped, and that is what a dot
+        # means everywhere else on it.
+        levels = [0.0] * theme.BARS
+
     if levels:
         bar_width = max(2, int(round(theme.BAR_WIDTH * scale)))
         pitch = bar_width + max(1, int(round(theme.BAR_GAP * scale)))
