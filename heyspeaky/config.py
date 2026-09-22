@@ -326,6 +326,40 @@ DEFAULTS = {
 }
 
 
+# Language orders that shipped as the default and were later measured to be
+# worse. config.json belongs to the user and the installer never overwrites
+# it, so anyone who had the app before the measurement keeps the old list
+# forever: the owner was still on ["en","ru","de","kk"] a day after it was
+# replaced, which is the order that loses 35% of the Cyrillic to Latin.
+#
+# A stored list that matches one of these exactly was never chosen by anyone.
+# It is an old default, and it is upgraded on load. A list that differs by so
+# much as one entry is somebody's own and is left alone.
+SUPERSEDED_LANGUAGES = [
+    ["en", "ru", "de", "kk"],
+]
+
+
+def _migrate(user_config):
+    """Brings an old config.json forward. Returns it and whether it changed.
+
+    Only for settings the user cannot reasonably have meant, where leaving
+    them costs something measurable. Anything a person might have typed on
+    purpose stays.
+    """
+    changed = False
+    cloud = ((user_config.get("transcription") or {}).get("cloud") or {})
+    stored = cloud.get("languages")
+    if stored in SUPERSEDED_LANGUAGES:
+        wanted = list(DEFAULTS["transcription"]["cloud"]["languages"])
+        if stored != wanted:
+            cloud["languages"] = wanted
+            changed = True
+            logger.info("Upgraded the language order from %s to %s",
+                        stored, wanted)
+    return user_config, changed
+
+
 def _deep_merge(base, override):
     """Returns base updated with override, recursing into nested dicts."""
     result = copy.deepcopy(base)
@@ -355,6 +389,9 @@ def load():
     if CONFIG_PATH.exists():
         try:
             user_config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            user_config, changed = _migrate(user_config)
+            if changed:
+                save(user_config)
         except (OSError, ValueError) as exc:
             logger.warning("Ignoring unreadable config.json: %s", exc)
     else:

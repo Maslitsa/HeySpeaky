@@ -1009,6 +1009,60 @@ class LanguagePriority(unittest.TestCase):
         self.assertEqual(after, [c for c in before if c != before[1]])
 
 
+class OldConfigsMoveForward(unittest.TestCase):
+    """A measured default is worth nothing if it never reaches anyone.
+
+    config.json is the user's file and the installer never touches it, so the
+    owner was still running the old language order a day after it had been
+    measured and replaced. These cover the upgrade that fixes that, and the
+    line it must not cross: a list somebody chose stays theirs.
+    """
+
+    def config(self, languages):
+        return {"transcription": {"cloud": {"languages": languages}}}
+
+    def languages(self, cfg):
+        return cfg["transcription"]["cloud"]["languages"]
+
+    def test_the_superseded_order_is_replaced(self):
+        cfg, changed = config_module._migrate(self.config(["en", "ru", "de",
+                                                           "kk"]))
+        self.assertTrue(changed)
+        self.assertEqual(
+            self.languages(cfg),
+            config_module.DEFAULTS["transcription"]["cloud"]["languages"])
+
+    def test_a_list_somebody_chose_is_left_alone(self):
+        """One entry different and it is a person's own list, not a default."""
+        mine = ["en", "ru", "de", "fr"]
+        cfg, changed = config_module._migrate(self.config(mine))
+        self.assertFalse(changed)
+        self.assertEqual(self.languages(cfg), mine)
+
+    def test_the_current_default_is_not_rewritten(self):
+        current = list(
+            config_module.DEFAULTS["transcription"]["cloud"]["languages"])
+        cfg, changed = config_module._migrate(self.config(current))
+        self.assertFalse(changed)
+        self.assertEqual(self.languages(cfg), current)
+
+    def test_a_config_without_the_setting_survives(self):
+        cfg, changed = config_module._migrate({"audio": {"sample_rate": 16000}})
+        self.assertFalse(changed)
+        self.assertEqual(cfg, {"audio": {"sample_rate": 16000}})
+
+    def test_an_empty_config_survives(self):
+        cfg, changed = config_module._migrate({})
+        self.assertFalse(changed)
+        self.assertEqual(cfg, {})
+
+    def test_no_superseded_order_is_still_the_current_default(self):
+        """A guard for whoever edits the list next: retiring the order that is
+        currently shipped would rewrite every config on every start."""
+        current = config_module.DEFAULTS["transcription"]["cloud"]["languages"]
+        self.assertNotIn(list(current), config_module.SUPERSEDED_LANGUAGES)
+
+
 @unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
 class HookWatchdog(unittest.TestCase):
     """When the watchdog may replace the hook, and when it must not.

@@ -114,6 +114,23 @@ without jargon, and say what you actually did and what you could not do.
   whichever language it is most likely to mishear. A language switched on from
   the tray is inserted at the front for the same reason.
   `tools/language_drill.py` is how any of this gets re-measured.
+- **A new default reaches nobody who already has a config.json.** That file
+  is the user's and the installer never overwrites it, so the owner was still
+  running the measured-worse language order a day after it was replaced, and
+  the fix he had been told about had never applied to him. `_migrate` in
+  `config.py` upgrades a stored list that exactly matches a superseded
+  default, and leaves anything else alone. Put a retired default in
+  `SUPERSEDED_LANGUAGES` when you replace one; do not reach further than
+  that, because every other setting might be something somebody typed.
+- **A name the model keeps mangling is fixed by `cloud.keywords`, not by the
+  language order.** The owner's friend is called Magzhan and he got back
+  Marzhan, Makzhan and Bagzhan. Measured on synthesised speech, four clips:
+  Kazakh first on its own rescued it 0 times out of 4, the same as the old
+  order; adding the name to `keywords` rescued it 2 out of 2 in a Kazakh
+  sentence, plain and slurred alike. In a Russian sentence the keyword still
+  moved it from "Marzhan" to "Magzhan" but the Kazakh letter did not survive
+  into Russian text, so priming narrows the gap and does not always close it.
+  That remainder is what a spelling fix applied after transcription is for.
 - **OpenAI is the default and local is a fallback.** Measured on the owner's
   laptop: OpenAI got a four-language clip completely right; local `base` lost
   most of the Russian and Kazakh, `small` took 4-7 s, `large-v3-turbo` 17-19 s.
