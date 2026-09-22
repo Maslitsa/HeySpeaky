@@ -118,6 +118,11 @@ def _cursor_position():
         return None
 
 
+# Ctrl+Alt+Space asks what the last words should have been. The names the
+# keyboard library uses for one key are not stable across layouts, so both
+# spellings are here.
+CORRECTION_KEYS = {"space", "spacebar"}
+
 CTRL_KEYS = {"ctrl", "left ctrl", "right ctrl"}
 ALT_KEYS = {"alt", "left alt", "right alt"}
 ALTGR_KEYS = {"alt gr", "altgr", "right alt gr"}
@@ -127,7 +132,7 @@ class HotkeyListener:
     """Watches for the Ctrl+Alt chord and reports engage/tap/hold/cancel."""
 
     def __init__(self, config, on_engage, on_tap, on_hold_release, on_cancel,
-                 on_latch=None):
+                 on_latch=None, on_correct=None):
         self._engage_delay = float(config["engage_delay"])
         self._tap_max = float(config["tap_max"])
         self._double_gap = float(config.get("double_tap_gap", 0.5))
@@ -139,6 +144,17 @@ class HotkeyListener:
         self._on_hold_release = on_hold_release
         self._on_cancel = on_cancel
         self._on_latch = on_latch
+        self._on_correct = on_correct
+        # One key has several names depending on the layout, so a config
+        # naming any of them accepts all of them. An empty value turns the
+        # correction key off without disturbing anything else.
+        wanted = str(config.get("correct_key", "space")).lower().strip()
+        if not wanted:
+            self._correct_keys = frozenset()
+        elif wanted in CORRECTION_KEYS:
+            self._correct_keys = CORRECTION_KEYS
+        else:
+            self._correct_keys = frozenset([wanted])
 
         self._lock = threading.RLock()
         self._pressed = set()
@@ -377,6 +393,29 @@ class HotkeyListener:
             has_other = any(
                 self._classify(k) == "other" for k in self._pressed
             )
+
+            # Ctrl+Alt+Space is the correction key. It is checked before the
+            # cancel rule below and only when nothing is being recorded, so
+            # that during a recording Space still means "I am typing a
+            # shortcut, stop". Marking the chord dirty stops the release from
+            # counting as a tap, which would otherwise go hands-free the
+            # moment somebody corrected two words in a row.
+            if (
+                self._on_correct is not None
+                and name in self._correct_keys
+                and event.event_type == keyboard.KEY_DOWN
+                and not repeat
+                and not self._engaged
+                and not self._latched
+                and has_ctrl
+                and has_alt
+            ):
+                self._chord_dirty = True
+                self._cancel_timer()
+                self._chord_taps = []
+                logger.info("Correction asked for")
+                self._fire(self._on_correct)
+                return
 
             # A non-modifier pressed while we are engaged means the user is
             # really using a shortcut, not dictating.

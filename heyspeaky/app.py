@@ -26,6 +26,7 @@ import numpy as np
 import webrtcvad
 
 from . import config as config_module
+from . import correct
 from . import diagnostics
 from . import updates
 from . import usage
@@ -149,6 +150,7 @@ class App:
             on_hold_release=self._on_hold_release,
             on_cancel=self._on_cancel,
             on_latch=self._on_latch,
+            on_correct=self._on_correct,
         )
         # A config.json edited by hand before the tray could add languages can
         # name a language in the menu and not in the list, or the other way.
@@ -351,6 +353,68 @@ class App:
             logger.info("Latched from the start (double tap)")
 
     # -- the pill's own buttons -------------------------------------------
+
+    # -- corrections -------------------------------------------------------
+
+    def _on_correct(self):
+        """Ctrl+Alt+Space, off the keyboard thread.
+
+        Reading the selection has to wait for Ctrl and Alt to come up and then
+        watch the clipboard, which is far too long to sit in a keyboard hook:
+        a low-level hook that overruns is the one Windows silently throws
+        away. See the watchdog in hotkey.py for what that costs.
+        """
+        threading.Thread(
+            target=self._collect_correction, name="correct", daemon=True
+        ).start()
+
+    def _collect_correction(self):
+        came_from = correct.foreground_window()
+        try:
+            heard = output.copy_selection(
+                float(self.cfg["output"]["modifier_release_timeout"])
+            )
+        except Exception:
+            logger.exception("Could not read the selection")
+            heard = ""
+        self.post(self._ask_correction, heard, came_from)
+
+    def _ask_correction(self, heard, came_from):
+        """Opens the box. On the Tk thread, which owns every window here."""
+        try:
+            correct.CorrectionBox(
+                self.root, heard,
+                lambda meant: self._correction_given(heard, meant, came_from),
+            )
+        except Exception:
+            logger.exception("Could not open the correction box")
+
+    def _correction_given(self, heard, meant, came_from):
+        if meant is None:
+            logger.info("Correction cancelled")
+            correct.restore_foreground(came_from)
+            return
+        threading.Thread(
+            target=self._save_correction, name="correction",
+            args=(heard, meant, came_from), daemon=True,
+        ).start()
+
+    def _save_correction(self, heard, meant, came_from):
+        fixed = correct.remember(heard, meant)
+        if fixed is None:
+            correct.restore_foreground(came_from)
+            return
+        logger.info("Correction saved (%d chars heard)", len(heard or ""))
+        correct.restore_foreground(came_from)
+        if heard:
+            # Replacing the selection is the point: the wrong words are still
+            # on the screen, and a correction that leaves them there has done
+            # only half the job.
+            time.sleep(0.08)
+            output.deliver(fixed, dict(self.cfg["output"],
+                                       append_space=False))
+        self.post(self.overlay.flash, "done", "",
+                  "Remembered “{}”".format(fixed), 2.0)
 
     def _on_button_cancel(self):
         """The cross on the pill: throw this recording away."""

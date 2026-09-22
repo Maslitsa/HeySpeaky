@@ -22,6 +22,7 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
 | `heyspeaky/languages.py` | the languages list and its tray grouping |
 | `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
+| `heyspeaky/correct.py` | Ctrl+Alt+Space: the box that asks what it should have said |
 | `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
 | `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
 | `heyspeaky/diagnostics.py` | the problem report people send you |
@@ -32,6 +33,7 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/benchmark.py` | measures models against real recordings |
 | `tools/language_drill.py` | measures sentences that change language halfway |
 | `tools/live_check.py` | shows the pill on the real screen and photographs it |
+| `tools/correction_check.py` | the same, for the correction box |
 | `tools/try_demo.py` | runs a recording through both backends |
 
 ## Rules that cost something to learn
@@ -148,6 +150,25 @@ without jargon, and say what you actually did and what you could not do.
   `dictionary.PATH` at an empty file for the whole run, because that file is
   read fresh on every transcription: without it the keyword tests pass on a
   clean CI runner and fail on any machine that has actually used the feature.
+- **Ctrl+Alt+Space is the only key carved out of `cancel_on_other_key`, and
+  only while nothing is being recorded.** During a recording Space still
+  means somebody is typing a shortcut and the recording stops, which is the
+  behaviour that was there first and is worth keeping. The correction also
+  marks the chord dirty, because two corrections in a row are two chords
+  released quickly - the exact shape of the double tap that goes hands-free.
+- **The correction box takes focus and the pill never does.** They are
+  opposite windows and both are right: dictation is worthless if it steals
+  the caret, and a box you cannot type into is worthless too. The box is an
+  ordinary `Toplevel`, not a layered surface, so none of the pill's rules
+  apply to it - but Windows 10 will not round a window with no frame, so it
+  clips itself with `SetWindowRgn` or it looks like a grey rectangle next to
+  a pill made of curves. Look at it with `tools/correction_check.py`.
+- **Reading somebody's selection means borrowing the clipboard.** There is no
+  API for another program's selection. `output.copy_selection` empties the
+  clipboard first - otherwise a Ctrl+C that copies nothing, because nothing
+  was selected, leaves the old contents sitting there looking like a
+  selection - sends Ctrl+C only once Ctrl and Alt are up, and puts back what
+  was there. The same modifier wait is why `deliver` exists in that shape.
 - **OpenAI is the default and local is a fallback.** Measured on the owner's
   laptop: OpenAI got a four-language clip completely right; local `base` lost
   most of the Russian and Kazakh, `small` took 4-7 s, `large-v3-turbo` 17-19 s.

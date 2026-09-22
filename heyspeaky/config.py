@@ -208,6 +208,12 @@ DEFAULTS = {
         "accept_altgr": False,
         # Any other key pressed during the combo cancels the recording.
         "cancel_on_other_key": True,
+        # Held with the chord, this key asks what the selected words should
+        # have been and remembers the answer. See heyspeaky/correct.py. It is
+        # exempt from cancel_on_other_key, but only while nothing is being
+        # recorded: during a recording Space still means a shortcut is being
+        # typed. "" turns it off.
+        "correct_key": "space",
         # How often to check the keyboard hook is still alive. Windows drops
         # low-level hooks silently, after a sleep or if a callback ever
         # overruns its timeout, and the only symptom is that Ctrl+Alt stops

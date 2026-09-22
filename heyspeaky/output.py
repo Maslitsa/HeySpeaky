@@ -35,6 +35,8 @@ _user32.CloseClipboard.argtypes = []
 _user32.CloseClipboard.restype = wintypes.BOOL
 _user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
 _user32.SetClipboardData.restype = wintypes.HANDLE
+_user32.GetClipboardData.argtypes = [wintypes.UINT]
+_user32.GetClipboardData.restype = wintypes.HANDLE
 _kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
 _kernel32.GlobalAlloc.restype = wintypes.HANDLE
 _kernel32.GlobalLock.argtypes = [wintypes.HANDLE]
@@ -78,6 +80,87 @@ def copy_to_clipboard(text):
         return True
     finally:
         _user32.CloseClipboard()
+
+
+def read_clipboard():
+    """What is on the clipboard as text, or "" if there is none to be had."""
+    for _attempt in range(10):
+        if _user32.OpenClipboard(None):
+            break
+        time.sleep(0.02)
+    else:
+        logger.warning("Clipboard stayed locked; nothing read")
+        return ""
+
+    try:
+        handle = _user32.GetClipboardData(CF_UNICODETEXT)
+        if not handle:
+            return ""
+        pointer = _kernel32.GlobalLock(handle)
+        if not pointer:
+            return ""
+        try:
+            return ctypes.wstring_at(pointer)
+        finally:
+            _kernel32.GlobalUnlock(handle)
+    except Exception:
+        logger.exception("Could not read the clipboard")
+        return ""
+    finally:
+        _user32.CloseClipboard()
+
+
+def clear_clipboard():
+    """Empties the clipboard, so a copy that yields nothing can be seen."""
+    for _attempt in range(10):
+        if _user32.OpenClipboard(None):
+            break
+        time.sleep(0.02)
+    else:
+        return False
+    try:
+        _user32.EmptyClipboard()
+        return True
+    finally:
+        _user32.CloseClipboard()
+
+
+def copy_selection(modifier_timeout=5.0, settle=0.4):
+    """Whatever is selected in the window in front, via Ctrl+C.
+
+    There is no way to read another program's selection directly, so this
+    borrows the clipboard and puts it back. It empties it first: without that,
+    a Ctrl+C that copies nothing - because nothing was selected - leaves the
+    previous contents sitting there looking exactly like a selection.
+
+    Ctrl+C cannot be sent while Ctrl+Alt is still held, for the same reason
+    `deliver` waits: the target would see Ctrl+Alt+C.
+    """
+    previous = read_clipboard()
+    wait_for_modifiers_released(modifier_timeout)
+    clear_clipboard()
+    try:
+        keyboard.send("ctrl+c")
+    except Exception:
+        logger.exception("Could not send Ctrl+C")
+        if previous:
+            copy_to_clipboard(previous)
+        return ""
+
+    deadline = time.monotonic() + settle
+    selection = ""
+    while time.monotonic() < deadline:
+        selection = read_clipboard()
+        if selection:
+            break
+        time.sleep(0.02)
+
+    # Put back what the person had, whether or not anything was selected.
+    if previous:
+        copy_to_clipboard(previous)
+    elif selection:
+        clear_clipboard()
+    return selection.strip()
 
 
 def deliver(text, config):

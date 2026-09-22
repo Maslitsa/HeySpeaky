@@ -1181,6 +1181,106 @@ class OldConfigsMoveForward(unittest.TestCase):
 
 
 @unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
+class CorrectionKey(unittest.TestCase):
+    """Ctrl+Alt+Space asks what the words should have been.
+
+    Space is the one key that had to be carved out of cancel_on_other_key,
+    and only while nothing is being recorded. Getting that wrong in either
+    direction is bad: cancelling a recording every time somebody corrects a
+    word, or swallowing the shortcut somebody was actually typing.
+    """
+
+    def listener(self, correct_key="space", on_correct=True):
+        self.corrected = threading.Event()
+        self.cancelled = threading.Event()
+        self.latched = threading.Event()
+        return HotkeyListener(
+            {
+                "engage_delay": 10.0,
+                "tap_max": 0.0,
+                "accept_altgr": False,
+                "cancel_on_other_key": True,
+                "double_tap_gap": 0.5,
+                "health_check_seconds": 0,
+                "min_reinstall_seconds": 60,
+                "correct_key": correct_key,
+            },
+            on_engage=lambda: None,
+            on_tap=lambda: None,
+            on_hold_release=lambda: None,
+            on_cancel=self.cancelled.set,
+            on_latch=self.latched.set,
+            on_correct=self.corrected.set if on_correct else None,
+        )
+
+    def send(self, listener, *events):
+        for name, kind in events:
+            listener._on_key_event(_Event(name, kind))
+
+    def test_space_inside_the_chord_asks_for_a_correction(self):
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                  ("space", "down"))
+        self.assertTrue(self.corrected.wait(2.0))
+        self.assertFalse(self.cancelled.is_set())
+
+    def test_correcting_twice_does_not_go_hands_free(self):
+        """Two corrections in a row are two chords released quickly, which is
+        exactly the shape of the double tap that starts hands-free."""
+        listener = self.listener()
+        for _ in range(2):
+            self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                      ("space", "down"), ("space", "up"),
+                      ("alt", "up"), ("ctrl", "up"))
+        self.assertTrue(self.corrected.wait(2.0))
+        self.assertFalse(self.latched.wait(0.3))
+
+    def test_space_during_a_recording_still_cancels(self):
+        """Mid-recording it is somebody typing, not somebody correcting."""
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"))
+        listener._engaged = True
+        self.send(listener, ("space", "down"))
+        self.assertTrue(self.cancelled.wait(2.0))
+        self.assertFalse(self.corrected.is_set())
+
+    def test_space_on_its_own_does_nothing(self):
+        listener = self.listener()
+        self.send(listener, ("space", "down"), ("space", "up"))
+        self.assertFalse(self.corrected.wait(0.3))
+
+    def test_holding_space_asks_once(self):
+        """Windows repeats KEY_DOWN, and each repeat must not open a box."""
+        listener = self.listener()
+        fired = []
+        listener._on_correct = lambda: fired.append(1)
+        self.send(listener, ("ctrl", "down"), ("alt", "down"))
+        for _ in range(5):
+            self.send(listener, ("space", "down"))
+        time.sleep(0.2)
+        self.assertEqual(len(fired), 1)
+
+    def test_the_key_can_be_turned_off(self):
+        listener = self.listener(correct_key="")
+        self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                  ("space", "down"))
+        self.assertFalse(self.corrected.wait(0.3))
+        self.assertFalse(self.cancelled.is_set())
+
+    def test_the_other_spelling_of_the_key_counts(self):
+        """The keyboard library names this key differently per layout."""
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                  ("spacebar", "down"))
+        self.assertTrue(self.corrected.wait(2.0))
+
+    def test_ctrl_alt_c_is_still_somebody_elses_shortcut(self):
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"), ("c", "down"))
+        self.assertFalse(self.corrected.wait(0.3))
+
+
+@unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
 class HookWatchdog(unittest.TestCase):
     """When the watchdog may replace the hook, and when it must not.
 
