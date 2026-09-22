@@ -212,6 +212,31 @@ def button(size, kind, fill, glyph, dim=1.0):
     return face
 
 
+def wave_layout(glass, count):
+    """Where the waveform's bars go, fitted to the space between the buttons.
+
+    Fitted, not scaled: a fixed pixel width and gap multiplied for a high-DPI
+    screen rounds each one up, and twenty-three roundings put the end of the
+    waveform underneath the tick.
+    """
+    boxes = button_boxes(glass)
+    pad = int(round(theme.PADDING * glass.scale))
+    left = boxes["cancel"][2] + pad
+    right = boxes["accept"][0] - pad
+    room = max(8, right - left)
+    pitch = room / float(max(1, count))
+    share = theme.BAR_WIDTH / float(theme.BAR_WIDTH + theme.BAR_GAP)
+    width = max(2, int(pitch * share))
+    return {"left": left, "right": right, "pitch": pitch, "width": width}
+
+
+def bar_left(layout, index):
+    """The left edge of one bar, centred in its slot."""
+    return layout["left"] + int(round(index * layout["pitch"]
+                                      + (layout["pitch"] - layout["width"])
+                                      / 2.0))
+
+
 def button_boxes(glass):
     """Where the two buttons are, in window pixels, for hit testing."""
     left, top, right, bottom = glass.box
@@ -396,12 +421,9 @@ def paint(glass, state="listening", levels=None, text="", status="",
         levels = [0.0] * theme.BARS
 
     if levels:
-        bar_width = max(2, int(round(theme.BAR_WIDTH * scale)))
-        pitch = bar_width + max(1, int(round(theme.BAR_GAP * scale)))
+        layout = wave_layout(glass, len(levels))
+        bar_width = layout["width"]
         tallest = max(4, int(round(theme.BAR_MAX * scale)))
-        # Centred between the buttons, whatever the bar count is.
-        span = len(levels) * pitch - (pitch - bar_width)
-        start = inner_left + max(0, (inner_right - inner_left - span) // 2)
         for index, level in enumerate(levels):
             if state == "listening":
                 reach = max(0.0, min(1.0, level))
@@ -415,7 +437,8 @@ def paint(glass, state="listening", levels=None, text="", status="",
             bar = glowing_bar(bar_width, bar_height, tallest, bar_colour,
                               _bar_fade(index, len(levels)))
             spread = (bar.size[0] - bar_width) // 2
-            frame.paste(bar, (start + index * pitch - spread,
+            left_edge = bar_left(layout, index)
+            frame.paste(bar, (left_edge - spread,
                               middle - bar.size[1] // 2), bar)
         return frame
 

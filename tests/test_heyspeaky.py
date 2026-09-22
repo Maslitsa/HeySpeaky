@@ -710,6 +710,33 @@ class PillButtons(unittest.TestCase):
         self.assertEqual(box[2] - box[0], box[3] - box[1])
         self.assertEqual(box[2] - box[0], theme.BUTTON)
 
+    def test_the_waveform_never_reaches_the_buttons(self):
+        """It used to run underneath the tick on a high-DPI screen.
+
+        Every bar width and gap was a fixed pixel count scaled up and rounded
+        up, and twenty-three roundings added up to more than the space.
+        """
+        for scale in (1.0, 1.25, 1.5, 2.0, 3.0):
+            prepared = self.prepared(scale=scale)
+            boxes = glass.button_boxes(prepared)
+            layout = glass.wave_layout(prepared, theme.BARS)
+            first = glass.bar_left(layout, 0)
+            last = glass.bar_left(layout, theme.BARS - 1) + layout["width"]
+            self.assertGreaterEqual(
+                first, boxes["cancel"][2],
+                "at scale %s the waveform starts under the cross" % scale)
+            self.assertLessEqual(
+                last, boxes["accept"][0],
+                "at scale %s the waveform ends under the tick" % scale)
+
+    def test_the_waveform_uses_the_space_it_has(self):
+        """Fitting must not mean shrinking into a corner."""
+        prepared = self.prepared()
+        layout = glass.wave_layout(prepared, theme.BARS)
+        span = (glass.bar_left(layout, theme.BARS - 1) + layout["width"]
+                - glass.bar_left(layout, 0))
+        self.assertGreater(span, (layout["right"] - layout["left"]) * 0.85)
+
     def test_a_pill_that_is_still_opening_draws_nothing_inside_it(self):
         opening = self.prepared(open_share=0.34)
         painted = glass.paint(opening, state="listening",
