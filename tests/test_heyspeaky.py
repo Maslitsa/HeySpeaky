@@ -729,6 +729,37 @@ class PillButtons(unittest.TestCase):
                 last, boxes["accept"][0],
                 "at scale %s the waveform ends under the tick" % scale)
 
+    def test_no_drawn_pixel_of_the_waveform_touches_a_button(self):
+        """The arithmetic guard above misses the glow around each bar.
+
+        Every bar is drawn with a bloom that reaches past its own edge, and
+        that is what was actually visible under the tick. This compares a
+        frame with a waveform against one without, and asks where the
+        difference lies.
+        """
+        from PIL import ImageChops
+
+        real = glass.button
+        glass.button = lambda size, kind, fill, glyph, dim=1.0: Image.new(
+            "RGBA", (size, size), (0, 0, 0, 0))
+        try:
+            for scale in (1.0, 1.25, 1.5, 2.0):
+                prepared = self.prepared(scale=scale)
+                boxes = glass.button_boxes(prepared)
+                empty = glass.paint(prepared, state="done")
+                wave = glass.paint(prepared, state="listening",
+                                   levels=[1.0] * theme.BARS)
+                left, _top, right, _bottom = ImageChops.difference(
+                    wave, empty).getbbox()
+                self.assertGreater(
+                    left, boxes["cancel"][2],
+                    "at scale %s the waveform reaches the cross" % scale)
+                self.assertLessEqual(
+                    right, boxes["accept"][0],
+                    "at scale %s the waveform reaches the tick" % scale)
+        finally:
+            glass.button = real
+
     def test_the_waveform_uses_the_space_it_has(self):
         """Fitting must not mean shrinking into a corner."""
         prepared = self.prepared()
