@@ -7,6 +7,8 @@ reinstalls of the environment.
 import copy
 import json
 import logging
+import os
+import time
 from pathlib import Path
 
 logger = logging.getLogger("heyspeaky.config")
@@ -377,12 +379,38 @@ def _deep_merge(base, override):
     return result
 
 
+def write_json(path, data):
+    """Writes a JSON file whole or not at all, never over one nobody can read.
+
+    config.json and dictionary.json are both meant to be edited by hand, and a
+    hand edit with one comma out of place reads as no file at all - on
+    purpose, so dictation keeps working. The next save used to write straight
+    over it, and every setting or word in it was gone without a word said. So
+    a file that does not parse is moved aside first, to <name>.broken-<time>,
+    where it can still be mended. The new contents go to a temporary file that
+    replaces the real one in one step, so a crash half way through leaves the
+    old file and not half of a new one. OSError is the caller's to report.
+    """
+    path = Path(path)
+    if path.exists():
+        try:
+            json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            aside = path.with_name("{}.broken-{}".format(
+                path.name, time.strftime("%Y%m%d-%H%M%S")))
+            os.replace(str(path), str(aside))
+            logger.warning("%s could not be read, so it was kept as %s "
+                           "rather than written over", path.name, aside.name)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False),
+                         encoding="utf-8")
+    os.replace(str(temporary), str(path))
+
+
 def save(cfg):
     """Writes the full config back to disk, keeping user edits readable."""
     try:
-        CONFIG_PATH.write_text(
-            json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        write_json(CONFIG_PATH, cfg)
         return True
     except OSError as exc:
         logger.warning("Could not save config.json: %s", exc)

@@ -132,6 +132,11 @@ without jargon, and say what you actually did and what you could not do.
   default, and leaves anything else alone. Put a retired default in
   `SUPERSEDED_LANGUAGES` when you replace one; do not reach further than
   that, because every other setting might be something somebody typed.
+- **Write config.json and dictionary.json through `config.write_json`.** Both
+  are edited by hand, and a typo makes one read as missing so dictation keeps
+  going - after which the next save used to write over it. It now moves an
+  unreadable file aside to `<name>.broken-<time>` first, and replaces the file
+  in one step so a crash cannot leave half of it.
 - **A name the model keeps mangling is fixed by `cloud.keywords`, not by the
   language order.** The owner's friend is called Magzhan and he got back
   Marzhan, Makzhan and Bagzhan. Measured on synthesised speech, four clips:

@@ -39,6 +39,8 @@ import os
 import re
 import unicodedata
 
+from . import config
+
 logger = logging.getLogger("heyspeaky.dictionary")
 
 PATH = "%APPDATA%\\HeySpeaky\\dictionary.json"
@@ -116,9 +118,9 @@ def save(entries, path=None):
         folder = os.path.dirname(expanded)
         if folder and not os.path.isdir(folder):
             os.makedirs(folder)
-        with open(expanded, "w", encoding="utf-8") as handle:
-            json.dump({"words": entries}, handle,
-                      indent=2, ensure_ascii=False)
+        # A file mistyped by hand loads as empty, and this is the save that
+        # would otherwise replace it with one word. See config.write_json.
+        config.write_json(expanded, {"words": entries})
         return True
     except OSError as exc:
         logger.warning("Could not save the dictionary: %s", exc)

@@ -1216,6 +1216,58 @@ class PersonalDictionary(unittest.TestCase):
         self.assertEqual(dictionary.add("", " … ", entries=[]), [])
 
 
+class HandEditedFilesSurviveATypo(unittest.TestCase):
+    """config.json and dictionary.json are both meant to be edited by hand.
+
+    One comma out of place and the file reads as missing - on purpose, so
+    dictation keeps working - but the next save then wrote over it: the next
+    Ctrl+Alt+Space replaced a whole dictionary with one word, and the next
+    language picked from the tray replaced config.json with the defaults.
+    """
+
+    def setUp(self):
+        self.folder = tempfile.mkdtemp()
+
+    def broken(self, name):
+        path = os.path.join(self.folder, name)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write('{"words": [{"meant": "Мағжан"},]}')
+        return path
+
+    def kept_aside(self, name):
+        return [entry for entry in os.listdir(self.folder)
+                if entry.startswith(name + ".broken-")]
+
+    def test_a_broken_dictionary_is_kept_before_it_is_written_over(self):
+        path = self.broken("dictionary.json")
+        entries = dictionary.add("", "Бағжан", path=path)
+        self.assertTrue(dictionary.save(entries, path))
+        aside = self.kept_aside("dictionary.json")
+        self.assertEqual(len(aside), 1)
+        with open(os.path.join(self.folder, aside[0]),
+                  encoding="utf-8") as handle:
+            self.assertIn("Мағжан", handle.read())
+        self.assertEqual(dictionary.words(dictionary.load(path)), ["Бағжан"])
+
+    def test_a_broken_config_is_kept_before_it_is_written_over(self):
+        path = self.broken("config.json")
+        original = config_module.CONFIG_PATH
+        config_module.CONFIG_PATH = Path(path)
+        self.addCleanup(setattr, config_module, "CONFIG_PATH", original)
+        cfg = config_module.load()
+        self.assertTrue(config_module.save(cfg))
+        self.assertEqual(len(self.kept_aside("config.json")), 1)
+
+    def test_a_readable_file_is_simply_replaced(self):
+        path = os.path.join(self.folder, "dictionary.json")
+        dictionary.save(dictionary.add("", "one", entries=[]), path)
+        dictionary.save(dictionary.add("", "two", path=path), path)
+        self.assertEqual(self.kept_aside("dictionary.json"), [])
+        self.assertEqual(dictionary.words(dictionary.load(path)),
+                         ["two", "one"])
+        self.assertEqual(sorted(os.listdir(self.folder)), ["dictionary.json"])
+
+
 class OldConfigsMoveForward(unittest.TestCase):
     """A measured default is worth nothing if it never reaches anyone.
 
