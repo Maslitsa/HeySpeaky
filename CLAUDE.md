@@ -91,9 +91,16 @@ without jargon, and say what you actually did and what you could not do.
   minute for as long as he used the mouse, with no dead hook behind any of
   them. Each refresh unhooks and rehooks, so each is a window where a press
   lands on nothing. `_dead_hook_reason` now asks `GetCursorPos` as well and
-  stays quiet when the pointer moved, except just after a resume. Do not go
-  back to injecting a key to probe: `SendInput` resets the idle timer, so a
-  scheduled probe stops the laptop ever sleeping.
+  stays quiet when the pointer moved, except just after a resume. That cut
+  it to 36 the next day, and the log explained the rest: 16 were input older
+  than the last check, which a comparison with the last check cannot see
+  (`_pointer_explains` now places the input against when the pointer moved),
+  and 21 were a fresh hook that heard no key at all until the next refresh -
+  input that was not keys, most likely a wheel or a click. A refresh answered
+  by silence now doubles the wait, up to ten minutes, and the first key heard
+  brings the minute back (`_refresh_gap`). Waking from sleep never waits.
+  Do not go back to injecting a key to probe: `SendInput` resets the idle
+  timer, so a scheduled probe stops the laptop ever sleeping.
 - **The transcription worker must die with the app** (`winjob.py`). Orphans
   once wrote 8.7 GB of the same traceback.
 - **Keys live outside the project**, in `%APPDATA%\HeySpeaky\openai.key`. The
@@ -146,7 +153,10 @@ without jargon, and say what you actually did and what you could not do.
   that is itself in the dictionary as something meant, because "Marzhan" is a
   real name belonging to somebody else and eating it every time it is said
   would be worse than the mistake being fixed. That is also why only the
-  owner's own corrections are ever applied, never a guess. The suite points
+  owner's own corrections are ever applied, never a guess. A word is stored
+  without the punctuation around it - he selected "Мағжан." with its full
+  stop and it went to the model like that - but only from the ends, because
+  inside a word a dot or a hyphen is part of it. The suite points
   `dictionary.PATH` at an empty file for the whole run, because that file is
   read fresh on every transcription: without it the keyword tests pass on a
   clean CI runner and fail on any machine that has actually used the feature.
@@ -156,6 +166,11 @@ without jargon, and say what you actually did and what you could not do.
   behaviour that was there first and is worth keeping. The correction also
   marks the chord dirty, because two corrections in a row are two chords
   released quickly - the exact shape of the double tap that goes hands-free.
+  And it is one correction at a time (`correct.OneAtATime`), claimed on the
+  key press rather than when the box appears: the box waits for Ctrl and Alt
+  to come up, and a second Space inside a held chord is a fresh key-down,
+  not a repeat. The owner's log showed two boxes open on top of each other.
+  A press while the box is open brings it forward instead.
 - **The correction box takes focus and the pill never does.** They are
   opposite windows and both are right: dictation is worthless if it steals
   the caret, and a box you cannot type into is worthless too. The box is an

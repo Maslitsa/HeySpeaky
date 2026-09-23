@@ -1600,6 +1600,82 @@ class HookWatchdog(unittest.TestCase):
         hotkey._cursor_position = lambda: (6, 5)
         self.assertTrue(listener._cursor_moved())
 
+    def test_input_from_before_the_last_check_is_put_down_to_the_pointer(self):
+        """16 of the 36 refreshes in the owner's log the day after the fix,
+        sleep aside: Windows last saw input 22-47 seconds ago, longer than the
+        20 between checks. That input came before the previous check, so
+        comparing the pointer with where it was at the previous check could
+        never account for it, whatever it was."""
+        listener = self.listener()
+        original = hotkey._cursor_position
+        self.addCleanup(setattr, hotkey, "_cursor_position", original)
+        hotkey._cursor_position = lambda: (5, 5)
+        listener._cursor_moved()
+        hotkey._cursor_position = lambda: (400, 300)
+        self.assertTrue(listener._cursor_moved())     # seen moving here...
+        listener._pointer_moved_at -= 20              # ...one check ago
+        self.assertFalse(listener._cursor_moved())    # and still since
+        self.system_idle(28)
+        self.assertIsNone(listener._dead_hook_reason(moved=False,
+                                                     resumed=False))
+
+    def test_a_pointer_that_moved_long_before_the_input_explains_nothing(self):
+        listener = self.listener()
+        listener._pointer_moved_at = time.monotonic() - 100
+        self.system_idle(28)
+        self.assertIsNotNone(listener._dead_hook_reason(moved=False,
+                                                        resumed=False))
+
+    def test_a_refresh_that_changed_nothing_is_not_repeated_every_minute(self):
+        """21 of the 36 were a brand-new hook that had heard no key in the
+        whole time since the refresh before it - nine in a row, a minute
+        apart. Whatever Windows was counting was almost certainly not keys,
+        and replacing the hook once a minute changed nothing but the risk of
+        a lost press."""
+        listener = self.listener()
+        self.system_idle(1)
+        listener._count_refresh()
+        listener._count_refresh()        # no key reached the hook in between
+        listener._last_reinstall = time.monotonic() - 61
+        self.assertIsNone(listener._dead_hook_reason(moved=False,
+                                                     resumed=False))
+        listener._last_reinstall = time.monotonic() - 121
+        self.assertIsNotNone(listener._dead_hook_reason(moved=False,
+                                                        resumed=False))
+
+    def test_a_key_after_a_refresh_brings_the_minute_back(self):
+        listener = self.listener()
+        self.system_idle(1)
+        for _ in range(4):
+            listener._count_refresh()
+        listener._on_key_event(_Event("a", "down"))
+        listener._on_key_event(_Event("a", "up"))
+        listener._last_event = time.monotonic() - 300
+        listener._last_reinstall = time.monotonic() - 61
+        self.assertIsNotNone(listener._dead_hook_reason(moved=False,
+                                                        resumed=False))
+
+    def test_the_wait_between_refreshes_has_a_ceiling(self):
+        """A hook that really does die later still gets replaced within
+        minutes, however long the machine was scrolled without a key."""
+        listener = self.listener()
+        self.system_idle(1)
+        for _ in range(30):
+            listener._count_refresh()
+        listener._last_reinstall = (time.monotonic()
+                                    - hotkey.MAX_REFRESH_GAP - 1)
+        self.assertIsNotNone(listener._dead_hook_reason(moved=False,
+                                                        resumed=False))
+
+    def test_waking_from_sleep_is_not_made_to_wait_out_the_backoff(self):
+        listener = self.listener()
+        self.system_idle(1)
+        for _ in range(6):
+            listener._count_refresh()
+        listener._last_reinstall = time.monotonic() - 61
+        self.assertIsNotNone(listener._dead_hook_reason(moved=True,
+                                                        resumed=True))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -71,6 +71,12 @@ KEYEVENTF_KEYUP = 0x0002
 # guard in _on_key_event still recognises it.
 VK_NONAME = 0xFC
 
+# The longest the watchdog waits between refreshes that are not being
+# answered. See `_refresh_gap`: long enough that a scrolled page is not a
+# reason to churn the hook, short enough that a hook which really did die
+# after all that is back within minutes.
+MAX_REFRESH_GAP = 600.0
+
 
 class _LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
@@ -179,6 +185,13 @@ class HotkeyListener:
         )
         self._last_reinstall = 0.0
         self._last_cursor = None
+        self._pointer_moved_at = None
+        # Keys the hook has seen, and how many it had seen at the last
+        # refresh: equal means nothing came through since, and that refresh
+        # was answered by silence.
+        self._keys_seen = 0
+        self._keys_at_refresh = 0
+        self._unanswered = 0
         self._last_tick_wall = 0.0
         self._watchdog = None
         self._stop_watchdog = threading.Event()
@@ -266,8 +279,7 @@ class HotkeyListener:
             if reason is None:
                 continue
 
-            self._last_reinstall = time.monotonic()
-            self.reinstalls += 1
+            self._count_refresh()
             logger.info("Keyboard hook %s; refreshing the hook (#%d)",
                         reason, self.reinstalls)
             with self._lock:
@@ -285,7 +297,53 @@ class HotkeyListener:
         moved = (where is not None and self._last_cursor is not None
                  and where != self._last_cursor)
         self._last_cursor = where
+        if moved:
+            self._pointer_moved_at = time.monotonic()
         return moved
+
+    def _pointer_explains(self, idle_for):
+        """Whether the input Windows last saw falls where the pointer moved.
+
+        A movement is only noticed at a check, and could have happened at any
+        point in the interval before it. Input older than the latest check is
+        outside what the latest comparison can see: 16 of the 36 refreshes on
+        the owner's machine the day after the first fix, sleep aside, were
+        input Windows had seen 22 to 47 seconds earlier, which no comparison
+        with the check 20 seconds ago could ever have accounted for.
+        """
+        if self._pointer_moved_at is None or idle_for is None:
+            return False
+        input_at = time.monotonic() - idle_for
+        return (self._pointer_moved_at - self._health_interval - 2.0
+                <= input_at <= self._pointer_moved_at + 2.0)
+
+    def _refresh_gap(self):
+        """How long after one refresh the next one may happen.
+
+        A minute, until a refresh is answered by silence. A brand-new hook
+        that hears no key for the whole time after it, while Windows keeps
+        counting input, says the input was almost certainly not keys - a
+        scroll wheel or a click moves no pixel of the pointer - and replacing
+        the hook again a minute later changes nothing but the chance of losing
+        a press. 21 of the owner's 36 were that, nine of them in a row a
+        minute apart. So each one answered by silence doubles the wait, up to
+        MAX_REFRESH_GAP, and the first key the hook does hear brings the
+        minute back.
+        """
+        if self._keys_seen != self._keys_at_refresh:
+            return self._min_reinstall_gap
+        backoff = self._min_reinstall_gap * (2 ** min(self._unanswered, 16))
+        return max(self._min_reinstall_gap, min(backoff, MAX_REFRESH_GAP))
+
+    def _count_refresh(self):
+        """Books a refresh, and whether the one before it heard anything."""
+        if self.reinstalls and self._keys_seen == self._keys_at_refresh:
+            self._unanswered += 1
+        else:
+            self._unanswered = 0
+        self._keys_at_refresh = self._keys_seen
+        self._last_reinstall = time.monotonic()
+        self.reinstalls += 1
 
     def _dead_hook_reason(self, moved, resumed):
         """Why the hook looks dead, or None if it looks fine.
@@ -317,11 +375,15 @@ class HotkeyListener:
         # nothing.
         if moved and not resumed:
             return None
+        if not resumed and self._pointer_explains(idle_for):
+            return None
 
         # A backstop for the rest: a click that moves no pixel looks the same
-        # as a key, so the hook can still be replaced without cause. Once a
-        # minute at worst is churn nobody feels.
-        if time.monotonic() - self._last_reinstall < self._min_reinstall_gap:
+        # as a key, so the hook can still be replaced without cause. Waking
+        # from sleep is the case this was written for, so it never waits out
+        # the backoff.
+        gap = self._min_reinstall_gap if resumed else self._refresh_gap()
+        if time.monotonic() - self._last_reinstall < gap:
             return None
 
         return ("saw nothing for %.0fs while Windows saw input %.0fs ago"
@@ -364,6 +426,7 @@ class HotkeyListener:
         # Stamped before anything else, including the early returns below: the
         # watchdog uses it as proof the hook is still being delivered to.
         self._last_event = time.monotonic()
+        self._keys_seen += 1
         name = (event.name or "").lower()
         if not name:
             return
