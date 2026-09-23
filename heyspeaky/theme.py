@@ -90,6 +90,22 @@ PANEL_CLOSE = 0.14
 READY_DOT = (48, 209, 88)
 BUSY_DOT = (255, 69, 58)
 PAUSED_DOT = (142, 142, 147)
+# The one warning colour: a Quit that is one click from happening.
+DANGER = (255, 69, 58)
+# The panel opens right over the tray, and Quit was the first row the
+# pointer met on its way up: the owner quit by accident again and again. It
+# now asks for a second click within this long.
+QUIT_ARMED = 3.0
+# The language search: the composer's field and its ring, at the top of the
+# language list - after Lakshay-art's search bar on uiverse, which won the
+# search-bar challenge there and is where the composer's ring came from.
+# The ring spreads less here, to stay inside the card.
+SEARCH_HEIGHT = 34
+SEARCH_SPREAD = 7
+CARET_BLINK = 0.53
+# A tick draws itself in, stroke by stroke, the way uiverse's checkboxes do,
+# rather than appearing whole; taking one off draws it back out.
+CHECK_DRAW_RATE = 0.22
 
 # The pill itself.
 WIDTH = 248

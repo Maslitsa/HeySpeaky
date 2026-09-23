@@ -25,6 +25,7 @@ import tkinter as tk
 import numpy as np
 import webrtcvad
 
+from . import apikey
 from . import config as config_module
 from . import correct
 from . import diagnostics
@@ -160,6 +161,12 @@ class App:
         # name a language in the menu and not in the list, or the other way.
         if languages.reconcile(cfg):
             config_module.save(cfg)
+        # Copy the key, click a row in the tray: see apikey.py.
+        self._key_flow = apikey.KeyFlow(
+            cfg, has_key=self.router.cloud.available,
+            read_clipboard=output.read_clipboard,
+            clear_clipboard=output.clear_clipboard,
+            on_saved=self._key_saved)
         self.tray = Tray(
             config_module.CONFIG_PATH,
             config_module.LOG_DIR,
@@ -177,6 +184,8 @@ class App:
             on_update=self._on_tray_update,
             on_panel=(self._on_tray_panel
                       if cfg.get("tray", {}).get("panel", True) else None),
+            on_key=self._key_flow.press,
+            key_state=self._key_flow.state,
         )
 
     # -- speech detection --------------------------------------------------
@@ -257,6 +266,16 @@ class App:
     def _on_ready(self):
         self.tray.set_status("Ready · hold Ctrl+Alt to dictate")
         logger.info("Engine ready")
+        if self.router.preferred == "cloud" \
+                and not self.router.cloud.available():
+            # Said once, where it can be acted on: the tray panel has a row
+            # that takes the key straight off the clipboard.
+            logger.info("No OpenAI key yet; asking for one in the tray")
+            self.tray.set_status("Ready · no OpenAI key yet")
+            self.tray.notify(
+                "HeySpeaky needs your OpenAI key",
+                "Copy the key, then click the HeySpeaky icon in the tray "
+                "and choose \"Add your OpenAI key\".")
         # Once a day at most, and never in the way: people install by pasting
         # a command and would otherwise never learn that a fix exists.
         updates.check_in_background(
@@ -307,6 +326,9 @@ class App:
             self._finish_recording()
             return
         if state != IDLE:
+            # Said, because a Ctrl+Alt that does nothing is the one fault
+            # people report, and the log could not say why.
+            logger.info("Ctrl+Alt while %s; nothing new started", state)
             return
         if not self.engine.ready:
             self.post(
@@ -783,7 +805,7 @@ class App:
                 self.overlay.flash,
                 "error",
                 "",
-                "No OpenAI key yet. See the README",
+                "No OpenAI key yet: add it in the tray",
                 3.0,
             )
             return
@@ -792,6 +814,15 @@ class App:
         self.post(
             self.overlay.flash, "done", "", "Using {}".format(label), 1.4
         )
+
+    def _key_saved(self):
+        """A key came in from the tray. Saving one means OpenAI is wanted,
+        so a laptop still set to transcribe on its own is switched over."""
+        if self.router.preferred != "cloud":
+            self._on_tray_backend("cloud")
+            return
+        self.tray.set_status("Ready · transcribing on OpenAI")
+        self.post(self.overlay.flash, "done", "", "OpenAI key saved", 1.6)
 
     def _on_tray_update(self):
         """Runs the installer in the folder, which replaces this copy."""

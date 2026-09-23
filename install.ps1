@@ -214,6 +214,7 @@ $VenvDir     = [IO.Path]::Combine($Root, '.venv')
 $VenvPy      = [IO.Path]::Combine($VenvDir, 'Scripts\python.exe')
 $VenvPyW     = [IO.Path]::Combine($VenvDir, 'Scripts\pythonw.exe')
 $EntryFile   = [IO.Path]::Combine($Root, 'run.py')
+$IconFile    = [IO.Path]::Combine($Root, 'heyspeaky.ico')
 $ConfigFile  = [IO.Path]::Combine($Root, 'config.json')
 $StartupDir  = [Environment]::GetFolderPath('Startup')
 $ProgramsDir = [Environment]::GetFolderPath('Programs')
@@ -442,8 +443,8 @@ function Use-KeyFromCommand {
 }
 
 function Write-KeyHint {
-    Write-Note 'To add one later, run the install command with your key in it:'
-    Write-Note "  `$env:OPENAI_API_KEY = `"sk-...`"; irm $RawInstaller | iex"
+    Write-Note 'To add one later: copy the key, click the HeySpeaky icon in the tray,'
+    Write-Note 'and click "Add your OpenAI key".'
 }
 
 function Set-ApiKey {
@@ -826,7 +827,13 @@ function New-Shortcut([string]$Path) {
     $sc.WorkingDirectory = $Root
     $sc.WindowStyle      = 7
     $sc.Description      = 'HeySpeaky - hold Ctrl+Alt to dictate'
-    $sc.IconLocation     = "$VenvPyW,0"
+    # Its own icon. The Python it starts has none, and the Start menu showed
+    # a blank window for it.
+    if (Test-Path -LiteralPath $IconFile) {
+        $sc.IconLocation = "$IconFile,0"
+    } else {
+        $sc.IconLocation = "$VenvPyW,0"
+    }
     $sc.Save()
     Write-Note "created $Path"
 }
@@ -974,6 +981,12 @@ function Invoke-Install {
     Invoke-Native 'The check' $VenvPy $check
 
     Write-Step 'Creating shortcuts'
+    try {
+        Invoke-Native 'Drawing the icon' $VenvPy @((Join-Path $Root 'tools\make_icon.py'), $IconFile)
+    } catch {
+        # A shortcut with a plain icon still starts HeySpeaky.
+        Write-Note 'The icon could not be drawn; the shortcuts get a plain one.'
+    }
     if ($NoAutostart) {
         # Only if it starts this copy. Another install's autostart is not ours
         # to remove.
@@ -1008,24 +1021,26 @@ function Invoke-Install {
     Write-Host '--------------------------------------------------------------' -ForegroundColor Green
     Write-Host @"
 
-  Hold Ctrl+Alt     record while held, release and the text is typed
-  Tap  Ctrl+Alt     hands-free, stops when you stop talking
-  Any other key     cancels
+  Hold Ctrl+Alt       record while held, release and the text is typed
+  Tap Ctrl+Alt twice  hands-free, stops when you stop talking
+  Ctrl+Alt+Win        teach it a word it got wrong
+  Any other key       cancels
 
   Transcribed by   $engineState
   OpenAI key       $keyState
   Autostart        $autoState
   Folder           $Root
 
-  Everything else is in the microphone icon in the tray:
-    Language > Add or remove languages   the languages you speak
-    Transcribed by                       OpenAI or this computer
+  Everything else is in the HeySpeaky icon in the tray - click it:
+    Language, +          the languages you speak (just type to find one)
+    Transcribed by       OpenAI or this computer
+    OpenAI key           copy your key, then click this row
 
   Something wrong?   double-click CHECKUP.bat in the folder above
   Remove it          double-click UNINSTALL.bat in the same folder
 
-  To add or change your OpenAI key, run the install command with it:
-  `$env:OPENAI_API_KEY = "sk-..."; irm $RawInstaller | iex
+  To add or change your OpenAI key: copy it, click the tray icon, and
+  click "OpenAI key". Keys are made at $KeysPage
 "@
 }
 

@@ -8,7 +8,7 @@ HeySpeaky assumes you are going to switch, probably mid-sentence.
 
 Hold Ctrl+Alt, talk, and the text lands in whatever window you were already
 typing in. No console window, nothing in the taskbar, nothing in Alt+Tab. Just
-a microphone in the tray.
+a waveform in the tray.
 
 Windows. Built on [RealtimeSTT](https://github.com/KoljaB/RealtimeSTT). MIT.
 
@@ -34,13 +34,25 @@ irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1 | iex
 It downloads about 1 GB, installs into `%LOCALAPPDATA%\Programs\HeySpeaky`,
 starts HeySpeaky with Windows and launches it. Then hold Ctrl+Alt and talk.
 
-### With your OpenAI key (recommended)
+### Your OpenAI key (recommended)
 
 OpenAI is much more accurate than the model on your computer, and it is the
 only option that keeps up when you switch language in the middle of a
-sentence. Create a key at
-[platform.openai.com/api-keys](https://platform.openai.com/api-keys), put it
-between the quotes, and paste the whole line into PowerShell instead:
+sentence. Adding the key takes two clicks:
+
+1. Create a key at
+   [platform.openai.com/api-keys](https://platform.openai.com/api-keys) and
+   copy it.
+2. Click the HeySpeaky icon in the tray, then **Add your OpenAI key**.
+
+HeySpeaky takes the key off the clipboard, checks it with OpenAI, saves it to
+`%APPDATA%\HeySpeaky\openai.key` where only your account can read it, and
+empties the clipboard so the key is not left there to be pasted by accident.
+If nothing is copied yet, the same click opens the page where keys are made.
+To change the key later, copy the new one and click **OpenAI key**.
+
+Or give it to the installer, which does the same checks: put the key between
+the quotes and paste the whole line into PowerShell instead:
 
 ```powershell
 $env:OPENAI_API_KEY = "PASTE-YOUR-KEY-HERE"; irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1 | iex
@@ -50,10 +62,7 @@ Filled in, it looks like this:
 
 <pre>$env:OPENAI_API_KEY = "<a href="docs/no-key-for-you.md">sk-proj-R4nd0m...x9Qz</a>"; irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1 | iex</pre>
 
-The installer checks the key with OpenAI, saves it to
-`%APPDATA%\HeySpeaky\openai.key` where only your account can read it, and takes
-it back out of your PowerShell history. To change the key later, run the same
-line with the new one.
+The installer also takes the key back out of your PowerShell history.
 
 It is your own key on your own OpenAI account. Nothing is proxied. Cost is
 about $0.006 per minute of audio, roughly $3.60 a month at 20 minutes of
@@ -128,7 +137,8 @@ downloaded speech models. A folder that is a git clone is left where it is.
 | Tap Ctrl+Alt twice, quickly | Hands-free: it keeps recording with nothing held down. Tap once more to finish, or stop talking and it ends after 2.5s of silence. |
 | Click the tick on the pill | Finishes now. |
 | Click the cross on the pill, or press any other key | Cancels. Nothing is inserted. |
-| Tray icon | Status, add or remove your languages, OpenAI or local, pause the hotkey, edit settings, save a problem report, quit. |
+| Select a word it got wrong, press Ctrl+Alt+Win | Type what you said. It remembers, and gets it right next time. |
+| Click the tray icon | Status, your languages (just start typing to find one, in English, Russian, Kazakh or its own name), your OpenAI key, OpenAI or local, pause the hotkey, your words, settings, a problem report. Quit asks for a second click. |
 
 <div align="center">
 <img src="docs/img/overlay-done.png" width="620" alt="Done state with a green dot and the final transcript in white"><br>

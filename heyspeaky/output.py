@@ -56,6 +56,20 @@ _user32.GetForegroundWindow.restype = wintypes.HWND
 _user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR,
                                   ctypes.c_int]
 _user32.GetClassNameW.restype = ctypes.c_int
+_user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND,
+                                             ctypes.POINTER(wintypes.DWORD)]
+_user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+_kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL,
+                                  wintypes.DWORD]
+_kernel32.OpenProcess.restype = wintypes.HANDLE
+_kernel32.QueryFullProcessImageNameW.argtypes = [
+    wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+    ctypes.POINTER(wintypes.DWORD)]
+_kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+_kernel32.CloseHandle.restype = wintypes.BOOL
+
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 VK_CONTROL = 0x11
 VK_C = 0x43
@@ -175,6 +189,33 @@ def _foreground_class():
         return "?"
 
 
+def _foreground_program():
+    """The program in front, by file name - chrome.exe, not the title,
+    which can be the name of somebody's document. Chrome, Edge, VS Code and
+    every Electron app share one window class, so the class alone cannot
+    say which of them it was."""
+    handle = None
+    try:
+        pid = wintypes.DWORD(0)
+        _user32.GetWindowThreadProcessId(_user32.GetForegroundWindow(),
+                                         ctypes.byref(pid))
+        handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                       False, pid.value)
+        if not handle:
+            return "?"
+        buffer = ctypes.create_unicode_buffer(512)
+        size = wintypes.DWORD(512)
+        if not _kernel32.QueryFullProcessImageNameW(handle, 0, buffer,
+                                                    ctypes.byref(size)):
+            return "?"
+        return buffer.value.replace("/", "\\").rsplit("\\", 1)[-1] or "?"
+    except Exception:
+        return "?"
+    finally:
+        if handle:
+            _kernel32.CloseHandle(handle)
+
+
 def copy_selection(modifier_timeout=5.0, settle=0.6, tries=2):
     """Whatever is selected in the window in front, via Ctrl+C.
 
@@ -191,7 +232,13 @@ def copy_selection(modifier_timeout=5.0, settle=0.6, tries=2):
     once more; a window that answered with no text had nothing selected, and
     is not asked again. The owner got an empty box nine times in a row with
     nothing in the log to say which of those it was, so it says now - how
-    much, from what kind of window, never the words themselves.
+    much, from which program and what kind of window, never the words.
+
+    An unchanged clipboard is not proof the keys went missing. Measured on
+    23 September: Chrome writes nothing at all when nothing is selected,
+    and the same code, with the chord pressed fast or slow and let go in
+    any order, read a Chrome selection every time. So the line says the
+    clipboard did not change, which is what is known.
     """
     previous = read_clipboard()
     started = time.monotonic()
@@ -222,12 +269,13 @@ def copy_selection(modifier_timeout=5.0, settle=0.6, tries=2):
         time.sleep(0.05)
 
     logger.info(
-        "Selection: %d chars from %s, %d %s; keys up after %.2fs%s; "
-        "the window %s",
-        len(selection.strip()), _foreground_class(), attempt,
-        "try" if attempt == 1 else "tries", waited,
+        "Selection: %d chars from %s (%s), %d %s; keys up after %.2fs%s; %s",
+        len(selection.strip()), _foreground_program(), _foreground_class(),
+        attempt, "try" if attempt == 1 else "tries", waited,
         "" if released else " (gave up waiting)",
-        "answered" if answered else "never answered")
+        "the window answered" if answered else
+        "the clipboard never changed (nothing selected, or the keys did not "
+        "arrive)")
 
     # Put back what the person had, whether or not anything was selected.
     if previous:

@@ -153,3 +153,147 @@ def reconcile(cfg):
     changed = languages != before or cfg["model"].get("language_menu") != menu
     cfg["model"]["language_menu"] = menu
     return changed
+
+
+# -- finding a language by typing it --------------------------------------
+#
+# The owner asked for a search: scrolling ninety names for your own every
+# time is the slow way. People type the name they know, which is not always
+# the English one, so each language answers to what it calls itself, to its
+# Russian name, and to a few other names people use for it.
+
+NATIVE = {
+    "af": "Afrikaans", "sq": "Shqip", "am": "አማርኛ", "ar": "العربية",
+    "hy": "Հայերեն", "as": "অসমীয়া", "az": "Azərbaycanca", "ba": "Башҡортса",
+    "eu": "Euskara", "be": "Беларуская", "bn": "বাংলা", "bs": "Bosanski",
+    "br": "Brezhoneg", "bg": "Български", "my": "မြန်မာ", "ca": "Català",
+    "zh": "中文", "hr": "Hrvatski", "cs": "Čeština", "da": "Dansk",
+    "nl": "Nederlands", "en": "English", "et": "Eesti", "fo": "Føroyskt",
+    "fi": "Suomi", "fr": "Français", "gl": "Galego", "ka": "ქართული",
+    "de": "Deutsch", "el": "Ελληνικά", "gu": "ગુજરાતી",
+    "ht": "Kreyòl ayisyen", "ha": "Hausa", "he": "עברית", "hi": "हिन्दी",
+    "hu": "Magyar", "is": "Íslenska", "id": "Bahasa Indonesia",
+    "it": "Italiano", "ja": "日本語", "kn": "ಕನ್ನಡ", "kk": "Қазақша",
+    "km": "ខ្មែរ", "ko": "한국어", "lo": "ລາວ", "la": "Latina",
+    "lv": "Latviešu", "ln": "Lingála", "lt": "Lietuvių",
+    "lb": "Lëtzebuergesch", "mk": "Македонски", "mg": "Malagasy",
+    "ms": "Bahasa Melayu", "ml": "മലയാളം", "mt": "Malti", "mi": "Māori",
+    "mr": "मराठी", "mn": "Монгол", "ne": "नेपाली", "no": "Norsk",
+    "nn": "Nynorsk", "oc": "Occitan", "ps": "پښتو", "fa": "فارسی",
+    "pl": "Polski", "pt": "Português", "pa": "ਪੰਜਾਬੀ", "ro": "Română",
+    "ru": "Русский", "sa": "संस्कृतम्", "sr": "Српски", "sn": "chiShona",
+    "sd": "سنڌي", "si": "සිංහල", "sk": "Slovenčina", "sl": "Slovenščina",
+    "so": "Soomaali", "es": "Español", "su": "Basa Sunda", "sw": "Kiswahili",
+    "sv": "Svenska", "tl": "Tagalog", "tg": "Тоҷикӣ", "ta": "தமிழ்",
+    "tt": "Татарча", "te": "తెలుగు", "th": "ไทย", "bo": "བོད་སྐད་",
+    "tr": "Türkçe", "tk": "Türkmençe", "uk": "Українська", "ur": "اردو",
+    "uz": "Oʻzbekcha", "vi": "Tiếng Việt", "cy": "Cymraeg", "yi": "ייִדיש",
+    "yo": "Yorùbá",
+}
+
+RUSSIAN = {
+    "af": "африкаанс", "sq": "албанский", "am": "амхарский", "ar": "арабский",
+    "hy": "армянский", "as": "ассамский", "az": "азербайджанский",
+    "ba": "башкирский", "eu": "баскский", "be": "белорусский",
+    "bn": "бенгальский", "bs": "боснийский", "br": "бретонский",
+    "bg": "болгарский", "my": "бирманский", "ca": "каталанский",
+    "zh": "китайский", "hr": "хорватский", "cs": "чешский", "da": "датский",
+    "nl": "нидерландский", "en": "английский", "et": "эстонский",
+    "fo": "фарерский", "fi": "финский", "fr": "французский",
+    "gl": "галисийский", "ka": "грузинский", "de": "немецкий",
+    "el": "греческий", "gu": "гуджарати", "ht": "гаитянский креольский",
+    "ha": "хауса", "he": "иврит", "hi": "хинди", "hu": "венгерский",
+    "is": "исландский", "id": "индонезийский", "it": "итальянский",
+    "ja": "японский", "kn": "каннада", "kk": "казахский", "km": "кхмерский",
+    "ko": "корейский", "lo": "лаосский", "la": "латинский", "lv": "латышский",
+    "ln": "лингала", "lt": "литовский", "lb": "люксембургский",
+    "mk": "македонский", "mg": "малагасийский", "ms": "малайский",
+    "ml": "малаялам", "mt": "мальтийский", "mi": "маори", "mr": "маратхи",
+    "mn": "монгольский", "ne": "непальский", "no": "норвежский",
+    "nn": "нюнорск", "oc": "окситанский", "ps": "пушту", "fa": "персидский",
+    "pl": "польский", "pt": "португальский", "pa": "панджаби",
+    "ro": "румынский", "ru": "русский", "sa": "санскрит", "sr": "сербский",
+    "sn": "шона", "sd": "синдхи", "si": "сингальский", "sk": "словацкий",
+    "sl": "словенский", "so": "сомалийский", "es": "испанский",
+    "su": "сунданский", "sw": "суахили", "sv": "шведский",
+    "tl": "тагальский", "tg": "таджикский", "ta": "тамильский",
+    "tt": "татарский", "te": "телугу", "th": "тайский", "bo": "тибетский",
+    "tr": "турецкий", "tk": "туркменский", "uk": "украинский", "ur": "урду",
+    "uz": "узбекский", "vi": "вьетнамский", "cy": "валлийский", "yi": "идиш",
+    "yo": "йоруба",
+}
+
+# Other names people reach for: the Kazakh names of the languages a Kazakh
+# speaker is likeliest to want, and the English names that are not the one
+# above.
+ALIASES = {
+    "ru": ("орыс",), "en": ("ағылшын",), "de": ("неміс",), "kk": ("қазақ",
+                                                                  "kazak"),
+    "tr": ("түрік",), "uz": ("өзбек",), "zh": ("қытай", "mandarin"),
+    "fr": ("француз",), "es": ("испан", "castilian"), "ar": ("араб",),
+    "ja": ("жапон",), "ko": ("корей",), "it": ("итальян",),
+    "fa": ("farsi", "фарси"), "nl": ("flemish", "голландский"),
+    "tl": ("filipino",), "ro": ("moldovan",), "my": ("myanmar",),
+    "uk": ("украин",),
+}
+
+# Kazakh letters folded to the Russian ones nearest them, so "каз" finds
+# Қазақша and "қаз" finds казахский: people type both, depending on which
+# layout happens to be on.
+_FOLD = str.maketrans("қғңәөұүһіё", "кгнаоууиие")
+
+
+def _fold(text):
+    import unicodedata
+    text = unicodedata.normalize("NFKD", (text or "").casefold())
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return text.translate(_FOLD).strip()
+
+
+def _names_of(code):
+    return [name(code), NATIVE.get(code, ""), RUSSIAN.get(code, "")] \
+        + list(ALIASES.get(code, ())) + [code]
+
+
+def search(codes, query):
+    """`codes` that answer to `query`, best first, keeping their order within
+    each kind of match: a name that starts with it, then a later word of a
+    name that does, then a name that merely contains it."""
+    wanted = _fold(query)
+    if not wanted:
+        return list(codes)
+    ranked = ([], [], [])
+    for code in codes:
+        best = None
+        for known in _names_of(code):
+            folded = _fold(known)
+            if not folded:
+                continue
+            if folded.startswith(wanted):
+                rank = 0
+            elif any(word.startswith(wanted) for word in folded.split()[1:]):
+                rank = 1
+            elif len(wanted) >= 3 and wanted in folded:
+                rank = 2
+            else:
+                continue
+            best = rank if best is None else min(best, rank)
+        if best is not None:
+            ranked[best].append(code)
+    return ranked[0] + ranked[1] + ranked[2]
+
+
+def _drawable(text):
+    """Whether the panel's font has every letter of it: Latin, Greek and
+    Cyrillic. Anything else would come out as empty boxes."""
+    return all(char == " " or ord(char) < 0x0530 or char == "ʻ"
+               for char in text)
+
+
+def native_label(code):
+    """What a language calls itself, for showing beside its English name -
+    or "" when that says nothing new or cannot be drawn."""
+    native = NATIVE.get(code, "")
+    if not native or native.casefold() == name(code).casefold():
+        return ""
+    return native if _drawable(native) else ""

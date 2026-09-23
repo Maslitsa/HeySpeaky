@@ -65,6 +65,51 @@ def _make_icon(state):
     return image.resize((size, size), Image.LANCZOS)
 
 
+def app_icon(size=256):
+    """HeySpeaky's own icon, for its shortcuts: the waveform in its colours
+    on a tile of the pill's dark glass.
+
+    The shortcuts used to borrow the icon of the Python they start, which
+    has none of its own, so the Start menu showed a blank window. The tray
+    icon is white on nothing, which vanishes on a light Start menu; a tile
+    reads on either.
+    """
+    k = 4
+    big = size * k
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    inset = big // 16
+    draw.rounded_rectangle((inset, inset, big - inset, big - inset),
+                           radius=big // 4.4, fill=tuple(theme.TINT) + (255,))
+    # The glass's bright edge, faintly, as on the pill.
+    draw.rounded_rectangle((inset, inset, big - inset, big - inset),
+                           radius=big // 4.4, outline=(255, 255, 255, 34),
+                           width=max(1, big // 110))
+    width = big // 11
+    gap = big // 19
+    tallest = big * 0.54
+    left = (big - (width * len(_BARS) + gap * (len(_BARS) - 1))) // 2
+    for index, share in enumerate(_BARS):
+        height = int(tallest * share)
+        x = left + index * (width + gap)
+        top = (big - height) // 2
+        draw.rounded_rectangle((x, top, x + width, top + height),
+                               radius=width // 2,
+                               fill=_bar_colour(index) + (255,))
+    return image.resize((size, size), Image.LANCZOS)
+
+
+def save_app_icon(path):
+    """Writes the icon as a .ico with every size Windows asks for."""
+    folder = os.path.dirname(os.path.abspath(path))
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+    sizes = [(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48),
+             (64, 64), (128, 128), (256, 256)]
+    app_icon(256).save(path, format="ICO", sizes=sizes)
+    return path
+
+
 class Tray:
     """Wraps a pystray icon and runs its message loop on its own thread."""
 
@@ -85,6 +130,8 @@ class Tray:
         usage_text=None,
         on_update=None,
         on_panel=None,
+        on_key=None,
+        key_state=None,
     ):
         self._config_path = config_path
         self._log_dir = log_dir
@@ -104,6 +151,8 @@ class Tray:
         self._usage_text = usage_text
         self._on_update = on_update
         self._on_panel = on_panel
+        self._on_key = on_key
+        self._key_state = key_state
         self._update_version = ""
         self._busy = False
 
@@ -351,6 +400,13 @@ class Tray:
         except Exception:
             logger.debug("Tray update raised", exc_info=True)
 
+    def notify(self, title, message):
+        """A Windows notification from the tray icon."""
+        try:
+            self._icon.notify(message, title)
+        except Exception:
+            logger.debug("Could not show a notification", exc_info=True)
+
     # -- the panel ---------------------------------------------------------
 
     def _wire_panel(self):
@@ -406,6 +462,7 @@ class Tray:
             "backend": self._backend,
             "usage": self._usage_text() if self._usage_text else "",
             "update": self._update_version,
+            "key": self._key_state() if self._key_state else "saved",
             "catalog": list(offered),
             "names": dict((code, language_names.name(code))
                           for code in offered),
@@ -424,6 +481,8 @@ class Tray:
             "report": self._report,
             "quit": self._quit,
         }
+        if self._on_key is not None:
+            handlers["key"] = self._on_key
         if action in handlers:
             target = handlers[action]
         elif action.startswith("pin:"):

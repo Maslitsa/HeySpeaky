@@ -11,6 +11,8 @@ pinned and the pause switched on, the language list, scrolled, and closed.
     .venv\Scripts\python.exe tools\panel_check.py --scale 1.5
 
 It moves the real pointer over one row, for the hover, and puts it back.
+It also types into the language search with real keys - in the Kazakh
+layout, if this machine has it - and clicks Quit once, which must not quit.
 """
 
 import argparse
@@ -30,6 +32,7 @@ for stream in (sys.stdout, sys.stderr):
         pass
 
 from heyspeaky import languages                              # noqa: E402
+from correction_check import kazakh_layout, type_in_layout   # noqa: E402
 from heyspeaky.overlay import (                              # noqa: E402
     GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_NOACTIVATE, _cursor_work_area,
     _monitor_scale, enable_dpi_awareness, window_handle,
@@ -42,7 +45,7 @@ class StandIn(object):
 
     def __init__(self):
         self.state = {"pinned": "", "paused": False, "backend": "cloud",
-                      "yours": ["kk", "ru", "en", "de"]}
+                      "yours": ["kk", "ru", "en", "de"], "key": "missing"}
         self.done = []
 
     def model(self):
@@ -57,16 +60,25 @@ class StandIn(object):
             "backend": self.state["backend"],
             "usage": "This month: $0.42 · 118 dictations",
             "update": "",
+            "key": self.state["key"],
             "catalog": list(offered),
             "names": dict((code, languages.name(code)) for code in offered),
         }
 
     def act(self, action):
         self.done.append(action)
-        if action.startswith("pin:"):
+        if action == "key":
+            self.state["key"] = "saved"
+        elif action.startswith("pin:"):
             self.state["pinned"] = action[4:]
         elif action == "pause":
             self.state["paused"] = not self.state["paused"]
+        elif action.startswith("lang:"):
+            yours = self.state["yours"]
+            if action[5:] in yours:
+                yours.remove(action[5:])
+            else:
+                yours.insert(0, action[5:])
         elif action.startswith("backend:"):
             self.state["backend"] = action[8:]
 
@@ -128,6 +140,15 @@ def main():
     if y + panel.window.winfo_height() > bottom + 40 * scale:
         problems.append("the panel runs under the taskbar")
 
+    first = [item for item in panel._items if item.kind == "row"][0]
+    if first.key != "key":
+        problems.append("a missing key is not the first row")
+    shots.append(("no key yet", photograph(panel)))
+    panel.press("key")
+    pump(root, 0.5)
+    if stand_in.state["key"] != "saved" or not panel.open:
+        problems.append("the key row did not do its job and stay open")
+
     row = [item for item in panel._items if item.key == "settings"][0]
     user32.SetCursorPos(x + (row.rect[0] + row.rect[2]) // 2,
                         y + (row.rect[1] + row.rect[3]) // 2)
@@ -153,6 +174,16 @@ def main():
         problems.append("the pinned language did not show")
     shots.append(("Kazakh pinned, paused, this laptop", photograph(panel)))
 
+    panel.press("quit")
+    pump(root, 0.3)
+    if "quit" in stand_in.done or not panel.open:
+        problems.append("one click on Quit quit")
+    shots.append(("Quit clicked once", photograph(panel)))
+    panel._escape()
+    pump(root, 0.3)
+    if panel._quit_armed_at is not None:
+        problems.append("Esc did not take the Quit back")
+
     panel.press("more-languages")
     pump(root, 0.3)
     shots.append(("languages", photograph(panel)))
@@ -173,6 +204,37 @@ def main():
     hint = [item for item in panel._items if item.kind == "hint"][0]
     if list_top - hint.rect[3] > 12 * scale:
         problems.append("a gap opened at the top of the scrolled list")
+    # Typing finds a language. With real keys, in the Kazakh layout when
+    # there is one: that is where Tk alone would have typed "?".
+    kazakh = kazakh_layout()
+    panel.window.focus_force()
+    pump(root, 0.2)
+    if kazakh:
+        type_in_layout(root, kazakh, (0x51, 0x41, 0x30))    # Й Ф Қ -> "йфқ"
+        panel._escape()
+        pump(root, 0.1)
+        type_in_layout(root, kazakh, (0x30, 0x46))          # Қ А -> "қа"
+    else:
+        for letter in "kaz":
+            panel.type_into_search(letter)
+            pump(root, 0.05)
+    pump(root, 0.4)
+    found = [item.key for item in panel._items if item.kind == "language"]
+    print("typed {!r}, found {}".format(panel._query, found))
+    if found[:1] != ["lang:kk"]:
+        problems.append("typing did not find Kazakh ({!r} -> {})".format(
+            panel._query, found))
+    shots.append(("typed " + panel._query, photograph(panel)))
+    unticked = [item.key for item in panel._items
+                if item.kind == "language" and not item.extra]
+    if unticked:
+        panel.press(unticked[0])
+        pump(root, 0.16)
+        shots.append(("a tick drawing itself", photograph(panel)))
+        pump(root, 0.5)
+        panel.press(unticked[0])
+        pump(root, 0.4)
+    panel._escape()
     panel.press("back")
     pump(root, 0.3)
 

@@ -61,3 +61,6 @@ desktop.ini
 
 # Problem reports hold recordings of your voice. They never belong in git.
 *-report-*.zip
+
+# Drawn by the installer from tools/make_icon.py, not kept here.
+heyspeaky.ico

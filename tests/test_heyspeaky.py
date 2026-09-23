@@ -2230,5 +2230,426 @@ class HookWatchdog(unittest.TestCase):
                                                         resumed=True))
 
 
+
+class _PanelModel(object):
+    YOURS = ["kk", "ru", "en", "de"]
+
+    def model(self, **changes):
+        catalog = languages.catalog(self.YOURS)
+        model = {"status": "Ready", "state": "ready", "paused": False,
+                 "pinned": "", "yours": list(self.YOURS), "backend": "cloud",
+                 "usage": "This month: $0.42", "update": "", "key": "saved",
+                 "catalog": list(catalog),
+                 "names": dict((c, languages.name(c)) for c in catalog)}
+        model.update(changes)
+        return model
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class ThePanelHasNoSlit(_PanelModel, unittest.TestCase):
+    """The owner saw the desktop through a thin line across the panel."""
+
+    def test_a_separator_is_laid_over_the_glass_not_cut_through_it(self):
+        """The line was drawn straight onto the picture, which put its own
+        faint alpha in place of the glass's. Laid over, the glass underneath
+        stays as solid as it is either side of the line."""
+        for scale in (1.0, 1.25):
+            size, items = panel_module.layout(self.model(), scale)
+            card = glass.panel_card(size[0], size[1], scale)
+            frame = glass.panel_frame(card, items, scale)
+            separators = [item for item in items if item.kind == "separator"]
+            self.assertTrue(separators)
+            for item in separators:
+                x = (item.rect[0] + item.rect[2]) // 2
+                y = int((item.rect[1] + item.rect[3]) / 2.0)
+                line = frame.getpixel((x, y))[3]
+                above = frame.getpixel((x, y - 4))[3]
+                self.assertGreaterEqual(line, above - 2, (scale, line, above))
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class QuitAsksTwice(_PanelModel, unittest.TestCase):
+    """The panel opens over the tray, and Quit was the row the pointer met
+    first on its way up: the owner quit by accident, again and again."""
+
+    def panel(self):
+        import types
+        panel = object.__new__(panel_module.TrayPanel)
+        self.done, self.closed = [], []
+        panel._quit_armed_at = None
+        panel._refit = lambda: None
+        panel._act = self.done.append
+        panel.close = lambda *_: self.closed.append(1)
+        panel.window = types.SimpleNamespace(after=lambda *_: None)
+        return panel
+
+    def test_one_click_on_quit_does_not_quit(self):
+        panel = self.panel()
+        panel.press("quit")
+        self.assertEqual(self.done, [])
+        self.assertEqual(self.closed, [])
+
+    def test_a_second_click_soon_after_quits(self):
+        panel = self.panel()
+        panel.press("quit")
+        panel.press("quit")
+        self.assertEqual(self.done, ["quit"])
+
+    def test_a_second_click_long_after_asks_again(self):
+        panel = self.panel()
+        panel.press("quit")
+        panel._quit_armed_at -= theme.QUIT_ARMED + 0.5
+        panel.press("quit")
+        self.assertEqual(self.done, [])
+
+    def test_the_row_says_what_the_next_click_does(self):
+        _size, items = panel_module.layout(self.model(), 1.0,
+                                           quit_armed=True)
+        row = [item for item in items if item.key == "quit"][0]
+        self.assertIn("again", row.label)
+        self.assertEqual(row.extra, "danger")
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class FindingALanguageByTyping(_PanelModel, unittest.TestCase):
+    """The owner asked to type his language instead of hunting for it."""
+
+    def found(self, query):
+        return panel_module.language_order(self.model(), query)
+
+    def test_kazakh_answers_to_every_way_of_typing_it(self):
+        for query in ("kaz", "Kaz", "каз", "қаз", "Қазақша", "kk"):
+            self.assertEqual(self.found(query)[:1], ["kk"], query)
+
+    def test_kazakh_letters_typed_on_a_russian_layout_still_find_it(self):
+        """Қазақша typed without the Kazakh layout on is "казакша"."""
+        self.assertEqual(self.found("казакша")[:1], ["kk"])
+
+    def test_a_language_answers_to_its_russian_and_its_own_name(self):
+        self.assertEqual(self.found("нем")[:1], ["de"])
+        self.assertEqual(self.found("Deutsch")[:1], ["de"])
+        self.assertEqual(self.found("орыс")[:1], ["ru"])
+        self.assertEqual(self.found("farsi")[:1], ["fa"])
+
+    def test_nothing_typed_leaves_the_whole_list(self):
+        self.assertEqual(self.found(""), panel_module.language_order(
+            self.model()))
+
+    def test_the_list_shows_only_what_answers(self):
+        _size, items = panel_module.layout(self.model(), 1.25, "languages",
+                                           0.0, "каз")
+        rows = [item.key for item in items if item.kind == "language"]
+        self.assertEqual(rows, ["lang:kk"])
+        hint = [item for item in items if item.kind == "hint"][0]
+        self.assertIn("Kazakh", hint.label)
+        search = [item for item in items if item.kind == "search"][0]
+        self.assertEqual(search.label, "каз")
+
+    def test_nothing_found_says_so(self):
+        _size, items = panel_module.layout(self.model(), 1.25, "languages",
+                                           0.0, "zzzz")
+        self.assertEqual([i for i in items if i.kind == "language"], [])
+        hint = [item for item in items if item.kind == "hint"][0]
+        self.assertIn("No language", hint.label)
+
+    def test_typing_on_the_first_page_opens_the_search(self):
+        import types
+        panel = object.__new__(panel_module.TrayPanel)
+        panel._page, panel._query, panel._scroll = "main", "", 0.0
+        panel._turn_goal, panel._flare_at, panel._caret_job = 0.0, None, None
+        panel._hover_key = None
+        panel._closing_at = None
+        panel._model = self.model()
+        panel._refit = lambda: None
+        panel.window = types.SimpleNamespace(after=lambda *_: None,
+                                             after_cancel=lambda *_: None)
+        real = keymap.typed_char
+        self.addCleanup(setattr, keymap, "typed_char", real)
+        keymap.typed_char = lambda code, layout=None: "қ"
+        panel._key(types.SimpleNamespace(keysym="Cyrillic_ka",
+                                         keycode=0x30, char="?"))
+        self.assertEqual((panel._page, panel._query), ("languages", "қ"))
+
+    def test_a_search_field_is_drawn(self):
+        size, items = panel_module.layout(self.model(), 1.25, "languages",
+                                          0.0, "kaz")
+        card = glass.panel_card(size[0], size[1], 1.25)
+        frame = glass.panel_frame(card, items, 1.25)
+        field = [item for item in items if item.kind == "search"][0]
+        inside = frame.getpixel((field.rect[0] + field.rect[3] - field.rect[1],
+                                 field.rect[1] + 3))
+        self.assertEqual(frame.size, card[0].size)
+        self.assertEqual(inside[3], 255)
+
+    def test_a_tick_draws_itself_in(self):
+        size, items = panel_module.layout(self.model(), 1.25, "languages")
+        card = glass.panel_card(size[0], size[1], 1.25)
+        row = [item for item in items if item.key == "lang:kk"][0]
+        box = (row.rect[2] - 40, row.rect[1], row.rect[2], row.rect[3])
+
+        def ink(share):
+            frame = glass.panel_frame(card, items, 1.25, None,
+                                      {"tick:lang:kk": share})
+            crop = frame.crop(box).convert("L").tobytes()
+            return sum(1 for value in crop if value > 160)
+
+        self.assertEqual(ink(0.0), 0)
+        self.assertLess(0, ink(0.4))
+        self.assertLess(ink(0.4), ink(1.0))
+
+
+try:
+    import tkinter as _tk
+    _tk_root = _tk.Tk()
+    _tk_root.withdraw()
+except Exception:                              # no display, no Tcl
+    _tk_root = None
+
+from heyspeaky import keymap  # noqa: E402
+
+
+class _KeyEvent(object):
+    def __init__(self, keycode, char):
+        self.keycode = keycode
+        self.char = char
+        self.keysym = "??"
+
+
+class TypingInTheLayoutInUse(unittest.TestCase):
+    """Kazakh typed into the correction box came out as ³ and question
+    marks: Tk decodes a key through a one-byte code page, and most of
+    Kazakh is not in one."""
+
+    def kazakh(self):
+        import ctypes
+        user32 = ctypes.windll.user32
+        user32.LoadKeyboardLayoutW.restype = ctypes.c_void_p
+        user32.GetKeyboardLayoutList.argtypes = [
+            ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
+        count = user32.GetKeyboardLayoutList(0, None)
+        loaded = (ctypes.c_void_p * count)()
+        user32.GetKeyboardLayoutList(count, loaded)
+        for handle in loaded:
+            if (handle or 0) & 0xFFFF == 0x043F:
+                return handle
+        # Not installed here: load it for the test, tell nobody, and put
+        # things back as they were.
+        handle = user32.LoadKeyboardLayoutW("0000043F", 0x80)
+        if not handle:
+            self.skipTest("the Kazakh layout cannot be loaded")
+        user32.UnloadKeyboardLayout.argtypes = [ctypes.c_void_p]
+        self.addCleanup(user32.UnloadKeyboardLayout, handle)
+        return handle
+
+    def test_the_number_row_of_the_kazakh_layout_is_kazakh(self):
+        layout = self.kazakh()
+        typed = "".join(keymap.typed_char(code, layout)
+                        for code in (0x33, 0x34, 0x35, 0x38, 0x30))
+        self.assertEqual(typed, "іңғүқ")
+
+    def test_keys_that_are_not_text_type_nothing(self):
+        layout = self.kazakh()
+        for code in (0x08, 0x0D, 0x25, 0x1B):      # Backspace Enter Left Esc
+            self.assertEqual(keymap.typed_char(code, layout), "", code)
+
+    @unittest.skipIf(_tk_root is None, "no display for Tk")
+    def test_a_field_types_what_the_layout_meant(self):
+        entry = _tk.Entry(_tk_root)
+        self.addCleanup(entry.destroy)
+        real = keymap.typed_char
+        self.addCleanup(setattr, keymap, "typed_char", real)
+        keymap.typed_char = lambda code, layout=None: "ң"
+        typed = keymap.fix_typing(entry)
+        entry.insert(0, "Ма")
+        self.assertEqual(typed(_KeyEvent(0x34, "?")), "break")
+        self.assertEqual(entry.get(), "Маң")
+
+    @unittest.skipIf(_tk_root is None, "no display for Tk")
+    def test_a_selection_is_typed_over(self):
+        entry = _tk.Entry(_tk_root)
+        self.addCleanup(entry.destroy)
+        real = keymap.typed_char
+        self.addCleanup(setattr, keymap, "typed_char", real)
+        keymap.typed_char = lambda code, layout=None: "і"
+        typed = keymap.fix_typing(entry)
+        entry.insert(0, "Marzhan")
+        entry.select_range(0, "end")
+        entry.icursor("end")
+        typed(_KeyEvent(0x33, "³"))
+        self.assertEqual(entry.get(), "і")
+
+    @unittest.skipIf(_tk_root is None, "no display for Tk")
+    def test_where_tk_already_agrees_it_is_left_alone(self):
+        entry = _tk.Entry(_tk_root)
+        self.addCleanup(entry.destroy)
+        real = keymap.typed_char
+        self.addCleanup(setattr, keymap, "typed_char", real)
+        keymap.typed_char = lambda code, layout=None: "a"
+        typed = keymap.fix_typing(entry)
+        self.assertIsNone(typed(_KeyEvent(0x41, "a")))
+        self.assertEqual(entry.get(), "")
+
+
+from heyspeaky import apikey  # noqa: E402
+
+
+class AddingTheKeyFromTheTray(unittest.TestCase):
+    """Copy the key, click one row: no PowerShell, no reinstall."""
+
+    KEY = "sk-proj-" + "Ab3_" * 12
+
+    def flow(self, clipboard, verdict="ok", has_key=False):
+        self.clipboard = {"text": clipboard}
+        self.saved, self.opened, self.told = [], [], []
+        self.have = {"key": has_key}
+
+        def save(config, key):
+            self.saved.append(key)
+            self.have["key"] = True
+
+        flow = apikey.KeyFlow(
+            {"transcription": {"cloud": {}}},
+            has_key=lambda: self.have["key"],
+            read_clipboard=lambda: self.clipboard["text"],
+            clear_clipboard=lambda: self.clipboard.update(text=""),
+            on_saved=lambda: self.told.append(1),
+            open_page=self.opened.append,
+            checker=lambda key: verdict, saver=save)
+        return flow
+
+    def settle(self, flow):
+        deadline = time.monotonic() + 2.0
+        while flow.state() == "checking" and time.monotonic() < deadline:
+            time.sleep(0.02)
+
+    def test_what_a_key_looks_like(self):
+        self.assertTrue(apikey.looks_like_key(self.KEY))
+        self.assertTrue(apikey.looks_like_key("  " + self.KEY + "\n"))
+        for text in ("", "hello", "sk-short", "sk-" + "a" * 10 + " b" * 10,
+                     "Bearer " + self.KEY):
+            self.assertFalse(apikey.looks_like_key(text), text)
+
+    def test_a_copied_key_is_checked_saved_and_taken_off_the_clipboard(self):
+        flow = self.flow(self.KEY)
+        self.assertEqual(flow.state(), "missing")
+        self.assertEqual(flow.press(), "checking")
+        self.assertEqual(self.clipboard["text"], "")
+        self.settle(flow)
+        self.assertEqual(self.saved, [self.KEY])
+        self.assertEqual(self.told, [1])
+        self.assertEqual(flow.state(), "saved")
+
+    def test_no_key_on_the_clipboard_opens_the_page_where_keys_are_made(self):
+        flow = self.flow("some text somebody copied")
+        self.assertEqual(flow.press(), "waiting")
+        self.assertEqual(self.opened, [apikey.KEYS_PAGE])
+        self.assertEqual(self.clipboard["text"], "some text somebody copied")
+        self.assertEqual(flow.state(), "waiting")
+
+    def test_a_refused_key_is_not_saved(self):
+        flow = self.flow(self.KEY, verdict="refused", has_key=True)
+        flow.press()
+        self.settle(flow)
+        self.assertEqual(self.saved, [])
+        self.assertEqual(flow.state(), "refused")
+
+    def test_a_key_that_could_not_be_checked_is_saved_anyway(self):
+        flow = self.flow(self.KEY, verdict="offline")
+        flow.press()
+        self.settle(flow)
+        self.assertEqual(self.saved, [self.KEY])
+        self.assertEqual(flow.state(), "offline")
+
+    def test_the_key_never_reaches_the_log(self):
+        flow = self.flow(self.KEY)
+        with self.assertLogs("heyspeaky.apikey", level="INFO") as logs:
+            flow.press()
+            self.settle(flow)
+        self.assertNotIn(self.KEY, "\n".join(logs.output))
+        self.assertNotIn(self.KEY[:12], "\n".join(logs.output))
+
+    def test_the_file_holds_the_key_and_nothing_else(self):
+        folder = tempfile.mkdtemp()
+        path = os.path.join(folder, "HeySpeaky", "openai.key")
+        apikey.save({"transcription": {"cloud": {"api_key_file": path}}},
+                    self.KEY + "\n")
+        with open(path, "rb") as handle:
+            self.assertEqual(handle.read(), self.KEY.encode("ascii"))
+
+    @unittest.skipIf(panel_module is None, "tkinter is missing")
+    def test_a_missing_key_comes_first_in_the_panel(self):
+        model = _PanelModel().model(key="missing")
+        _size, items = panel_module.layout(model, 1.0)
+        rows = [item for item in items if item.kind == "row"]
+        self.assertEqual(rows[0].key, "key")
+        self.assertEqual(rows[0].extra, "accent")
+        model = _PanelModel().model(key="saved")
+        _size, items = panel_module.layout(model, 1.0)
+        rows = [item for item in items if item.kind == "row"]
+        self.assertNotEqual(rows[0].key, "key")
+        self.assertIn("key", [item.key for item in rows])
+
+
+class TheShortcutsHaveAnIcon(unittest.TestCase):
+    """The Start menu showed a blank window for HeySpeaky."""
+
+    def test_the_icon_is_a_tile_with_the_waveform(self):
+        from heyspeaky import tray
+        image = tray.app_icon(64)
+        self.assertEqual(image.size, (64, 64))
+        self.assertEqual(image.getpixel((0, 0))[3], 0)
+        middle = image.getpixel((32, 32))
+        self.assertEqual(middle[3], 255)
+        self.assertGreater(max(middle[:3]), 150)       # a coloured bar
+
+    def test_the_file_carries_the_small_sizes_windows_asks_for(self):
+        from PIL import Image
+        from heyspeaky import tray
+        path = os.path.join(tempfile.mkdtemp(), "heyspeaky.ico")
+        tray.save_app_icon(path)
+        with Image.open(path) as image:
+            sizes = image.info.get("sizes", set())
+        for size in ((16, 16), (32, 32), (48, 48), (256, 256)):
+            self.assertIn(size, sizes)
+
+
+@unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
+class TheLogSaysWhyCtrlAltDidNothing(unittest.TestCase):
+    """"I restarted it and Ctrl+Alt did nothing": the log could not say
+    whether the keyboard was heard at all."""
+
+    def listener(self):
+        listener = HotkeyListener(
+            {"engage_delay": 10.0, "tap_max": 0.0, "accept_altgr": False,
+             "cancel_on_other_key": True, "double_tap_gap": 0.5,
+             "health_check_seconds": 0, "min_reinstall_seconds": 60},
+            on_engage=lambda: None, on_tap=lambda: None,
+            on_hold_release=lambda: None, on_cancel=lambda: None)
+        listener._installed_at = time.monotonic() - 3.0
+        return listener
+
+    def test_the_first_key_after_starting_is_noted_once(self):
+        listener = self.listener()
+        with self.assertLogs("heyspeaky.hotkey", level="INFO") as logs:
+            listener._on_key_event(_Event("shift", "down"))
+            listener._on_key_event(_Event("shift", "up"))
+            listener._on_key_event(_Event("ctrl", "down"))
+        said = [line for line in logs.output if "first key" in line]
+        self.assertEqual(len(said), 1)
+
+    def test_ctrl_alt_on_top_of_a_held_key_says_so_without_the_letter(self):
+        listener = self.listener()
+        listener._keys_seen = 5
+        with self.assertLogs("heyspeaky.hotkey", level="INFO") as logs:
+            listener._on_key_event(_Event("q", "down"))
+            listener._on_key_event(_Event("ctrl", "down"))
+            listener._on_key_event(_Event("alt", "down"))
+        said = "\n".join(logs.output)
+        self.assertIn("already held", said)
+        self.assertIn("a character key", said)
+        self.assertNotIn("'q'", said)
+        self.assertNotIn(" q ", said)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

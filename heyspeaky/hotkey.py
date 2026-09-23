@@ -208,6 +208,8 @@ class HotkeyListener:
         self._keys_at_refresh = 0
         self._unanswered = 0
         self._last_tick_wall = 0.0
+        self._installed_at = None
+        self._blocked_said_at = 0.0
         self._watchdog = None
         self._stop_watchdog = threading.Event()
         self.reinstalls = 0
@@ -232,6 +234,8 @@ class HotkeyListener:
     def _install(self):
         self._hook = keyboard.hook(self._on_key_event)
         self._last_event = time.monotonic()
+        if self._installed_at is None:
+            self._installed_at = self._last_event
 
     def _uninstall(self):
         if self._hook is not None:
@@ -442,6 +446,12 @@ class HotkeyListener:
         # watchdog uses it as proof the hook is still being delivered to.
         self._last_event = time.monotonic()
         self._keys_seen += 1
+        if self._keys_seen == 1 and self._installed_at is not None:
+            # Proof, in the log, that a freshly started app hears the
+            # keyboard. "I restarted it and Ctrl+Alt did nothing" could not
+            # be told apart from "I restarted it and did not press anything".
+            logger.info("Keyboard hook heard its first key %.1fs after "
+                        "starting", self._last_event - self._installed_at)
         name = (event.name or "").lower()
         if not name:
             return
@@ -524,6 +534,10 @@ class HotkeyListener:
                 self._chord_dirty = True
 
             combo = has_ctrl and has_alt and not has_other
+            if (has_ctrl and has_alt and has_other and not self._combo_active
+                    and kind in ("ctrl", "alt") and not repeat
+                    and event.event_type == keyboard.KEY_DOWN):
+                self._say_blocked()
             if combo and not self._combo_active:
                 self._combo_active = True
                 self._chord_dirty = repeat and kind == "other"
@@ -543,6 +557,23 @@ class HotkeyListener:
                         self._fire(self._on_hold_release)
                 elif not dirty and held < self._engage_delay:
                     self._chord_tapped()
+
+    def _say_blocked(self):
+        """Ctrl and Alt are down, but so is something else, so this is a
+        shortcut and not dictation. Worth a line when it happens, at most
+        every ten seconds: a key the hook thinks is held when it is not would
+        look exactly like this, and would stop Ctrl+Alt working until that
+        key is pressed again. Named only when it is not a letter - the log
+        never holds what anybody typed."""
+        now = time.monotonic()
+        if now - self._blocked_said_at < 10.0:
+            return
+        self._blocked_said_at = now
+        others = sorted(set(
+            key if len(key) > 1 else "a character key"
+            for key in self._pressed if self._classify(key) == "other"))
+        logger.info("Ctrl+Alt with %s already held; taken as a shortcut",
+                    ", ".join(others) or "another key")
 
     def _chord_tapped(self):
         """A press of Ctrl+Alt too short to have started anything.

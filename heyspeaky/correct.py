@@ -43,7 +43,7 @@ import time
 import tkinter as tk
 from ctypes import wintypes
 
-from . import dictionary, glass, overlay, theme
+from . import dictionary, glass, keymap, overlay, theme
 
 logger = logging.getLogger("heyspeaky.correct")
 
@@ -285,6 +285,9 @@ class CorrectionBox(object):
             self.entry.bind(sequence, self._accept)
         self.entry.bind("<Escape>", self._cancel)
         self.entry.bind("<Key>", self._typed)
+        # After _typed, which has already turned the ring for this key:
+        # Tk decodes Kazakh wrongly, and this types what the layout meant.
+        keymap.fix_typing(self.entry)
         # Clicking away is the third way people close a box like this, and
         # leaving it floating over everything when they do is the fastest way
         # to make somebody hate a feature.

@@ -16,7 +16,12 @@ sent to the screen: a real click that missed would land in whatever window is
 underneath.
 
 The picture it saves is a strip of moments: opening, open, each button
-hovered, typing, and the green tick just before it leaves.
+hovered, typing, Kazakh typed for real, and the green tick just before it
+leaves.
+
+With the Kazakh layout on this machine, it types "іңқ" with real key
+presses, switching the layout on for itself and back afterwards, because Tk
+alone turned those keys into "³" and question marks.
 """
 
 import argparse
@@ -86,6 +91,41 @@ def point_at(box, name):
     ctypes.windll.user32.SetCursorPos(
         box._position[0] + (button[0] + button[2]) // 2,
         box._position[1] + (button[1] + button[3]) // 2)
+
+
+def kazakh_layout():
+    """The Kazakh keyboard layout's handle, if this machine has it."""
+    user32 = ctypes.windll.user32
+    user32.GetKeyboardLayoutList.argtypes = [
+        ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
+    count = user32.GetKeyboardLayoutList(0, None)
+    loaded = (ctypes.c_void_p * count)()
+    user32.GetKeyboardLayoutList(count, loaded)
+    for handle in loaded:
+        if (handle or 0) & 0xFFFF == 0x043F:
+            return handle
+    return None
+
+
+def type_in_layout(root, layout, codes):
+    """Presses real keys with `layout` on for this thread, then puts back
+    the layout that was on. Tk on its own turned the Kazakh ones into "³"
+    and question marks."""
+    user32 = ctypes.windll.user32
+    user32.GetKeyboardLayout.restype = ctypes.c_void_p
+    user32.ActivateKeyboardLayout.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+    user32.ActivateKeyboardLayout.restype = ctypes.c_void_p
+    was = user32.GetKeyboardLayout(0)
+    user32.ActivateKeyboardLayout(layout, 0)
+    try:
+        for code in codes:
+            scan = user32.MapVirtualKeyW(code, 0)
+            user32.keybd_event(code, scan, 0, 0)
+            pump(root, 0.03)
+            user32.keybd_event(code, scan, 2, 0)
+            pump(root, 0.05)
+    finally:
+        user32.ActivateKeyboardLayout(was, 0)
 
 
 def main():
@@ -184,6 +224,24 @@ def main():
         box._typed(_Key(letter))
         pump(root, 0.06)
     shots.append(("typing", photograph(box)))
+
+    kazakh = kazakh_layout()
+    if kazakh:
+        typed_before = box.entry.get()
+        box.top.focus_force()
+        box.entry.focus_set()
+        box.entry.icursor("end")
+        pump(root, 0.15)
+        type_in_layout(root, kazakh, (0x20, 0x33, 0x34, 0x30))
+        pump(root, 0.1)
+        got = box.entry.get()[len(typed_before):]
+        print("the Kazakh keys typed", repr(got))
+        if got != " іңқ":
+            problems.append("the Kazakh layout typed {!r}".format(got))
+        shots.append(("Kazakh keys", photograph(box)))
+        box.entry.delete(len(typed_before), "end")
+    else:
+        print("no Kazakh layout on this machine; the typing check is skipped")
 
     start = box._position
     box._grab(_Event(box.layout["box"][0] + 60, box.layout["box"][1] + 4,

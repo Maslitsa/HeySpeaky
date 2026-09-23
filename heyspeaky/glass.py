@@ -654,10 +654,10 @@ class GlowRing(object):
     this angle once the ring has turned this far.
     """
 
-    def __init__(self, layout, scale):
+    def __init__(self, layout, scale, spread=theme.GLOW_SPREAD):
         field = layout["field"]
         window = layout["window"]
-        spread = max(2, _px(theme.GLOW_SPREAD, scale))
+        spread = max(2, _px(spread, scale))
         reach = spread * 2
         left, top = max(0, field[0] - reach), max(0, field[1] - reach)
         right = min(window[0], field[2] + reach)
@@ -1032,10 +1032,93 @@ def _chevron(drawing, x, y, size, ink):
                  width=max(1, int(round(size / 5.0))), joint="curve")
 
 
-def _check(drawing, x, y, size, ink):
-    drawing.line([(x - size * 0.45, y), (x - size * 0.1, y + size * 0.35),
-                  (x + size * 0.5, y - size * 0.4)], fill=ink + (255,),
+def _check(drawing, x, y, size, ink, share=1.0):
+    """The tick, drawn as far as `share` of the way along its two strokes:
+    short stroke down, long stroke up, the way a hand draws one."""
+    points = [(x - size * 0.45, y), (x - size * 0.1, y + size * 0.35),
+              (x + size * 0.5, y - size * 0.4)]
+    share = max(0.0, min(1.0, share))
+    if share < 0.02:
+        return
+    lengths = [math.hypot(b[0] - a[0], b[1] - a[1])
+               for a, b in zip(points, points[1:])]
+    left = share * sum(lengths)
+    path = [points[0]]
+    for (a, b), length in zip(zip(points, points[1:]), lengths):
+        if left >= length:
+            path.append(b)
+            left -= length
+            continue
+        part = left / length
+        path.append((a[0] + (b[0] - a[0]) * part, a[1] + (b[1] - a[1]) * part))
+        break
+    drawing.line(path, fill=ink + (255,),
                  width=max(1, int(round(size / 5.0))), joint="curve")
+
+
+def _magnifier(drawing, x, y, size, ink):
+    """A lens and its handle, for the search field."""
+    radius = size * 0.32
+    width = max(1, int(round(size / 7.0)))
+    drawing.ellipse((x - radius - size * 0.08, y - radius - size * 0.08,
+                     x + radius - size * 0.08, y + radius - size * 0.08),
+                    outline=ink + (255,), width=width)
+    drawing.line([(x + radius * 0.62, y + radius * 0.62),
+                  (x + size * 0.42, y + size * 0.42)], fill=ink + (255,),
+                 width=width + 1)
+
+
+_search_rings = {}
+
+
+def search_ring(field, window, scale):
+    """The composer's ring, for a field of this size in a window this big.
+    Built once per shape: a frame only turns it."""
+    key = (tuple(field), tuple(window), round(scale, 3))
+    ring = _search_rings.get(key)
+    if ring is None:
+        _search_rings.clear()
+        ring = GlowRing({"field": field, "window": window}, scale,
+                        spread=theme.SEARCH_SPREAD)
+        _search_rings[key] = ring
+    return ring
+
+
+def _search_field(frame, drawing, item, scale, motion, muted, faint):
+    """The language search: the composer's field and ring, a lens, the
+    words typed so far or what to type, and a caret."""
+    left, top, right, bottom = item.rect
+    height = bottom - top
+    ring = search_ring(item.rect, frame.size, scale)
+    _place_over(frame, ring.render(motion.get("search-turn", 0.0),
+                                   motion.get("search-glow",
+                                              theme.GLOW_SETTLED)),
+                ring.origin[0], ring.origin[1])
+    face = sprite((right - left, height), height // 2, theme.FIELD_FILL)
+    _place_over(frame, face, left, top)
+    middle = (top + bottom) / 2.0
+    lens = _px(14, scale)
+    _magnifier(drawing, left + _px(16, scale), middle, lens, faint)
+    text_left = left + _px(30, scale)
+    body = font(max(9, _px(theme.FONT_SIZE, scale)))
+    typed = item.label or ""
+    if typed:
+        limit = right - _px(16, scale) - text_left
+        shown = typed
+        while shown and drawing.textlength(shown, font=body) > limit:
+            shown = shown[1:]
+        drawing.text((text_left, middle), shown, font=body,
+                     fill=theme.TEXT_LIGHT + (255,), anchor="lm")
+        caret_x = text_left + drawing.textlength(shown, font=body) + 1
+    else:
+        drawing.text((text_left, middle), item.extra or "", font=body,
+                     fill=muted + (255,), anchor="lm")
+        caret_x = text_left - _px(1, scale)
+    if motion.get("caret", 1.0) > 0.5:
+        half = height * 0.26
+        drawing.line([(caret_x, middle - half), (caret_x, middle + half)],
+                     fill=theme.TEXT_LIGHT + (255,),
+                     width=max(1, _px(1.5, scale)))
 
 
 def panel_frame(card, items, scale=1.0, hover=None, motion=None):
@@ -1117,6 +1200,8 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
             ink = theme.TEXT_LIGHT
             if item.extra == "accent":
                 ink = theme.SIRI[1]
+            elif item.extra == "danger":
+                ink = theme.DANGER
             drawing.text((text_left, middle), item.label, font=body,
                          fill=ink + (255,), anchor="lm")
             if kind == "switch":
@@ -1127,18 +1212,30 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
                 _place_over(frame, face, right - inset - width,
                             middle - height / 2.0)
             elif kind == "language":
-                if item.extra:
-                    _check(drawing, right - inset - _px(6, scale), middle,
-                           _px(11, scale), theme.TEXT_LIGHT)
+                drawn = motion.get("tick:" + item.key,
+                                   1.0 if item.extra else 0.0)
+                _check(drawing, right - inset - _px(6, scale), middle,
+                       _px(11, scale), theme.TEXT_LIGHT, drawn)
+                if item.hint:
+                    drawing.text((right - inset - _px(20, scale), middle),
+                                 item.hint, font=small, fill=faint + (255,),
+                                 anchor="rm")
             elif kind == "row" and item.hint:
                 drawing.text((right - inset, middle), item.hint, font=small,
-                             fill=faint + (255,), anchor="rm")
+                             fill=(muted if item.extra in ("accent", "danger")
+                                   else faint) + (255,), anchor="rm")
             elif kind == "row" and item.extra == "more":
                 _chevron(drawing, right - inset - _px(3, scale), middle,
                          _px(9, scale), faint)
         elif kind == "separator":
-            drawing.line([(left, middle), (right, middle)],
-                         fill=(255, 255, 255, 22), width=1)
+            # Laid over the glass. Drawn straight onto the picture, a
+            # translucent line replaces the glass's own alpha with its own,
+            # and the owner saw the desktop through the slit it left.
+            line = Image.new("RGBA", (right - left, max(1, _px(1, scale))),
+                             (255, 255, 255, 22))
+            frame.alpha_composite(line, (int(left), int(middle)))
+        elif kind == "search":
+            _search_field(frame, drawing, item, scale, motion, muted, faint)
         elif kind == "footer":
             drawing.text((left, middle), item.label, font=small,
                          fill=faint + (255,), anchor="lm")

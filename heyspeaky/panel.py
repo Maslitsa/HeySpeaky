@@ -14,6 +14,14 @@ is white with dark ink, like the tick; everything else is the cross's grey;
 the only colour is the waveform's gradient, on the pause switch when it is
 on.
 
+Two things were added for the owner. The OpenAI key: copy it from wherever
+OpenAI shows it and click one row - see `apikey.py`. And typing: whatever is
+typed while the panel is open goes into a search at the top of the language
+list, because scrolling ninety names for your own is the slow way.
+
+Quit asks twice. The panel opens right over the tray, so the bottom row is
+the first thing the pointer meets on its way up, and that row was Quit.
+
 Unlike the pill it does take focus - it is a menu, and a menu has to hear
 Escape and know when you have clicked away - but it is drawn the pill's way,
 with a real alpha channel through UpdateLayeredWindow, so its corners and
@@ -24,7 +32,7 @@ import logging
 import time
 import tkinter as tk
 
-from . import glass, overlay, theme
+from . import glass, keymap, languages, overlay, theme
 
 logger = logging.getLogger("heyspeaky.panel")
 
@@ -36,7 +44,21 @@ FOCUS_GRACE_MS = 150
 
 # What stays open after a click and what closes: a switch you flip should be
 # seen to flip; a row that opens something else is done with the panel.
-STAYS_OPEN = ("pin:", "backend:", "pause", "lang:", "more-languages", "back")
+STAYS_OPEN = ("pin:", "backend:", "pause", "lang:", "more-languages", "back",
+              "key")
+
+SEARCH_PROMPT = "Type a language"
+
+# What the key row says, by the state `apikey.KeyFlow` is in: its label,
+# the hint on its right, and whether it asks to be noticed.
+KEY_ROWS = {
+    "missing": ("Add your OpenAI key", "copy it, click here", "accent"),
+    "waiting": ("Add your OpenAI key", "copy it, click again", "accent"),
+    "checking": ("Checking the key", "a moment", "accent"),
+    "refused": ("OpenAI refused that key", "copy another", "accent"),
+    "offline": ("OpenAI key", "saved, not checked", None),
+    "saved": ("OpenAI key", "saved", None),
+}
 
 _BACKENDS = (("OpenAI", "cloud"), ("This laptop", "local"))
 
@@ -61,7 +83,8 @@ class Item(object):
 CLICKABLE = ("chip", "segmented", "switch", "row", "back", "language")
 
 
-def layout(model, scale=1.0, page="main", scroll=0.0):
+def layout(model, scale=1.0, page="main", scroll=0.0, query="",
+           quit_armed=False):
     """Lays the panel out: its card size, and every part in window pixels.
 
     `model` is what the tray knows - see `Tray.panel_model`. Arithmetic and
@@ -91,8 +114,18 @@ def layout(model, scale=1.0, page="main", scroll=0.0):
 
     if page == "languages":
         add("back", "back", "Languages", row)
-        y += row + gap(4)
-        add("hint", None, "Tick every language you speak.", px(16))
+        y += row + gap(6)
+        add("search", "search", query, px(theme.SEARCH_HEIGHT),
+            SEARCH_PROMPT)
+        y += px(theme.SEARCH_HEIGHT) + gap(8)
+        found = language_order(model, query)
+        if not query:
+            hint = "Tick every language you speak."
+        elif found:
+            hint = "Enter ticks {}.".format(names.get(found[0], found[0]))
+        else:
+            hint = "No language called that."
+        add("hint", None, hint, px(16))
         y += px(16) + gap(8)
         top = y
         bottom = y + px(theme.LIST_HEIGHT)
@@ -100,14 +133,15 @@ def layout(model, scale=1.0, page="main", scroll=0.0):
         # and the list would open with a hole in it.
         offset = int(round(scroll / float(row))) * row
         cursor = top - offset
-        for code in language_order(model):
+        for code in found:
             if cursor >= top - 1 and cursor + row <= bottom + 1:
                 items.append(Item("language", "lang:" + code,
                                   names.get(code, code),
                                   (left, cursor, right - px(8), cursor + row),
-                                  code in model.get("yours", ())))
+                                  code in model.get("yours", ()),
+                                  languages.native_label(code)))
             cursor += row
-        reach = list_height(model, scale)
+        reach = list_height(model, scale, query)
         if reach > 0:
             shown = px(theme.LIST_HEIGHT) / float(px(theme.LIST_HEIGHT) + reach)
             items.append(Item("scrollbar", None, "",
@@ -124,6 +158,13 @@ def layout(model, scale=1.0, page="main", scroll=0.0):
     add("title", None, "HeySpeaky", header)
     add("status", None, model.get("status", ""), header, dot)
     y += header + gap(8)
+
+    key_state = model.get("key", "saved")
+    key_label, key_hint, key_look = KEY_ROWS.get(key_state, KEY_ROWS["saved"])
+    if key_look == "accent":
+        # Nothing works without it, so it comes first until it is there.
+        add("row", "key", key_label, row, "accent", hint=key_hint)
+        y += row + gap(4)
 
     add("row", "dictate", "Start / stop dictation", row, hint="Ctrl+Alt")
     y += row + gap()
@@ -166,6 +207,9 @@ def layout(model, scale=1.0, page="main", scroll=0.0):
         add("row", "update", "Update to {}".format(model["update"]), row,
             "accent")
         y += row
+    if key_look != "accent":
+        add("row", "key", key_label, row, None, hint=key_hint)
+        y += row
     for key, label in (("words", "Your words"), ("settings", "Settings"),
                        ("logs", "Logs"), ("report", "Save a problem report")):
         add("row", key, label, row, "more" if key != "report" else None)
@@ -173,7 +217,11 @@ def layout(model, scale=1.0, page="main", scroll=0.0):
     y += gap(4)
     add("separator", None, "", gap(6))
     y += gap(6) + gap(4)
-    add("row", "quit", "Quit HeySpeaky", row)
+    if quit_armed:
+        add("row", "quit", "Click again to quit", row, "danger",
+            hint="Esc keeps it")
+    else:
+        add("row", "quit", "Quit HeySpeaky", row)
     y += row
     usage = model.get("usage", "")
     if usage:
@@ -201,21 +249,22 @@ def hit(items, x, y):
     return None, None
 
 
-def language_order(model):
+def language_order(model, query=""):
     """Yours first, in your order, so taking one off never means hunting
-    through the alphabet; then everything else by name."""
+    through the alphabet; then everything else by name. With something
+    typed, only the languages that answer to it, best match first."""
     yours = [code for code in model.get("yours", ())]
     names = model.get("names", {})
     rest = sorted((code for code in model.get("catalog", ())
                    if code not in yours),
                   key=lambda code: names.get(code, code).lower())
-    return yours + rest
+    return languages.search(yours + rest, query)
 
 
-def list_height(model, scale=1.0):
+def list_height(model, scale=1.0, query=""):
     """How far the language list scrolls."""
     row = int(round(theme.ROW_HEIGHT * scale))
-    rows = len(language_order(model))
+    rows = len(language_order(model, query))
     return max(0.0, float(rows * row - int(round(theme.LIST_HEIGHT * scale))))
 
 
@@ -242,6 +291,8 @@ class TrayPanel(object):
         self._anchor = anchor
         self._page = "main"
         self._scroll = 0.0
+        self._query = ""
+        self._quit_armed_at = None
         self._hover_key = None
         self._hover = {}
         self._motion = {}
@@ -250,6 +301,14 @@ class TrayPanel(object):
         self._closed = False
         self._job = None
         self._idle_job = None
+        self._caret_job = None
+        self._caret_on = True
+        # The search ring: how far round it has turned, how far it is
+        # going, and when it last flared at a key.
+        self._turn = 0.0
+        self._turn_goal = 0.0
+        self._flare_at = None
+        self._card = None
         self._surface = overlay.Surface()
         self._placed_above = True
         self._position = (0, 0)
@@ -265,7 +324,8 @@ class TrayPanel(object):
                                   ("<Leave>", self._left),
                                   ("<ButtonRelease-1>", self._clicked),
                                   ("<MouseWheel>", self._wheel),
-                                  ("<Escape>", self.close),
+                                  ("<Escape>", self._escape),
+                                  ("<KeyPress>", self._key),
                                   ("<FocusOut>", self._focus_left)):
             self.window.bind(sequence, handler)
 
@@ -288,16 +348,31 @@ class TrayPanel(object):
 
     # -- layout ------------------------------------------------------------
 
+    def _armed(self, now=None):
+        now = time.monotonic() if now is None else now
+        return (self._quit_armed_at is not None
+                and now - self._quit_armed_at < theme.QUIT_ARMED)
+
     def _relayout(self):
-        self._size, self._items = layout(self._model, self.scale, self._page,
-                                         self._scroll)
-        self._card = glass.panel_card(self._size[0], self._size[1],
-                                      self.scale)
+        size = getattr(self, "_size", None)
+        self._size, self._items = layout(
+            self._model, self.scale, self._page, self._scroll, self._query,
+            self._armed())
+        # The glass only changes with the size, and typing into the search
+        # lays the panel out again on every key.
+        if self._card is None or self._size != size:
+            self._card = glass.panel_card(self._size[0], self._size[1],
+                                          self.scale)
         for item in self._items:
             if item.kind == "segmented":
                 self._motion.setdefault(item.key, float(item.extra[1]))
             elif item.kind == "switch":
                 self._motion.setdefault(item.key,
+                                        1.0 if item.extra else 0.0)
+            elif item.kind == "language":
+                # Ticks already there when the list opens are drawn whole;
+                # only one ticked while you watch draws itself in.
+                self._motion.setdefault("tick:" + item.key,
                                         1.0 if item.extra else 0.0)
 
     def _place(self):
@@ -342,9 +417,24 @@ class TrayPanel(object):
             slide += 4 * self.scale * gone
         return opacity, slide, share < 1.0
 
+    def _glow(self, now):
+        """How bright the search ring is: settled, or flaring at a key."""
+        if self._flare_at is None:
+            return theme.GLOW_SETTLED
+        faded = min(1.0, (now - self._flare_at) / 0.6)
+        return theme.GLOW_FLARE + (theme.GLOW_SETTLED - theme.GLOW_FLARE) \
+            * faded
+
     def _advance(self, now):
         busy = False
         for item in self._items:
+            if item.kind == "language":
+                key = "tick:" + item.key
+                goal = 1.0 if item.extra else 0.0
+                value = _approach(self._motion.get(key, goal), goal,
+                                  theme.CHECK_DRAW_RATE)
+                self._motion[key] = value
+                busy = busy or value != goal
             if item.key is None or item.kind not in CLICKABLE:
                 continue
             target = 1.0 if item.key == self._hover_key else 0.0
@@ -362,6 +452,18 @@ class TrayPanel(object):
                                   0.28)
                 self._motion[item.key] = value
                 busy = busy or value != goal
+        if self._page == "languages":
+            self._turn = _approach(self._turn, self._turn_goal, 0.12)
+            busy = busy or self._turn != self._turn_goal
+            if self._flare_at is not None:
+                if now - self._flare_at >= 0.6:
+                    self._flare_at = None
+                busy = True
+        if self._quit_armed_at is not None and not self._armed(now):
+            # The second click did not come: back to plain Quit.
+            self._quit_armed_at = None
+            self._relayout()
+            busy = True
         return busy
 
     def _handle(self):
@@ -377,8 +479,12 @@ class TrayPanel(object):
         opacity, slide, _opening = self._shape(now)
         self._move(slide)
         self._handle()
+        motion = dict(self._motion)
+        motion["search-turn"] = self._turn
+        motion["search-glow"] = self._glow(now)
+        motion["caret"] = 1.0 if self._caret_on else 0.0
         frame = glass.panel_frame(self._card, self._items, self.scale,
-                                  self._hover, self._motion)
+                                  self._hover, motion)
         overlay.present(self._hwnd, self._surface, frame, opacity)
 
     def _tick(self):
@@ -394,7 +500,8 @@ class TrayPanel(object):
                 self._destroy()
                 return
             self._paint(now)
-            busy = busy or opening or self._closing_at is not None
+            busy = busy or opening or self._closing_at is not None \
+                or self._quit_armed_at is not None
         except Exception:
             logger.exception("The tray panel could not draw a frame")
             busy = False
@@ -407,6 +514,27 @@ class TrayPanel(object):
                 self._job = self.window.after(TICK_MS, self._tick)
             except tk.TclError:
                 self._job = None
+
+    def _blink(self):
+        """The search caret, on and off while the language list is open.
+        A blink is one frame, not a stream of them."""
+        self._caret_job = None
+        if self._closed or self._page != "languages":
+            return
+        self._caret_on = not self._caret_on
+        self._schedule()
+        self._caret_job = self.window.after(
+            int(theme.CARET_BLINK * 1000), self._blink)
+
+    def _start_blinking(self):
+        if self._caret_job is not None:
+            try:
+                self.window.after_cancel(self._caret_job)
+            except tk.TclError:
+                pass
+        self._caret_on = True
+        self._caret_job = self.window.after(
+            int(theme.CARET_BLINK * 1000), self._blink)
 
     def _watch(self):
         """Picks up changes made elsewhere: a pause, a language, an update."""
@@ -453,7 +581,8 @@ class TrayPanel(object):
             return
         step = 2 * int(round(theme.ROW_HEIGHT * self.scale))
         delta = -step if getattr(event, "delta", 0) > 0 else step
-        self._scroll = max(0.0, min(list_height(self._model, self.scale),
+        self._scroll = max(0.0, min(list_height(self._model, self.scale,
+                                                self._query),
                                     self._scroll + delta))
         self._refit()
 
@@ -465,16 +594,83 @@ class TrayPanel(object):
             return
         self.press(action)
 
+    # -- the keyboard ------------------------------------------------------
+
+    def _key(self, event):
+        """Typing goes into the language search, from either page."""
+        if self._closing_at is not None:
+            return "break"
+        keysym = getattr(event, "keysym", "") or ""
+        if keysym == "BackSpace":
+            if self._page == "languages" and self._query:
+                self.type_into_search(None)
+            return "break"
+        if keysym in ("Return", "KP_Enter"):
+            if self._page == "languages" and self._query:
+                found = language_order(self._model, self._query)
+                if found:
+                    self.press("lang:" + found[0])
+            return "break"
+        text = keymap.typed_char(getattr(event, "keycode", 0)) \
+            or (event.char if (event.char or "").isprintable() else "")
+        if text and text.strip() or (text == " " and self._query):
+            self.type_into_search(text)
+        return "break"
+
+    def type_into_search(self, text):
+        """Adds `text` to the search, or takes a letter off for None; opens
+        the language list first if it is not what is showing. Public, for
+        the live check."""
+        if self._page != "languages":
+            self._open_languages()
+        if text is None:
+            self._query = self._query[:-1]
+        else:
+            self._query = (self._query + text)[:40]
+        self._scroll = 0.0
+        self._hover_key = None
+        self._turn_goal += theme.GLOW_NUDGE / 360.0
+        self._flare_at = time.monotonic()
+        self._start_blinking()
+        self._refit()
+
+    def _open_languages(self):
+        self._page, self._scroll, self._query = "languages", 0.0, ""
+        self._hover_key = None
+        # The ring goes once round as the list opens, as the composer's
+        # does when it appears.
+        self._turn_goal += 1.0
+        self._start_blinking()
+
+    def _escape(self, _event=None):
+        """Esc steps back: out of the search, then out of the list, then
+        closes. And it is what keeps HeySpeaky when Quit is waiting."""
+        if self._quit_armed_at is not None:
+            self._quit_armed_at = None
+            self._refit()
+        elif self._page == "languages" and self._query:
+            self._query = ""
+            self._scroll = 0.0
+            self._refit()
+        elif self._page == "languages":
+            self.press("back")
+        else:
+            self.close()
+        return "break"
+
     def press(self, action):
         """Does what a click on `action` does. Public, for the live check."""
         if action == "more-languages":
-            self._page, self._scroll = "languages", 0.0
-            self._hover_key = None
+            self._open_languages()
             self._refit()
             return
         if action == "back":
-            self._page = "main"
+            self._page, self._query = "main", ""
             self._hover_key = None
+            self._refit()
+            return
+        if action == "quit" and not self._armed():
+            self._quit_armed_at = time.monotonic()
             self._refit()
             return
         try:
@@ -530,7 +726,7 @@ class TrayPanel(object):
 
     def _destroy(self):
         self._closed = True
-        for job in (self._job, self._idle_job):
+        for job in (self._job, self._idle_job, self._caret_job):
             if job is not None:
                 try:
                     self.window.after_cancel(job)

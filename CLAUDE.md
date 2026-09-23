@@ -24,6 +24,8 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
 | `heyspeaky/correct.py` | Ctrl+Alt+Win: the box that asks what it should have said |
 | `heyspeaky/panel.py` | the tray panel: what a click on the tray icon opens |
+| `heyspeaky/apikey.py` | the OpenAI key from the clipboard, one click in the tray |
+| `heyspeaky/keymap.py` | typing what the keyboard layout means, not what Tk decoded |
 | `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
 | `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
 | `heyspeaky/diagnostics.py` | the problem report people send you |
@@ -35,7 +37,8 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/language_drill.py` | measures sentences that change language halfway |
 | `tools/live_check.py` | shows the pill on the real screen and photographs it |
 | `tools/correction_check.py` | the same, for the correction composer: hovers, clicks, drags |
-| `tools/panel_check.py` | the same, for the tray panel |
+| `tools/panel_check.py` | the same, for the tray panel, typing in Kazakh |
+| `tools/make_icon.py` | draws the shortcuts' icon; the installer runs it |
 | `tools/try_demo.py` | runs a recording through both backends |
 
 ## Rules that cost something to learn
@@ -236,6 +239,47 @@ without jargon, and say what you actually did and what you could not do.
   panel drew nothing at all, and only `tools/panel_check.py` showed it. The
   tray icon is the waveform: white, the gradient while recording, grey dots
   while paused.
+- **Never draw something translucent straight onto an RGBA frame.**
+  `ImageDraw` on an RGBA picture replaces the pixel, alpha and all; it does
+  not lay one colour over another. The panel's separator was a line of
+  alpha 22 drawn that way, which cut a slit through the glass, and the owner
+  saw his desktop through it. Anything with alpha below 255 goes on its own
+  layer and in with `alpha_composite`. A test reads the alpha under the line.
+- **Quit asks twice.** The panel opens right over the tray, so its bottom row
+  is the first thing the pointer meets on the way up, and that row was Quit:
+  the owner quit by accident again and again. One click turns it into
+  "Click again to quit" in red for `theme.QUIT_ARMED` seconds; Esc takes it
+  back.
+- **The key comes from the clipboard** (`apikey.py`). The owner wanted adding
+  a key to be as little work as possible, and the only way was rerunning the
+  installer with the key in a PowerShell line. Now: copy it, click the row.
+  The row is first in the panel, in the accent colour, until there is a key.
+  The clipboard is emptied the moment a key is read off it, the key is
+  checked with OpenAI before it replaces anything, and a key OpenAI refuses
+  never overwrites a working one. No key on the clipboard opens the page
+  where keys are made. Saving one switches a laptop set to local over to
+  OpenAI, and a start with no key says so once, in a notification.
+- **Typing in the panel is a language search.** Scrolling ninety names was
+  the owner's complaint. Anything typed while the panel is open goes into a
+  field at the top of the language list - the composer's field and ring,
+  after Lakshay-art's winning search bar on uiverse - and Enter ticks the top
+  match. A language answers to its English name, its own name, its Russian
+  name and a few Kazakh ones, and Kazakh letters fold to Russian ones, so
+  "каз", "қаз" and "kaz" all find Kazakh whichever layout is on.
+- **Tk cannot type Kazakh by itself** (`keymap.py`). Tk 8.6 decodes a key
+  through a one-byte code page, and whichever one it last heard about: with
+  the Kazakh layout, "і" came into the correction box as "³", "ң", "ү" and
+  "қ" as "?", "й" as "é". Measured with real key presses on the owner's
+  laptop; Russian happened to work, Kazakh never could, because most of it
+  is in no one-byte code page. Every text field and the panel's search ask
+  Windows (`ToUnicodeEx`) what the key means in the active layout and type
+  that when Tk got it wrong. `tools/correction_check.py` and
+  `tools/panel_check.py` type Kazakh with real keys when the layout is there.
+- **The shortcuts have HeySpeaky's own icon.** They start the virtual
+  environment's pythonw.exe, which has no icon, so the Start menu showed a
+  blank window. The installer draws `heyspeaky.ico` with `tools/make_icon.py`
+  - the waveform in its colours on a dark tile, which reads on a light Start
+  menu and a dark one - and falls back to a plain icon if that fails.
 - **Reading somebody's selection means borrowing the clipboard.** There is no
   API for another program's selection. `output.copy_selection` empties the
   clipboard first - otherwise a Ctrl+C that copies nothing, because nothing
@@ -246,11 +290,22 @@ without jargon, and say what you actually did and what you could not do.
   library's list of held keys, which goes stale when a release never reaches
   its hook. Ctrl+C goes by key code, a step at a time, and is tried once more
   if the clipboard's sequence number never moved. Every read logs a line -
-  how many characters, from what class of window, whether the window
-  answered - and never the text. The owner had nine empty boxes in a row on
-  23 September and the log could not say why; simulated keys could not
-  reproduce it faithfully either, because the library drops some injected
-  events. That line is how the next one gets explained.
+  how many characters, from which program and what class of window, whether
+  the clipboard changed - and never the text. An unchanged clipboard does
+  not prove the keys went missing: Chrome writes nothing at all when nothing
+  is selected. On 23 September the owner's log still showed empty reads from
+  Chrome-class windows, and the same code, driven through his running app
+  with the chord pressed fast and slow and let go in every order, read a
+  Chrome selection every time. The cause is not known yet; the program name
+  in that line is what will say where to look.
+- **A Ctrl+Alt that does nothing now leaves a line.** After a restart the
+  owner said Ctrl+Alt did nothing, and the log could not tell that apart
+  from nothing being pressed. It now notes the first key the hook hears after
+  starting, a Ctrl+Alt ignored because the app was busy, and a Ctrl+Alt
+  taken as a shortcut because another key was already down (by name only
+  for keys like Shift - never a letter). Measured on his laptop: the app
+  hears the keyboard about four seconds after its shortcut is clicked, and
+  Ctrl+Alt worked at eight seconds and at twenty.
 - **OpenAI is the default and local is a fallback.** Measured on the owner's
   laptop: OpenAI got a four-language clip completely right; local `base` lost
   most of the Russian and Kazakh, `small` took 4-7 s, `large-v3-turbo` 17-19 s.
