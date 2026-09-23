@@ -2594,8 +2594,7 @@ class TheShortcutsHaveAnIcon(unittest.TestCase):
     """The Start menu showed a blank window for HeySpeaky."""
 
     def test_the_icon_is_a_tile_with_the_waveform(self):
-        from heyspeaky import tray
-        image = tray.app_icon(64)
+        image = glass.app_icon(64)
         self.assertEqual(image.size, (64, 64))
         self.assertEqual(image.getpixel((0, 0))[3], 0)
         middle = image.getpixel((32, 32))
@@ -2604,9 +2603,8 @@ class TheShortcutsHaveAnIcon(unittest.TestCase):
 
     def test_the_file_carries_the_small_sizes_windows_asks_for(self):
         from PIL import Image
-        from heyspeaky import tray
         path = os.path.join(tempfile.mkdtemp(), "heyspeaky.ico")
-        tray.save_app_icon(path)
+        glass.save_app_icon(path)
         with Image.open(path) as image:
             sizes = image.info.get("sizes", set())
         for size in ((16, 16), (32, 32), (48, 48), (256, 256)):

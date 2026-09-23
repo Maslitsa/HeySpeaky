@@ -890,6 +890,61 @@ def composer_frame(composer, open_share=1.0, turn=0.0,
     return frame
 
 
+# -- the shortcuts' icon ------------------------------------------------------
+
+# Bar heights, as a share of the tallest: the pill's waveform in miniature,
+# the same five the tray icon draws.
+ICON_BARS = (0.36, 0.68, 1.0, 0.68, 0.36)
+
+
+def app_icon(size=256):
+    """HeySpeaky's own icon, for its shortcuts: the waveform in its colours
+    on a tile of the pill's dark glass.
+
+    The shortcuts used to borrow the icon of the Python they start, which
+    has none of its own, so the Start menu showed a blank window. The tray
+    icon is white on nothing, which vanishes on a light Start menu; a tile
+    reads on either. Here and not in tray.py, which needs pystray to import.
+    """
+    k = 4
+    big = size * k
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    drawing = ImageDraw.Draw(image)
+    inset = big // 16
+    tile = (inset, inset, big - inset, big - inset)
+    drawing.rounded_rectangle(tile, radius=big // 4.4,
+                              fill=tuple(theme.TINT) + (255,))
+    # The glass's bright edge, faintly, as on the pill.
+    drawing.rounded_rectangle(tile, radius=big // 4.4,
+                              outline=(255, 255, 255, 34),
+                              width=max(1, big // 110))
+    width = big // 11
+    gap = big // 19
+    tallest = big * 0.54
+    count = len(ICON_BARS)
+    left = (big - (width * count + gap * (count - 1))) // 2
+    for index, share in enumerate(ICON_BARS):
+        height = int(tallest * share)
+        x = left + index * (width + gap)
+        top = (big - height) // 2
+        drawing.rounded_rectangle(
+            (x, top, x + width, top + height), radius=width // 2,
+            fill=_siri_colour(index / float(count - 1)) + (255,))
+    return image.resize((size, size), Image.LANCZOS)
+
+
+def save_app_icon(path):
+    """Writes the icon as a .ico with every size Windows asks for."""
+    import os
+    folder = os.path.dirname(os.path.abspath(path))
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+    sizes = [(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48),
+             (64, 64), (128, 128), (256, 256)]
+    app_icon(256).save(path, format="ICO", sizes=sizes)
+    return path
+
+
 # -- the tray panel ----------------------------------------------------------
 
 def panel_card(width, height, scale=1.0):

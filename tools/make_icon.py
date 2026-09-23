@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from heyspeaky import tray                                   # noqa: E402
+from heyspeaky import glass                                  # noqa: E402
 
 
 def main():
@@ -24,9 +24,9 @@ def main():
     parser.add_argument("out", help="where to write the .ico")
     parser.add_argument("--png", help="also save a large PNG to look at")
     args = parser.parse_args()
-    tray.save_app_icon(args.out)
+    glass.save_app_icon(args.out)
     if args.png:
-        tray.app_icon(256).save(args.png)
+        glass.app_icon(256).save(args.png)
     print("icon", args.out)
     return 0
 

@@ -65,51 +65,6 @@ def _make_icon(state):
     return image.resize((size, size), Image.LANCZOS)
 
 
-def app_icon(size=256):
-    """HeySpeaky's own icon, for its shortcuts: the waveform in its colours
-    on a tile of the pill's dark glass.
-
-    The shortcuts used to borrow the icon of the Python they start, which
-    has none of its own, so the Start menu showed a blank window. The tray
-    icon is white on nothing, which vanishes on a light Start menu; a tile
-    reads on either.
-    """
-    k = 4
-    big = size * k
-    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    inset = big // 16
-    draw.rounded_rectangle((inset, inset, big - inset, big - inset),
-                           radius=big // 4.4, fill=tuple(theme.TINT) + (255,))
-    # The glass's bright edge, faintly, as on the pill.
-    draw.rounded_rectangle((inset, inset, big - inset, big - inset),
-                           radius=big // 4.4, outline=(255, 255, 255, 34),
-                           width=max(1, big // 110))
-    width = big // 11
-    gap = big // 19
-    tallest = big * 0.54
-    left = (big - (width * len(_BARS) + gap * (len(_BARS) - 1))) // 2
-    for index, share in enumerate(_BARS):
-        height = int(tallest * share)
-        x = left + index * (width + gap)
-        top = (big - height) // 2
-        draw.rounded_rectangle((x, top, x + width, top + height),
-                               radius=width // 2,
-                               fill=_bar_colour(index) + (255,))
-    return image.resize((size, size), Image.LANCZOS)
-
-
-def save_app_icon(path):
-    """Writes the icon as a .ico with every size Windows asks for."""
-    folder = os.path.dirname(os.path.abspath(path))
-    if not os.path.isdir(folder):
-        os.makedirs(folder)
-    sizes = [(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48),
-             (64, 64), (128, 128), (256, 256)]
-    app_icon(256).save(path, format="ICO", sizes=sizes)
-    return path
-
-
 class Tray:
     """Wraps a pystray icon and runs its message loop on its own thread."""
 
