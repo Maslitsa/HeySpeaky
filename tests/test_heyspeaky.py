@@ -580,59 +580,135 @@ from PIL import Image  # noqa: E402
 from heyspeaky import glass, theme  # noqa: E402
 
 
-class GlassCard(unittest.TestCase):
-    """The correction box's background, out of the pill's own materials.
+class GlassComposer(unittest.TestCase):
+    """The correction composer's picture, which is plain PIL.
 
-    The box itself needs Tk and a screen, so CI cannot open it; the picture
-    behind it is plain PIL and can be checked anywhere. tools/correction_check.py
-    is what looks at the real window.
+    The windows need Tk and a screen; tools/correction_check.py looks at
+    those. What is checked here is the drawing and the arithmetic every part
+    of it shares - above all that the typing widget, laid over the picture,
+    lands on nothing but the field's own flat colour.
     """
 
-    WELL = (16, 70, 404, 110)
+    SCALES = (1.0, 1.25, 1.5, 2.0)
 
-    def card(self, width=420, height=150, scale=1.0):
-        return glass.card(width, height, self.WELL, scale)
+    def test_everything_sits_inside_the_capsule(self):
+        for scale in self.SCALES:
+            layout = glass.composer_layout(scale)
+            box = layout["box"]
+            parts = list(layout["buttons"].values()) + [layout["field"],
+                                                        layout["entry"]]
+            for part in parts:
+                self.assertGreaterEqual(part[0], box[0])
+                self.assertLessEqual(part[2], box[2])
+                self.assertGreaterEqual(part[1], box[1])
+                self.assertLessEqual(part[3], box[3])
 
-    def test_it_is_the_size_it_was_asked_for(self):
-        self.assertEqual(self.card(420, 150).size, (420, 150))
+    def test_cross_field_tick_in_that_order_and_apart(self):
+        for scale in self.SCALES:
+            layout = glass.composer_layout(scale)
+            self.assertLess(layout["buttons"]["cancel"][2],
+                            layout["field"][0])
+            self.assertLess(layout["field"][2],
+                            layout["buttons"]["accept"][0])
 
-    def test_it_has_no_alpha_channel(self):
-        """Unlike the pill. This window hosts a text field, so Windows clips
-        its corners with a region and per-pixel alpha would be thrown away."""
-        self.assertEqual(self.card().mode, "RGB")
+    def test_the_widget_lands_on_nothing_but_the_field_colour(self):
+        """The widget is an opaque window of FIELD_FILL. If the ring or its
+        glow reached under it, the widget would cut a flat rectangle out of
+        the colour, and that seam is exactly what the old box had."""
+        for scale in self.SCALES:
+            composer = glass.composer(scale)
+            entry = composer.layout["entry"]
+            for turn in (0.0, 0.2, 0.45, 0.7):
+                frame = glass.composer_frame(composer, turn=turn,
+                                             strength=1.0)
+                under = frame.crop(entry)
+                colours = set(under.getdata())
+                self.assertEqual(colours, {tuple(theme.FIELD_FILL) + (255,)},
+                                 "at scale %s turn %s" % (scale, turn))
 
-    def test_the_body_is_the_pill_s_tint(self):
-        card = self.card()
-        self.assertEqual(card.load()[210, 145], tuple(theme.TINT))
+    def test_the_ring_turns(self):
+        composer = glass.composer(1.25)
+        first = glass.composer_frame(composer, turn=0.1)
+        again = glass.composer_frame(composer, turn=0.1)
+        later = glass.composer_frame(composer, turn=0.3)
+        self.assertEqual(first.tobytes(), again.tobytes())
+        self.assertNotEqual(first.tobytes(), later.tobytes())
 
-    def test_the_top_edge_is_brighter_than_the_bottom(self):
-        """The bright edge is what makes it read as glass rather than paper,
-        and it is strongest along the top on both windows."""
-        card = self.card()
-        top = sum(card.load()[210, 1])
-        bottom = sum(card.load()[210, 148])
-        self.assertGreater(top, bottom + 30)
+    def test_the_ring_is_the_waveform_s_colours(self):
+        ring = glass.composer(1.25).ring.render(0.0, 1.0)
+        lit = [pixel for pixel in ring.getdata() if pixel[3] > 120]
+        self.assertTrue(lit)
+        self.assertTrue(any(p[2] > p[0] + 60 for p in lit))    # blue arc
+        self.assertTrue(any(p[0] > p[2] + 60 for p in lit))    # warm arc
 
-    def test_the_well_is_lighter_than_the_card(self):
-        card = self.card()
-        self.assertGreater(sum(card.load()[210, 90]), sum(theme.TINT))
+    def test_the_arcs_fade_out_rather_than_stop(self):
+        """Measured as a CSS conic gradient does it, by the angle from the
+        centre, the glow along a long thin field jumped by up to 23 levels
+        from one pixel to the next and looked cut with scissors. Measured
+        along the edge the worst step is 8."""
+        for scale in (1.0, 1.25):
+            composer = glass.composer(scale)
+            field = composer.layout["field"]
+            origin = composer.ring.origin
+            row = field[1] - origin[1] - glass._px(3, scale)
+            for turn in [step / 24.0 for step in range(24)]:
+                alpha = np.asarray(composer.ring.render(turn, 1.0))[..., 3]
+                steps = np.abs(np.diff(alpha[row].astype(int)))
+                self.assertLessEqual(steps.max(), 10,
+                                     "at scale %s turn %s" % (scale, turn))
 
-    def test_the_accent_runs_the_waveform_s_colours(self):
-        """Cold at the left and warm at the right, which is the order the
-        bars use. A line that came out one colour means the gradient was
-        collapsed, and that has happened before elsewhere."""
-        card = self.card()
-        row = self.WELL[3] - 2
-        left = card.load()[self.WELL[0] + 6, row]
-        right = card.load()[self.WELL[2] - 6, row]
-        self.assertGreater(left[2], left[0])      # blue side
-        self.assertGreater(right[0], right[2])    # warm side
+    def test_the_corners_are_see_through(self):
+        frame = glass.composer_frame(glass.composer(1.25))
+        self.assertEqual(frame.getpixel((0, 0))[3], 0)
+        width, height = frame.size
+        self.assertEqual(frame.getpixel((width - 1, height - 1))[3], 0)
 
-    def test_it_survives_the_owner_s_screen_scale(self):
-        for scale in (1.0, 1.25, 1.5, 2.0):
-            card = glass.card(int(420 * scale), int(150 * scale),
-                              [v * scale for v in self.WELL], scale)
-            self.assertEqual(card.size, (int(420 * scale), int(150 * scale)))
+    def test_the_glass_is_the_pill_s_glass(self):
+        composer = glass.composer(1.0)
+        box = composer.layout["box"]
+        middle = (box[1] + box[3]) // 2
+        body = composer.shell.getpixel((box[0] + 6, middle))
+        self.assertLess(max(abs(body[i] - theme.TINT[i]) for i in range(3)),
+                        12)
+        self.assertGreater(body[3], 200)
+
+    def test_opening_draws_the_empty_glass_only(self):
+        composer = glass.composer(1.25)
+        box = composer.layout["box"]
+        middle = (box[1] + box[3]) // 2
+        opening = glass.composer_frame(composer, open_share=0.5)
+        # The capsule is half as wide, so its old left end is bare desktop,
+        # and there is no field and no ring yet in its middle.
+        self.assertEqual(opening.getpixel((box[0] + 4, middle))[3], 0)
+        centre = opening.getpixel(((box[0] + box[2]) // 2, middle))
+        self.assertLess(max(abs(centre[i] - theme.TINT[i]) for i in range(3)),
+                        16)
+
+    def test_the_cross_turns_and_nothing_else_does(self):
+        still = glass.button(34, "cancel", theme.CANCEL_FILL,
+                             theme.CANCEL_GLYPH)
+        turned = glass.button(34, "cancel", theme.CANCEL_FILL,
+                              theme.CANCEL_GLYPH, turn=45)
+        self.assertEqual(still.size, turned.size)
+        self.assertNotEqual(still.tobytes(), turned.tobytes())
+        # The shadow under the disc does not turn with the glyph.
+        self.assertEqual(still.getpixel((still.size[0] // 2,
+                                         still.size[1] - 1)),
+                         turned.getpixel((turned.size[0] // 2,
+                                          turned.size[1] - 1)))
+
+    def test_a_label_is_as_wide_as_its_words(self):
+        short = glass.chip([("Save", False)], 1.25)
+        long = glass.chip([("Save", False), ("  Enter", True)], 1.25)
+        self.assertGreater(long.size[0], short.size[0])
+        self.assertEqual(long.size[1], short.size[1])
+
+    def test_the_labels_fit_above_the_capsule(self):
+        for scale in self.SCALES:
+            layout = glass.composer_layout(scale)
+            label = glass.chip([("heard  ", True), ("Маржан", False)], scale)
+            gap = glass._px(theme.CHIP_GAP, scale)
+            self.assertGreaterEqual(layout["box"][1] - gap - label.size[1], 0)
 
 
 class GlassPill(unittest.TestCase):

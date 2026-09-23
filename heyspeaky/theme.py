@@ -9,23 +9,58 @@ button. Nothing else. Whatever you said lands in the window you were typing
 in, so the pill has no reason to repeat it back at you.
 """
 
-# The correction box, Ctrl+Alt+Win. Same materials as the pill - the tint,
-# the bright top edge, the specular - so the two read as one app. It is a card
-# rather than a capsule, so its corner is a fixed radius instead of half its
-# height, and it is a window you type into, so it is nearly opaque where the
-# pill is not.
-BOX_WIDTH = 420
-BOX_RADIUS = 16
-BOX_PAD = 16
-BOX_ALPHA = 0.97
-BOX_GAP = 10
-# The field you type in: a darker well sunk into the card, with the waveform's
-# own colours running under it. That line is the one piece of colour in either
-# window, and having it in both is what ties them together.
-WELL_HEIGHT = 40
-WELL_RADIUS = 10
-WELL_FILL = (38, 38, 45)
-WELL_ACCENT = 2
+# The correction composer, Ctrl+Alt+Win. The pill's twin: the same glass, a
+# cross on the left and a tick on the right, and a field to type into where
+# the waveform would be. More solid than the pill, because it is read rather
+# than glanced at. Around the field runs a ring of the waveform's colours that
+# turns once as it opens and a little with every key - after an MIT-licensed
+# uiverse.io input by Lakshay-art, whose border is two arcs of a conic
+# gradient chasing each other round the field.
+COMPOSER_WIDTH = 440
+COMPOSER_HEIGHT = 58
+COMPOSER_ALPHA = 0.95
+# Room around the capsule for its shadow and its glow, and above it for the
+# small labels: what was heard, and what a button does.
+COMPOSER_MARGIN = 24
+COMPOSER_TOP = 30
+COMPOSER_BUTTON = 34
+COMPOSER_BUTTON_INSET = 12
+FIELD_GAP = 9
+FIELD_HEIGHT = 38
+# Solid, and exactly the typing field's own colour, so the widget laid over it
+# cannot be told apart from the picture underneath.
+FIELD_FILL = (9, 9, 12)
+FIELD_EDGE = 0.12
+FIELD_TEXT = 15
+FIELD_INSET = 6
+# The selection, in a dark cut of the palette's purple rather than the blue
+# Windows would pick.
+SELECT_FILL = (92, 58, 150)
+# The ring: a thin sharp line plus a soft glow outside it, never inside, so
+# the field stays one flat colour under the text.
+GLOW_RING = 1.6
+GLOW_SPREAD = 11
+GLOW_SETTLED = 0.72
+GLOW_FLARE = 1.0
+GLOW_SWEEP = 1.6
+GLOW_NUDGE = 16
+# The labels above the capsule.
+CHIP_FILL = (24, 24, 29)
+CHIP_ALPHA = 0.94
+CHIP_HEIGHT = 22
+CHIP_PAD = 9
+CHIP_GAP = 7
+# Motion, in seconds, and the size of it.
+COMPOSER_OPEN = 0.32
+COMPOSER_CLOSE = 0.18
+COMPOSER_DONE_HOLD = 0.34
+COMPOSER_SLIDE = 10
+HOVER_GROW = 1.12
+HOVER_TURN = 90
+HOVER_LIFT = 2
+PRESS_SHRINK = 0.88
+TIP_DELAY = 0.35
+SHAKE = 9
 
 # The pill itself.
 WIDTH = 248

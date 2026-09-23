@@ -15,8 +15,8 @@ without jargon, and say what you actually did and what you could not do.
 | `run.py` | entry point, launched with pythonw.exe |
 | `heyspeaky/app.py` | the controller and the state machine |
 | `heyspeaky/config.py` | defaults, and config.json loading |
-| `heyspeaky/theme.py` | every colour, size and timing of the pill |
-| `heyspeaky/glass.py` | draws the pill: glass over a photo of the desktop |
+| `heyspeaky/theme.py` | every colour, size and timing of the pill and the composer |
+| `heyspeaky/glass.py` | draws the pill and the correction composer |
 | `heyspeaky/overlay.py` | the window: never focused, and its two buttons |
 | `heyspeaky/engine.py` | RealtimeSTT: capture and voice activity detection |
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
@@ -33,7 +33,7 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/benchmark.py` | measures models against real recordings |
 | `tools/language_drill.py` | measures sentences that change language halfway |
 | `tools/live_check.py` | shows the pill on the real screen and photographs it |
-| `tools/correction_check.py` | the same, for the correction box |
+| `tools/correction_check.py` | the same, for the correction composer: hovers, clicks, drags |
 | `tools/try_demo.py` | runs a recording through both backends |
 
 ## Rules that cost something to learn
@@ -188,25 +188,32 @@ without jargon, and say what you actually did and what you could not do.
   (`_spend_chord_locked`). Clearing it on a cancel let the chord re-arm the
   moment the other key was released: the owner's log has a recording
   cancelled by Win and a new one starting 0.37 s later, twice.
-- **The correction box takes focus and the pill never does.** They are
-  opposite windows and both are right: dictation is worthless if it steals
-  the caret, and a box you cannot type into is worthless too. The box is an
-  ordinary `Toplevel`, not a layered surface, so none of the pill's rules
-  apply to it - `-alpha` is fine here and fatal there - but Windows 10 will
-  not round a window with no frame, so it clips itself with `SetWindowRgn`.
-  Look at it with `tools/correction_check.py`, which also drags it and runs
-  it at several screen scales.
+- **The correction composer is the pill's twin, and it is two windows.**
+  The owner disliked the first box (a flat card) and asked for something
+  from uiverse.io that looks good without being busy. It is now a capsule:
+  cross, a field where the waveform would be, tick. The glass (`back`) is a
+  layered window like the pill - `WS_EX_NOACTIVATE`, drawn with
+  `UpdateLayeredWindow`, never `-alpha`. The field (`top`) is an ordinary
+  window laid exactly over the field in the picture, because a layered
+  window cannot show a child widget; it takes focus, and `-alpha` is fine on
+  it. Clicks on the glass never move the caret out of the field.
 - **Both windows are drawn by the same code, and that is the point.**
-  `glass.card` builds the box's background out of the three layers
-  `glass.prepare` builds the capsule from: the tint, the bright edge
-  strongest along the top, the specular just inside it. The one piece of
-  colour in either window is the waveform's palette, which runs as a line
-  under the field you type in. Sizes live in `theme.py` with everything else
-  about the look. The box lays the same thing out twice - once as pixels in
-  the picture, once as widgets over it - so every size is computed once in
-  `CorrectionBox.__init__` and used by both, and the well in the picture is
-  where the entry is placed. Change one without the other and the field
-  floats off its own slot.
+  `glass.composer` uses the helpers `glass.prepare` uses (`_drop_shadow`,
+  `_glass_body`), and the pill renders pixel-identical to before that split -
+  check any change there the same way. Every size comes from
+  `glass.composer_layout`, once, for the picture, the widget and the hit
+  tests alike; the widget must land on nothing but `FIELD_FILL`, and a test
+  says so.
+- **The ring round the field is measured along its edge, not by angle.**
+  It is after an MIT-licensed uiverse input by Lakshay-art: two arcs of a
+  conic gradient chasing each other. By angle from the centre, as CSS does
+  it, the arcs were cut off in the middle of each long side (up to 23 levels
+  a pixel); along the edge the worst step is 8. It turns once as the box
+  opens and a little with every key. Buttons grow, the cross spins and the
+  tick lifts on hover, with a label after 0.35 s; an empty Enter shakes. The
+  animation stops scheduling frames once nothing moves. Look at all of it
+  with `tools/correction_check.py`, which moves the real pointer over the
+  buttons, drags, types, and photographs each moment.
 - **Reading somebody's selection means borrowing the clipboard.** There is no
   API for another program's selection. `output.copy_selection` empties the
   clipboard first - otherwise a Ctrl+C that copies nothing, because nothing

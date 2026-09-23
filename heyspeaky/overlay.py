@@ -217,7 +217,53 @@ def premultiplied(frame):
     )).tobytes()
 
 
-class _Surface:
+def layered_styles(hwnd, clickable=True):
+    """Layered, focus-proof and Alt+Tab invisible.
+
+    Shared with the correction composer's glass, which is the same kind of
+    window: it is clicked, never focused.
+    """
+    if not hwnd:
+        return
+    user32 = ctypes.windll.user32
+    style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    style |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED
+    if not clickable:
+        # Then every pixel passes clicks through, not only the
+        # transparent ones. For anyone who turns the buttons off.
+        style |= WS_EX_TRANSPARENT
+    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+
+
+def present(hwnd, surface, frame, opacity):
+    """Hands one finished frame to Windows, alpha and all."""
+    if not hwnd or not surface.ensure(frame.size):
+        return False
+    surface.write(premultiplied(frame))
+    blend = _BLENDFUNCTION(AC_SRC_OVER, 0,
+                           int(max(0, min(255, opacity * 255))),
+                           AC_SRC_ALPHA)
+    size = _SIZE(frame.size[0], frame.size[1])
+    source = _POINT(0, 0)
+    ok = ctypes.windll.user32.UpdateLayeredWindow(
+        hwnd, None, None, ctypes.byref(size), surface.dc,
+        ctypes.byref(source), 0, ctypes.byref(blend), ULW_ALPHA)
+    if not ok:
+        logger.debug("UpdateLayeredWindow refused the frame (%d)",
+                     ctypes.GetLastError())
+    return bool(ok)
+
+
+def window_handle(window):
+    """The Win32 handle of a Tk toplevel's frame, or 0."""
+    try:
+        return int(window.wm_frame(), 16)
+    except (ValueError, tk.TclError):
+        logger.warning("Could not resolve a window handle")
+        return 0
+
+
+class Surface:
     """A device bitmap the size of the window, reused between frames.
 
     Making one costs a few hundred microseconds, which is affordable once and
@@ -306,7 +352,7 @@ class Overlay:
         self._levels = deque([0.0] * theme.BARS, maxlen=theme.BARS)
 
         self._glass = None
-        self._surface = _Surface()
+        self._surface = Surface()
         self._opacity = 0.0
         self._visible = False
         self._anim_job = None
@@ -334,25 +380,11 @@ class Overlay:
         self._apply_window_styles()
 
     def _hwnd(self):
-        try:
-            return int(self._root.wm_frame(), 16)
-        except (ValueError, tk.TclError):
-            logger.warning("Could not resolve the overlay window handle")
-            return 0
+        return window_handle(self._root)
 
     def _apply_window_styles(self):
         """Layered, focus-proof and Alt+Tab invisible."""
-        hwnd = self._hwnd()
-        if not hwnd:
-            return
-        user32 = ctypes.windll.user32
-        style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-        style |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED
-        if not self._clickable:
-            # Then every pixel passes clicks through, not only the
-            # transparent ones. For anyone who turns the buttons off.
-            style |= WS_EX_TRANSPARENT
-        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+        layered_styles(self._hwnd(), self._clickable)
 
     # -- the two buttons ---------------------------------------------------
 
@@ -426,21 +458,7 @@ class Overlay:
 
     def _present(self, frame):
         """Hands one finished frame to Windows, alpha and all."""
-        hwnd = self._hwnd()
-        if not hwnd or not self._surface.ensure(frame.size):
-            return
-        self._surface.write(premultiplied(frame))
-        blend = _BLENDFUNCTION(AC_SRC_OVER, 0,
-                               int(max(0, min(255, self._opacity * 255))),
-                               AC_SRC_ALPHA)
-        size = _SIZE(frame.size[0], frame.size[1])
-        source = _POINT(0, 0)
-        ok = ctypes.windll.user32.UpdateLayeredWindow(
-            hwnd, None, None, ctypes.byref(size), self._surface.dc,
-            ctypes.byref(source), 0, ctypes.byref(blend), ULW_ALPHA)
-        if not ok:
-            logger.debug("UpdateLayeredWindow refused the frame (%d)",
-                         ctypes.GetLastError())
+        present(self._hwnd(), self._surface, frame, self._opacity)
 
     def _tick(self):
         # Loudness measured straight off the microphone spends most of its
