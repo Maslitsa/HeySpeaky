@@ -306,6 +306,12 @@ DEFAULTS = {
         # Wait for you to let go of Ctrl/Alt/Shift/Win before inserting.
         "modifier_release_timeout": 5.0,
     },
+    "tray": {
+        # A click on the tray icon opens a panel in the pill's glass. false
+        # brings back the plain Windows menu, which is also what appears if
+        # the panel ever fails to open.
+        "panel": True,
+    },
     "overlay": {
         # How the pill looks - colours, sizes, the waveform, the glass - lives
         # in heyspeaky/theme.py, where tools/ui_lab.py can draw it for you.

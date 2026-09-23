@@ -34,6 +34,7 @@ from . import output
 from . import sound
 from . import languages
 from . import levels
+from . import panel as panel_module
 from .engine import TranscriptionEngine
 from .hotkey import HotkeyListener
 from .mic import Microphone
@@ -105,6 +106,8 @@ class App:
         self._max_timer = None
         self._quitting = False
         self._correction = correct.OneAtATime()
+        self._panel = None
+        self._panel_closed_at = 0.0
 
         self.root = tk.Tk()
         self.root.title("HeySpeaky")
@@ -172,6 +175,8 @@ class App:
             on_report=self._on_tray_report,
             usage_text=lambda: usage.describe(self.cfg),
             on_update=self._on_tray_update,
+            on_panel=(self._on_tray_panel
+                      if cfg.get("tray", {}).get("panel", True) else None),
         )
 
     # -- speech detection --------------------------------------------------
@@ -829,6 +834,34 @@ class App:
 
     def _on_tray_quit(self):
         self.post(self.shutdown)
+
+    def _on_tray_panel(self):
+        """A click on the tray icon, on pystray's thread."""
+        self.post(self._toggle_panel, panel_module.pointer_position())
+
+    def _toggle_panel(self, anchor):
+        """Opens the tray panel, or closes it if it is open.
+
+        Clicking the icon while the panel is up takes focus from the panel
+        first, and it starts closing on its own a moment before this click
+        arrives. Without the second check that click would open it again.
+        """
+        if self._panel is not None:
+            # Open, or already on its way out: either way this click is the
+            # one that closes it.
+            self._panel.close()
+            return
+        if time.monotonic() - self._panel_closed_at < 0.4:
+            return
+        self._panel = panel_module.TrayPanel(
+            self.root, self.tray.panel_model, self.tray.panel_act,
+            scale=self.overlay.scale, anchor=anchor,
+            on_closed=self._panel_closed)
+
+    def _panel_closed(self, closed):
+        if closed is self._panel:
+            self._panel = None
+        self._panel_closed_at = time.monotonic()
 
     # -- lifecycle ---------------------------------------------------------
 

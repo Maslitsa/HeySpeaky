@@ -62,6 +62,35 @@ PRESS_SHRINK = 0.88
 TIP_DELAY = 0.35
 SHAKE = 9
 
+# The tray panel: what a click on the tray icon opens, in place of the grey
+# Windows menu. The same glass as the pill and the composer, as a card. The
+# buttons speak the pill's language: the chosen thing is white with dark ink,
+# like the tick; everything else is the cross's grey. The one piece of colour
+# is the waveform's gradient, on a switch that is on.
+PANEL_WIDTH = 320
+PANEL_RADIUS = 22
+PANEL_ALPHA = 0.96
+PANEL_PAD = 16
+PANEL_MARGIN = 26
+ROW_HEIGHT = 34
+ROW_RADIUS = 10
+ROW_HOVER = 0.08
+SECTION_GAP = 12
+LABEL_GAP = 7
+PANEL_CHIP_HEIGHT = 28
+PANEL_CHIP_GAP = 6
+SWITCH_WIDTH = 38
+SWITCH_HEIGHT = 22
+SEGMENT_HEIGHT = 32
+TITLE_SIZE = 15
+HINT_SIZE = 11
+LIST_HEIGHT = 330
+PANEL_OPEN = 0.22
+PANEL_CLOSE = 0.14
+READY_DOT = (48, 209, 88)
+BUSY_DOT = (255, 69, 58)
+PAUSED_DOT = (142, 142, 147)
+
 # The pill itself.
 WIDTH = 248
 HEIGHT = 54

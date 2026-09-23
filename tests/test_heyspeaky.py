@@ -711,6 +711,151 @@ class GlassComposer(unittest.TestCase):
             self.assertGreaterEqual(layout["box"][1] - gap - label.size[1], 0)
 
 
+try:
+    from heyspeaky import panel as panel_module
+except Exception:           # no tkinter
+    panel_module = None
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class TrayPanelLayout(unittest.TestCase):
+    """The tray panel's layout and picture, which are arithmetic and PIL.
+
+    The window itself is tools/panel_check.py's business: it found the one
+    fault these could not, a panel styled on a window handle Tk then
+    replaced, which drew nothing at all.
+    """
+
+    YOURS = ["kk", "ru", "en", "de"]
+
+    def model(self, **changes):
+        catalog = languages.catalog(self.YOURS)
+        model = {"status": "Ready", "state": "ready", "paused": False,
+                 "pinned": "", "yours": list(self.YOURS), "backend": "cloud",
+                 "usage": "This month: $0.42", "update": "",
+                 "catalog": list(catalog),
+                 "names": dict((c, languages.name(c)) for c in catalog)}
+        model.update(changes)
+        return model
+
+    def card_box(self, size, scale):
+        margin = int(round(theme.PANEL_MARGIN * scale))
+        return (margin, margin, margin + size[0], margin + size[1])
+
+    def test_every_part_sits_inside_the_card(self):
+        for scale in (1.0, 1.25, 1.5, 2.0):
+            for page in ("main", "languages"):
+                size, items = panel_module.layout(self.model(), scale, page)
+                box = self.card_box(size, scale)
+                for item in items:
+                    left, top, right, bottom = item.rect
+                    self.assertGreaterEqual(left, box[0], (scale, item))
+                    self.assertLessEqual(right, box[2], (scale, item))
+                    self.assertGreaterEqual(top, box[1], (scale, item))
+                    self.assertLessEqual(bottom, box[3], (scale, item))
+
+    def test_the_pinned_language_is_the_chosen_chip(self):
+        _size, items = panel_module.layout(self.model(pinned="kk"), 1.25)
+        chosen = [item.key for item in items
+                  if item.kind == "chip" and item.extra]
+        self.assertEqual(chosen, ["pin:kk"])
+        _size, items = panel_module.layout(self.model(), 1.25)
+        chosen = [item.key for item in items
+                  if item.kind == "chip" and item.extra]
+        self.assertEqual(chosen, ["pin:"])
+
+    def test_chips_wrap_rather_than_run_off(self):
+        many = ["kk", "ru", "en", "de", "fr", "es", "it", "tr", "uk"]
+        _size, items = panel_module.layout(self.model(yours=many), 1.25)
+        chips = [item for item in items if item.kind == "chip"]
+        self.assertGreater(len(set(item.rect[1] for item in chips)), 1)
+
+    def test_the_update_row_is_there_only_when_there_is_an_update(self):
+        _size, items = panel_module.layout(self.model(), 1.0)
+        self.assertNotIn("update", [item.key for item in items])
+        _size, items = panel_module.layout(self.model(update="1.2.0"), 1.0)
+        self.assertIn("update", [item.key for item in items])
+
+    def test_the_two_halves_of_the_switch_between_engines(self):
+        _size, items = panel_module.layout(self.model(), 1.25)
+        control = [item for item in items if item.kind == "segmented"][0]
+        left, top, right, bottom = control.rect
+        middle = (top + bottom) // 2
+        self.assertEqual(panel_module.hit(items, left + 4, middle)[1],
+                         "backend:cloud")
+        self.assertEqual(panel_module.hit(items, right - 4, middle)[1],
+                         "backend:local")
+
+    def test_labels_and_the_title_cannot_be_clicked(self):
+        _size, items = panel_module.layout(self.model(), 1.25)
+        for item in items:
+            if item.kind in ("title", "label", "hint", "footer"):
+                x = (item.rect[0] + item.rect[2]) // 2
+                y = (item.rect[1] + item.rect[3]) // 2
+                self.assertIsNone(panel_module.hit(items, x, y)[0])
+
+    def test_your_languages_head_the_list(self):
+        order = panel_module.language_order(self.model())
+        self.assertEqual(order[:4], self.YOURS)
+        rest = order[4:]
+        names = [languages.name(code).lower() for code in rest]
+        self.assertEqual(names, sorted(names))
+
+    def test_a_scrolled_list_has_no_hole_at_the_top(self):
+        """Scrolled by anything that is not a whole row, the half-hidden top
+        row used to be left out, and the list opened with a gap."""
+        for scale in (1.0, 1.25):
+            for scroll in (10, 37, 85, 300):
+                _size, items = panel_module.layout(self.model(), scale,
+                                                   "languages", scroll)
+                hint = [item for item in items if item.kind == "hint"][0]
+                rows = [item for item in items if item.kind == "language"]
+                self.assertLessEqual(rows[0].rect[1] - hint.rect[3],
+                                     int(round(8 * scale)) + 1,
+                                     (scale, scroll))
+
+    def test_a_long_list_shows_a_scrollbar(self):
+        _size, items = panel_module.layout(self.model(), 1.25, "languages")
+        self.assertIn("scrollbar", [item.kind for item in items])
+
+    def test_the_card_s_corners_are_see_through(self):
+        size, items = panel_module.layout(self.model(), 1.25)
+        card = glass.panel_card(size[0], size[1], 1.25)
+        frame = glass.panel_frame(card, items, 1.25)
+        self.assertEqual(frame.getpixel((0, 0))[3], 0)
+        box = card[1]
+        # Inside the card's rectangle but outside its rounded corner there
+        # is only the faintest shadow; a square card would be solid there.
+        self.assertLess(frame.getpixel((box[0] + 1, box[1] + 1))[3], 40)
+        self.assertGreater(frame.getpixel((box[0] + 40, box[1] + 40))[3],
+                           200)
+
+    def test_a_hovered_row_changes_only_its_own_rectangle(self):
+        from PIL import ImageChops
+        size, items = panel_module.layout(self.model(), 1.25)
+        card = glass.panel_card(size[0], size[1], 1.25)
+        rest = glass.panel_frame(card, items, 1.25)
+        lit = glass.panel_frame(card, items, 1.25, {"settings": 1.0})
+        changed = ImageChops.difference(lit, rest).getbbox()
+        row = [item for item in items if item.key == "settings"][0]
+        self.assertIsNotNone(changed)
+        self.assertGreaterEqual(changed[0], row.rect[0])
+        self.assertLessEqual(changed[2], row.rect[2])
+        self.assertGreaterEqual(changed[1], row.rect[1])
+        self.assertLessEqual(changed[3], row.rect[3])
+
+    def test_a_switch_that_is_on_carries_the_waveform_s_colour(self):
+        on = glass.switch(48, 28, 1.0)
+        off = glass.switch(48, 28, 0.0)
+        blue_on = on.getpixel((8, 14))
+        blue_off = off.getpixel((40, 14))
+        self.assertGreater(blue_on[2], blue_on[0] + 80)
+        self.assertLess(abs(blue_off[2] - blue_off[0]), 20)
+
+    def test_the_setting_that_brings_the_menu_back_is_on_by_default(self):
+        self.assertTrue(config_module.DEFAULTS["tray"]["panel"])
+
+
 class GlassPill(unittest.TestCase):
     """The pill draws itself over a photograph of the desktop."""
 

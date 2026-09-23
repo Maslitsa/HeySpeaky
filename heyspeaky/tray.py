@@ -2,6 +2,12 @@
 
 The app has no console and no window of its own, so this is the only place
 you can see that it is running, pause it, or quit it.
+
+A click on the icon - either button - opens the tray panel (`panel.py`),
+drawn in the pill's own glass. The Windows menu built below stays attached
+underneath as the fallback: if the panel cannot open, the click goes on to it.
+The icon is the pill's waveform: white bars at rest, the waveform's colours
+while it records, grey dots while it is paused.
 """
 
 import logging
@@ -12,29 +18,51 @@ import threading
 import pystray
 from PIL import Image, ImageDraw
 
-from . import dictionary
+from . import dictionary, theme
 from . import languages as language_names
 
 logger = logging.getLogger("heyspeaky.tray")
 
 _IDLE = (233, 236, 241)
-_BUSY = (255, 77, 79)
 _PAUSED = (120, 124, 132)
+# Bar heights, as a share of the tallest: the pill's waveform in miniature.
+_BARS = (0.36, 0.68, 1.0, 0.68, 0.36)
 
 
-def _make_icon(color):
-    """Draws a simple microphone glyph at tray resolution."""
-    size = 64
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+def _bar_colour(index):
+    """The waveform's gradient, across the five bars."""
+    stops = theme.SIRI
+    place = index / float(len(_BARS) - 1) * (len(stops) - 1)
+    low = min(int(place), len(stops) - 2)
+    mix = place - low
+    return tuple(int(round(a + (b - a) * mix))
+                 for a, b in zip(stops[low], stops[low + 1]))
+
+
+def _make_icon(state):
+    """The pill's waveform at tray resolution.
+
+    Drawn four times over and scaled down, like everything else here,
+    because a 16-pixel icon with hard edges is where cheap shows first.
+    """
+    size, k = 64, 4
+    big = size * k
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    # Capsule body.
-    draw.rounded_rectangle((24, 10, 40, 38), radius=8, fill=color)
-    # Cradle.
-    draw.arc((18, 22, 46, 46), start=0, end=180, fill=color, width=5)
-    # Stem and base.
-    draw.rectangle((30, 45, 34, 52), fill=color)
-    draw.rectangle((22, 52, 42, 56), fill=color)
-    return image
+    width, gap, tallest = 8 * k, 5 * k, 50 * k
+    left = (big - (width * len(_BARS) + gap * (len(_BARS) - 1))) // 2
+    for index, share in enumerate(_BARS):
+        if state == "paused":
+            # Silence is drawn as dots, here as on the pill.
+            height, colour = width, _PAUSED
+        else:
+            height = int(tallest * share)
+            colour = _bar_colour(index) if state == "busy" else _IDLE
+        x = left + index * (width + gap)
+        top = (big - height) // 2
+        draw.rounded_rectangle((x, top, x + width, top + height),
+                               radius=width // 2, fill=colour + (255,))
+    return image.resize((size, size), Image.LANCZOS)
 
 
 class Tray:
@@ -56,6 +84,7 @@ class Tray:
         on_report=None,
         usage_text=None,
         on_update=None,
+        on_panel=None,
     ):
         self._config_path = config_path
         self._log_dir = log_dir
@@ -74,14 +103,16 @@ class Tray:
         # A callable, so the figure is current every time the menu opens.
         self._usage_text = usage_text
         self._on_update = on_update
+        self._on_panel = on_panel
         self._update_version = ""
+        self._busy = False
 
         self._status = "Starting…"
         self._paused = False
         self._icons = {
-            "idle": _make_icon(_IDLE),
-            "busy": _make_icon(_BUSY),
-            "paused": _make_icon(_PAUSED),
+            "idle": _make_icon("idle"),
+            "busy": _make_icon("busy"),
+            "paused": _make_icon("paused"),
         }
         self._icon = pystray.Icon(
             "HeySpeaky",
@@ -90,6 +121,7 @@ class Tray:
             menu=self._build_menu(),
         )
         self._thread = None
+        self._wire_panel()
 
     def _build_menu(self):
         return pystray.Menu(
@@ -308,6 +340,7 @@ class Tray:
     def set_status(self, status, busy=False):
         """Updates the tooltip, menu header and icon colour."""
         self._status = status
+        self._busy = bool(busy)
         try:
             self._icon.title = "HeySpeaky · {}".format(status)
             if self._paused:
@@ -317,3 +350,90 @@ class Tray:
             self._icon.update_menu()
         except Exception:
             logger.debug("Tray update raised", exc_info=True)
+
+    # -- the panel ---------------------------------------------------------
+
+    def _wire_panel(self):
+        """Sends a click on the icon to the panel instead of the menu.
+
+        pystray keeps a table of window-message handlers; the one for the
+        icon's notifications is swapped for one that opens the panel, and
+        hands the click on to the original - the Windows menu - if that
+        fails. pystray is pinned in requirements.lock, so the table is where
+        this expects it.
+        """
+        if self._on_panel is None:
+            return
+        handlers = getattr(self._icon, "_message_handlers", None)
+        try:
+            from pystray._util import win32
+        except Exception:
+            logger.warning("pystray has changed; the tray keeps its menu")
+            return
+        if not isinstance(handlers, dict) or win32.WM_NOTIFY not in handlers:
+            logger.warning("pystray has changed; the tray keeps its menu")
+            return
+        original = handlers[win32.WM_NOTIFY]
+        clicks = (win32.WM_LBUTTONUP, win32.WM_RBUTTONUP)
+
+        def on_notify(wparam, lparam):
+            if lparam in clicks:
+                try:
+                    # As pystray does before its own menu: the icon's window
+                    # to the front, which is what lets the panel take focus.
+                    hwnd = getattr(self._icon, "_hwnd", None)
+                    if hwnd:
+                        win32.SetForegroundWindow(hwnd)
+                    self._on_panel()
+                    return 0
+                except Exception:
+                    logger.exception("The tray panel did not open; "
+                                     "showing the menu instead")
+            return original(wparam, lparam)
+
+        handlers[win32.WM_NOTIFY] = on_notify
+
+    def panel_model(self):
+        """What the panel shows, read fresh each time it asks."""
+        offered = language_names.catalog(self._languages)
+        return {
+            "status": self._status,
+            "state": ("paused" if self._paused else
+                      "busy" if self._busy else "ready"),
+            "paused": self._paused,
+            "pinned": self._language,
+            "yours": list(self._languages),
+            "backend": self._backend,
+            "usage": self._usage_text() if self._usage_text else "",
+            "update": self._update_version,
+            "catalog": list(offered),
+            "names": dict((code, language_names.name(code))
+                          for code in offered),
+        }
+
+    def panel_act(self, action):
+        """Does what the panel was clicked for. Off the Tk thread, because
+        some of these save files or build a report."""
+        handlers = {
+            "dictate": self._toggle,
+            "pause": self._toggle_pause,
+            "update": self._update,
+            "words": self._open_dictionary,
+            "settings": self._open_config,
+            "logs": self._open_logs,
+            "report": self._report,
+            "quit": self._quit,
+        }
+        if action in handlers:
+            target = handlers[action]
+        elif action.startswith("pin:"):
+            target = self._make_language_setter(action[len("pin:"):])
+        elif action.startswith("lang:"):
+            target = self._make_language_toggle(action[len("lang:"):])
+        elif action.startswith("backend:"):
+            target = self._make_backend_setter(action[len("backend:"):])
+        else:
+            logger.warning("The tray panel asked for %r", action)
+            return
+        threading.Thread(target=target, name="tray-panel",
+                         daemon=True).start()

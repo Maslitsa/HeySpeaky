@@ -15,14 +15,15 @@ without jargon, and say what you actually did and what you could not do.
 | `run.py` | entry point, launched with pythonw.exe |
 | `heyspeaky/app.py` | the controller and the state machine |
 | `heyspeaky/config.py` | defaults, and config.json loading |
-| `heyspeaky/theme.py` | every colour, size and timing of the pill and the composer |
-| `heyspeaky/glass.py` | draws the pill and the correction composer |
+| `heyspeaky/theme.py` | every colour, size and timing: pill, composer, tray panel |
+| `heyspeaky/glass.py` | draws the pill, the correction composer and the tray panel |
 | `heyspeaky/overlay.py` | the window: never focused, and its two buttons |
 | `heyspeaky/engine.py` | RealtimeSTT: capture and voice activity detection |
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
 | `heyspeaky/languages.py` | the languages list and its tray grouping |
 | `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
 | `heyspeaky/correct.py` | Ctrl+Alt+Win: the box that asks what it should have said |
+| `heyspeaky/panel.py` | the tray panel: what a click on the tray icon opens |
 | `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
 | `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
 | `heyspeaky/diagnostics.py` | the problem report people send you |
@@ -34,6 +35,7 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/language_drill.py` | measures sentences that change language halfway |
 | `tools/live_check.py` | shows the pill on the real screen and photographs it |
 | `tools/correction_check.py` | the same, for the correction composer: hovers, clicks, drags |
+| `tools/panel_check.py` | the same, for the tray panel |
 | `tools/try_demo.py` | runs a recording through both backends |
 
 ## Rules that cost something to learn
@@ -218,6 +220,22 @@ without jargon, and say what you actually did and what you could not do.
   animation stops scheduling frames once nothing moves. Look at all of it
   with `tools/correction_check.py`, which moves the real pointer over the
   buttons, drags, types, and photographs each moment.
+- **One design, three windows: the pill, the composer and the tray panel.**
+  The owner asked for the tray to match. The Windows menu cannot be
+  restyled - Windows draws it - so a click on the icon (either button) now
+  opens `panel.py`, a card of the same glass: the chosen thing white with
+  dark ink like the tick, the rest the cross's grey, and the only colour the
+  waveform's gradient on a switch that is on. `Tray._wire_panel` swaps
+  pystray's notification handler for one that opens it and falls back to
+  the menu if that fails; pystray is pinned, so that table is where the code
+  expects it. `tray.panel: false` brings the menu back. The panel is the one
+  layered window that takes focus - a menu has to hear Escape and notice a
+  click elsewhere. Tk hands out a new window handle once the window is
+  really made, so the layered style is applied to the handle each frame is
+  presented to, not the one seen at creation: styled on the first, the
+  panel drew nothing at all, and only `tools/panel_check.py` showed it. The
+  tray icon is the waveform: white, the gradient while recording, grey dots
+  while paused.
 - **Reading somebody's selection means borrowing the clipboard.** There is no
   API for another program's selection. `output.copy_selection` empties the
   clipboard first - otherwise a Ctrl+C that copies nothing, because nothing

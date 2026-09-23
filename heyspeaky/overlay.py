@@ -217,17 +217,23 @@ def premultiplied(frame):
     )).tobytes()
 
 
-def layered_styles(hwnd, clickable=True):
+def layered_styles(hwnd, clickable=True, focusable=False):
     """Layered, focus-proof and Alt+Tab invisible.
 
     Shared with the correction composer's glass, which is the same kind of
-    window: it is clicked, never focused.
+    window: it is clicked, never focused. The tray panel is the one layered
+    window that may take focus - it is a menu, and has to hear Escape and
+    know when it has been clicked away from - so it asks for `focusable`.
     """
     if not hwnd:
         return
     user32 = ctypes.windll.user32
     style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-    style |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED
+    style |= WS_EX_TOOLWINDOW | WS_EX_LAYERED
+    if focusable:
+        style &= ~WS_EX_NOACTIVATE
+    else:
+        style |= WS_EX_NOACTIVATE
     if not clickable:
         # Then every pixel passes clicks through, not only the
         # transparent ones. For anyone who turns the buttons off.

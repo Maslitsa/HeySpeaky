@@ -358,7 +358,7 @@ def _drop_shadow(base, box, mask, scale):
 
 
 def _glass_body(base, box, mask, radius, scale, alpha, specular_depth,
-                specular_blur):
+                specular_blur, specular_alpha=theme.SPECULAR_ALPHA):
     """The glass itself: the tint, the bright edge, the specular.
 
     Shared by the pill and the correction composer, which is what makes the
@@ -388,7 +388,7 @@ def _glass_body(base, box, mask, radius, scale, alpha, specular_depth,
     ImageDraw.Draw(specular).ellipse(
         (capsule_size[0] * 0.18, 2 * SS,
          capsule_size[0] * 0.82, capsule_size[1] * specular_depth),
-        fill=int(255 * theme.SPECULAR_ALPHA))
+        fill=int(255 * specular_alpha))
     layer.paste((255, 255, 255, 255), (0, 0),
                 specular.filter(
                     ImageFilter.GaussianBlur(specular_blur * scale * SS)))
@@ -887,4 +887,267 @@ def composer_frame(composer, open_share=1.0, turn=0.0,
 
     for image, x, y, alpha in chips:
         _place_over(frame, image, x, y, alpha)
+    return frame
+
+
+# -- the tray panel ----------------------------------------------------------
+
+def panel_card(width, height, scale=1.0):
+    """The tray panel's glass: the pill's own layers, as a card.
+
+    Returns the picture and where the card sits in it; the rest of the
+    picture is room for the shadow, and fully transparent.
+    """
+    margin = _px(theme.PANEL_MARGIN, scale)
+    window = (int(width) + margin * 2, int(height) + margin * 2)
+    big = (window[0] * SS, window[1] * SS)
+    box = (margin * SS, margin * SS, (margin + int(width)) * SS,
+           (margin + int(height)) * SS)
+    size = (box[2] - box[0], box[3] - box[1])
+    radius = _px(theme.PANEL_RADIUS, scale) * SS
+    mask = _rounded(size, radius)
+    image = Image.new("RGBA", big, (0, 0, 0, 0))
+    _drop_shadow(image, box, mask, scale)
+    # A card is tall, and the pill's specular stretched down one reads as a
+    # smudge behind the title. Here it is a thin sheen along the top.
+    _glass_body(image, box, mask, radius, scale, theme.PANEL_ALPHA, 0.035, 3,
+                0.07)
+    return (image.resize(window, Image.LANCZOS),
+            (margin, margin, margin + int(width), margin + int(height)))
+
+
+def _mix(first, second, share):
+    share = max(0.0, min(1.0, share))
+    return tuple(int(round(a + (b - a) * share))
+                 for a, b in zip(first, second))
+
+
+def _gradient(size, first, second):
+    """A left-to-right ramp between two colours."""
+    ramp = Image.new("RGB", (max(1, size[0]), 1))
+    pixels = ramp.load()
+    for x in range(ramp.size[0]):
+        pixels[x, 0] = _mix(first, second, x / float(max(1, ramp.size[0] - 1)))
+    return ramp.resize(size, Image.BILINEAR)
+
+
+def switch(width, height, on):
+    """A switch, `on` running 0 to 1 as it slides.
+
+    Off, it is the cross's grey. On, its track is the waveform's gradient -
+    the one piece of colour in the panel, and the same one the pill and the
+    composer carry.
+    """
+    on = round(max(0.0, min(1.0, on)), 2)
+    key = ("switch", width, height, on)
+    if key in _sprite_cache:
+        return _sprite_cache[key]
+    k = 4
+    big = (width * k, height * k)
+    face = Image.new("RGBA", big, (0, 0, 0, 0))
+    track = Image.new("L", big, 0)
+    ImageDraw.Draw(track).rounded_rectangle(
+        (0, 0, big[0] - 1, big[1] - 1), radius=big[1] // 2, fill=255)
+    off = Image.new("RGB", big, theme.CANCEL_FILL)
+    lit = _gradient(big, theme.SIRI[0], theme.SIRI[1])
+    face.paste(Image.blend(off, lit, on), (0, 0), track)
+    inset = max(2, big[1] // 10)
+    knob = big[1] - inset * 2
+    left = inset + int(round((big[0] - inset * 2 - knob) * on))
+    shade = Image.new("L", big, 0)
+    ImageDraw.Draw(shade).ellipse(
+        (left, inset + k, left + knob, inset + knob + k), fill=90)
+    face.paste((0, 0, 0, 255), (0, 0),
+               shade.filter(ImageFilter.GaussianBlur(k * 1.5)))
+    ImageDraw.Draw(face).ellipse((left, inset, left + knob, inset + knob),
+                                 fill=theme.ACCEPT_FILL + (255,))
+    face = face.resize((width, height), Image.LANCZOS)
+    _sprite_cache[key] = face
+    return face
+
+
+def _pill_label(width, height, fill, text, ink, text_font):
+    face = sprite((width, height), height // 2, fill).copy()
+    ImageDraw.Draw(face).text((width / 2.0, height / 2.0), text,
+                              font=text_font, fill=ink + (255,), anchor="mm")
+    return face
+
+
+def panel_chip(text, selected, scale=1.0):
+    """A language to pin. The chosen one is white with dark ink, like the
+    tick; the rest are the cross's grey."""
+    key = ("panel-chip", text, bool(selected), round(scale, 3))
+    if key in _sprite_cache:
+        return _sprite_cache[key]
+    height = _px(theme.PANEL_CHIP_HEIGHT, scale)
+    text_font = font(max(8, _px(theme.FONT_SIZE - 1, scale)), medium=True)
+    measure = ImageDraw.Draw(Image.new("L", (1, 1)))
+    width = int(math.ceil(measure.textlength(text, font=text_font))) \
+        + _px(24, scale)
+    width = max(width, height)
+    if selected:
+        face = _pill_label(width, height, theme.ACCEPT_FILL, text,
+                           theme.ACCEPT_GLYPH, text_font)
+    else:
+        face = _pill_label(width, height, theme.CANCEL_FILL, text,
+                           theme.CANCEL_GLYPH, text_font)
+    _sprite_cache[key] = face
+    return face
+
+
+def segmented(width, height, labels, position, scale=1.0):
+    """Two or more choices in one track, a grey thumb under the chosen one.
+
+    `position` is where the thumb is, 0 for the first choice, and may be in
+    between while it slides.
+    """
+    key = ("segmented", width, height, tuple(labels), round(position, 2),
+           round(scale, 3))
+    if key in _sprite_cache:
+        return _sprite_cache[key]
+    face = sprite((width, height), height // 2, theme.FIELD_FILL).copy()
+    count = max(1, len(labels))
+    cell = width / float(count)
+    inset = max(2, _px(3, scale))
+    thumb = sprite((int(round(cell)) - inset * 2, height - inset * 2),
+                   (height - inset * 2) // 2, theme.CANCEL_FILL)
+    x = int(round(inset + cell * position))
+    face.alpha_composite(thumb, (x, inset))
+    text_font = font(max(8, _px(theme.FONT_SIZE - 1, scale)), medium=True)
+    drawing = ImageDraw.Draw(face)
+    for index, label in enumerate(labels):
+        near = max(0.0, 1.0 - abs(position - index))
+        ink = _mix(_mix(theme.TEXT_LIGHT, (0, 0, 0), 1 - theme.MUTED_STRENGTH),
+                   theme.TEXT_LIGHT, near)
+        drawing.text((cell * (index + 0.5), height / 2.0), label,
+                     font=text_font, fill=ink + (255,), anchor="mm")
+    _sprite_cache[key] = face
+    return face
+
+
+def _chevron(drawing, x, y, size, ink):
+    half = size / 2.0
+    drawing.line([(x - half * 0.5, y - half), (x + half * 0.5, y),
+                  (x - half * 0.5, y + half)], fill=ink + (255,),
+                 width=max(1, int(round(size / 5.0))), joint="curve")
+
+
+def _check(drawing, x, y, size, ink):
+    drawing.line([(x - size * 0.45, y), (x - size * 0.1, y + size * 0.35),
+                  (x + size * 0.5, y - size * 0.4)], fill=ink + (255,),
+                 width=max(1, int(round(size / 5.0))), joint="curve")
+
+
+def panel_frame(card, items, scale=1.0, hover=None, motion=None):
+    """One frame of the tray panel.
+
+    `card` is (picture, box) from `panel_card`; `items` the laid-out parts
+    from `panel.layout`, in window pixels. `hover` maps an item's key to how
+    far the pointer's highlight has come on, 0 to 1; `motion` carries what
+    slides - the switch and the segmented thumb - by key.
+    """
+    image, _box = card
+    frame = image.copy()
+    drawing = ImageDraw.Draw(frame)
+    hover = hover or {}
+    motion = motion or {}
+    muted = _mix(theme.TEXT_LIGHT, (0, 0, 0), 1 - theme.MUTED_STRENGTH)
+    faint = _mix(theme.TEXT_LIGHT, (0, 0, 0), 0.62)
+    body = font(max(9, _px(theme.FONT_SIZE, scale)))
+    small = font(max(8, _px(theme.HINT_SIZE, scale)))
+    label_font = font(max(7, _px(theme.HINT_SIZE - 1, scale)), medium=True)
+    title_font = font(max(10, _px(theme.TITLE_SIZE, scale)), medium=True)
+
+    for item in items:
+        left, top, right, bottom = item.rect
+        middle = (top + bottom) / 2.0
+        lit = hover.get(item.key, 0.0)
+        kind = item.kind
+        if kind in ("row", "switch", "back", "language") and lit > 0.005:
+            fill = Image.new("RGBA", (right - left, bottom - top),
+                             (255, 255, 255, int(255 * theme.ROW_HOVER * lit)))
+            shape = sprite((right - left, bottom - top),
+                           _px(theme.ROW_RADIUS, scale), (255, 255, 255))
+            fill.putalpha(ImageChops.multiply(fill.getchannel("A"),
+                                              shape.getchannel("A")))
+            frame.alpha_composite(fill, (left, top))
+
+        if kind == "title":
+            drawing.text((left, middle), item.label, font=title_font,
+                         fill=theme.TEXT_LIGHT + (255,), anchor="lm")
+        elif kind == "status":
+            dot = _px(8, scale)
+            colour = item.extra
+            drawing.ellipse((right - dot, middle - dot / 2.0, right,
+                             middle + dot / 2.0), fill=colour + (255,))
+            drawing.text((right - dot - _px(7, scale), middle), item.label,
+                         font=small, fill=muted + (255,), anchor="rm")
+        elif kind == "label":
+            drawing.text((left, middle), item.label.upper(), font=label_font,
+                         fill=faint + (255,), anchor="lm")
+        elif kind == "hint":
+            drawing.text((left, middle), item.label, font=small,
+                         fill=muted + (255,), anchor="lm")
+        elif kind == "chip":
+            face = panel_chip(item.label, bool(item.extra), scale)
+            grow = 1.0 + 0.06 * lit
+            if grow > 1.004:
+                face = face.resize((int(round(face.size[0] * grow)),
+                                    int(round(face.size[1] * grow))),
+                                   Image.LANCZOS)
+            _place_over(frame, face, (left + right) / 2.0 - face.size[0] / 2.0,
+                        middle - face.size[1] / 2.0)
+        elif kind == "segmented":
+            labels, chosen = item.extra
+            face = segmented(right - left, bottom - top, labels,
+                             motion.get(item.key, chosen), scale)
+            _place_over(frame, face, left, top)
+        elif kind in ("row", "switch", "back", "language"):
+            inset = _px(10, scale)
+            text_left = left + inset
+            if kind == "back":
+                _chevron(drawing, text_left + _px(3, scale), middle,
+                         _px(10, scale), theme.TEXT_LIGHT)
+                # Pointing the other way: drawn, then mirrored in place.
+                region = (text_left - _px(2, scale), int(top),
+                          text_left + _px(9, scale), int(bottom))
+                frame.paste(frame.crop(region).transpose(
+                    Image.FLIP_LEFT_RIGHT), region[:2])
+                text_left += _px(16, scale)
+            ink = theme.TEXT_LIGHT
+            if item.extra == "accent":
+                ink = theme.SIRI[1]
+            drawing.text((text_left, middle), item.label, font=body,
+                         fill=ink + (255,), anchor="lm")
+            if kind == "switch":
+                width = _px(theme.SWITCH_WIDTH, scale)
+                height = _px(theme.SWITCH_HEIGHT, scale)
+                face = switch(width, height,
+                              motion.get(item.key, 1.0 if item.extra else 0.0))
+                _place_over(frame, face, right - inset - width,
+                            middle - height / 2.0)
+            elif kind == "language":
+                if item.extra:
+                    _check(drawing, right - inset - _px(6, scale), middle,
+                           _px(11, scale), theme.TEXT_LIGHT)
+            elif kind == "row" and item.hint:
+                drawing.text((right - inset, middle), item.hint, font=small,
+                             fill=faint + (255,), anchor="rm")
+            elif kind == "row" and item.extra == "more":
+                _chevron(drawing, right - inset - _px(3, scale), middle,
+                         _px(9, scale), faint)
+        elif kind == "separator":
+            drawing.line([(left, middle), (right, middle)],
+                         fill=(255, 255, 255, 22), width=1)
+        elif kind == "footer":
+            drawing.text((left, middle), item.label, font=small,
+                         fill=faint + (255,), anchor="lm")
+        elif kind == "scrollbar":
+            shown, offset = item.extra
+            track = bottom - top
+            length = max(_px(24, scale), int(track * shown))
+            start = top + int((track - length) * offset)
+            bar = sprite((right - left, length), (right - left) // 2,
+                         (255, 255, 255))
+            _place_over(frame, bar, left, start, 0.22)
     return frame
