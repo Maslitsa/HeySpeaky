@@ -74,7 +74,11 @@ without jargon, and say what you actually did and what you could not do.
   because Windows hit-tests a layered window through its alpha.
   `overlay.buttons_clickable: false` makes the whole thing click-through
   again. WS_EX_NOACTIVATE stays either way, so a click never moves the caret
-  out of the window you were typing in.
+  out of the window you were typing in. The buttons answer the pointer as
+  the composer's do - grow, the cross spins, the tick lifts - and only
+  while they can be used; at rest the pill is pixel for pixel what it was
+  before hover existed, and `tools/live_check.py` puts the real pointer on
+  the cross and checks the window in front stayed in front.
 - **Hands-free is a double tap of the whole chord**, half a second apart, the
   way Wispr Flow does it. The owner asked for that specifically. It works
   because a single tap is shorter than the engage delay and so does nothing at

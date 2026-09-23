@@ -397,9 +397,31 @@ def _glass_body(base, box, mask, radius, scale, alpha, specular_depth,
     base.alpha_composite(layer, (box[0], box[1]))
 
 
+def _paste_button(frame, face, box, bleed, grow=1.0, lift=0.0):
+    """A button in its place; bigger and higher while the pointer is on it.
+
+    At rest it goes down exactly as it always has, so a pill nobody is
+    pointing at is the same picture, pixel for pixel, as before hover existed.
+    """
+    if abs(grow - 1.0) <= 0.004 and abs(lift) < 0.5:
+        frame.paste(face, (box[0] - bleed, box[1] - bleed), face)
+        return
+    if abs(grow - 1.0) > 0.004:
+        face = face.resize((max(1, int(round(face.size[0] * grow))),
+                            max(1, int(round(face.size[1] * grow)))),
+                           Image.LANCZOS)
+    x = int(round((box[0] + box[2]) / 2.0 - face.size[0] / 2.0))
+    y = int(round((box[1] + box[3]) / 2.0 - lift - face.size[1] / 2.0))
+    frame.paste(face, (x, y), face)
+
+
 def paint(glass, state="listening", levels=None, text="", status="",
-          label=""):
-    """One frame: the prepared glass, plus the parts that move."""
+          label="", hover=None):
+    """One frame: the prepared glass, plus the parts that move.
+
+    `hover` maps "cancel" and "accept" to (grow, turn, lift), as for the
+    correction composer: the pill's buttons answer the pointer the same way.
+    """
     frame = glass.image.copy()
     if glass.open_share < 0.98:
         # Still growing. An empty capsule opening is the whole effect; buttons
@@ -418,12 +440,13 @@ def paint(glass, state="listening", levels=None, text="", status="",
     # Left: throw this recording away. Dimmed once there is nothing to throw.
     cancel_dim = 1.0 if state in ("listening", "transcribing") \
         else theme.BUTTON_DIM
+    motion = hover or {}
+    grow, spin, lift = motion.get("cancel", (1.0, 0, 0))
     cross = button(size, "cancel", theme.CANCEL_FILL, theme.CANCEL_GLYPH,
-                   cancel_dim)
+                   cancel_dim, turn=spin)
     # The sprite is wider than the button: it carries its own shadow.
     bleed = (cross.size[0] - size) // 2
-    frame.paste(cross, (boxes["cancel"][0] - bleed, boxes["cancel"][1] - bleed),
-                cross)
+    _paste_button(frame, cross, boxes["cancel"], bleed, grow, lift)
 
     # Right: finish. It goes green for the moment before the pill leaves.
     if state == "done":
@@ -433,8 +456,8 @@ def paint(glass, state="listening", levels=None, text="", status="",
                       theme.BUTTON_DIM)
     else:
         tick = button(size, "accept", theme.ACCEPT_FILL, theme.ACCEPT_GLYPH)
-    frame.paste(tick, (boxes["accept"][0] - bleed, boxes["accept"][1] - bleed),
-                tick)
+    grow, _spin, lift = motion.get("accept", (1.0, 0, 0))
+    _paste_button(frame, tick, boxes["accept"], bleed, grow, lift)
 
     inner_left = boxes["cancel"][2] + int(round(theme.PADDING * scale))
     inner_right = boxes["accept"][0] - int(round(theme.PADDING * scale))

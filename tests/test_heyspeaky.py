@@ -893,7 +893,7 @@ class PillButtons(unittest.TestCase):
         from PIL import ImageChops
 
         real = glass.button
-        glass.button = lambda size, kind, fill, glyph, dim=1.0: Image.new(
+        glass.button = lambda size, kind, fill, glyph, dim=1.0, turn=0: Image.new(
             "RGBA", (size, size), (0, 0, 0, 0))
         try:
             for scale in (1.0, 1.25, 1.5, 2.0):
@@ -932,6 +932,43 @@ class PillButtons(unittest.TestCase):
         painted = glass.paint(full, state="listening",
                               levels=[0.5] * theme.BARS)
         self.assertNotEqual(painted.tobytes(), full.image.tobytes())
+
+    def test_a_pill_nobody_points_at_is_the_picture_it_always_was(self):
+        """Hover was added after the pill had been measured and looked at
+        live; at rest it must draw exactly what it drew before."""
+        full = self.prepared()
+        levels = [0.5] * theme.BARS
+        plain = glass.paint(full, state="listening", levels=levels)
+        at_rest = glass.paint(full, state="listening", levels=levels,
+                              hover={"cancel": (1.0, 0, 0),
+                                     "accept": (1.0, 0, 0)})
+        self.assertEqual(plain.tobytes(), at_rest.tobytes())
+
+    def test_a_button_under_the_pointer_grows_and_stays_clear_of_the_wave(self):
+        """The waveform's own guard, with each button at its largest: a
+        grown button may spread into the gap beside it, never onto a bar."""
+        from PIL import ImageChops
+        for scale in (1.0, 1.25, 2.0):
+            prepared = self.prepared(scale=scale)
+            layout = glass.wave_layout(prepared, theme.BARS)
+            first = glass.bar_left(layout, 0)
+            last = glass.bar_left(layout, theme.BARS - 1) + layout["width"]
+            rest = glass.paint(prepared, state="done")
+            for name, motion in (
+                    ("cancel", (theme.HOVER_GROW, theme.HOVER_TURN, 0)),
+                    ("accept", (theme.HOVER_GROW, 0,
+                                theme.HOVER_LIFT * scale))):
+                grown = glass.paint(prepared, state="done",
+                                    hover={name: motion})
+                changed = ImageChops.difference(grown, rest).getbbox()
+                self.assertIsNotNone(changed, "%s at %s" % (name, scale))
+                if name == "cancel":
+                    self.assertLess(changed[2], first,
+                                    "the cross reaches the wave at %s" % scale)
+                else:
+                    self.assertGreater(changed[0], last,
+                                       "the tick reaches the wave at %s"
+                                       % scale)
 
 
 from heyspeaky import sound  # noqa: E402

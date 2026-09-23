@@ -9,10 +9,12 @@ where the faults were.
     .venv\Scripts\python.exe tools\live_check.py
     .venv\Scripts\python.exe tools\live_check.py --out shot.png
 
-It reports three things the tests cannot: that the window is layered and never
-takes focus, that its corners are genuinely transparent rather than a
-rectangle of stale desktop, and that a click at the centre of each button
-reaches the callback. Exit code 0 if all of that holds.
+It reports what the tests cannot: that the window is layered and never takes
+focus, that its corners are genuinely transparent rather than a rectangle of
+stale desktop, that a click at the centre of each button reaches the
+callback, and that the real pointer over the cross makes it answer while the
+window in front stays in front. The picture is the pill twice: as it is, and
+with the pointer on the cross. Exit code 0 if all of that holds.
 """
 
 import argparse
@@ -70,10 +72,40 @@ def main():
     from PIL import ImageGrab
 
     x, y, width, height = overlay._geometry
-    shot = ImageGrab.grab(
-        bbox=(x - 40, y - 20, x + width + 40, y + height + 20),
-        all_screens=True)
-    shot.save(args.out)
+    bbox = (x - 40, y - 20, x + width + 40, y + height + 20)
+    shot = ImageGrab.grab(bbox=bbox, all_screens=True)
+
+    # The real pointer over the cross: the button has to answer it, and the
+    # window in front must stay the window in front throughout.
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = ctypes.c_void_p
+    in_front = user32.GetForegroundWindow()
+
+    class _Point(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    was_at = _Point()
+    user32.GetCursorPos(ctypes.byref(was_at))
+    cross = glass.button_boxes(overlay._glass)["cancel"]
+    user32.SetCursorPos(x + (cross[0] + cross[2]) // 2,
+                        y + (cross[1] + cross[3]) // 2)
+    for _ in range(25):
+        overlay.set_level(0.4)
+        root.update()
+        time.sleep(0.02)
+    hovered = overlay._hover
+    pointed = ImageGrab.grab(bbox=bbox, all_screens=True)
+    user32.SetCursorPos(was_at.x, was_at.y)
+    for _ in range(10):
+        root.update()
+        time.sleep(0.02)
+    kept_front = user32.GetForegroundWindow() == in_front
+
+    from PIL import Image
+    both = Image.new("RGB", (shot.size[0], shot.size[1] * 2))
+    both.paste(shot, (0, 0))
+    both.paste(pointed, (0, shot.size[1]))
+    both.save(args.out)
 
     hwnd = int(root.wm_frame(), 16)
     style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
@@ -105,9 +137,12 @@ def main():
     print("buttons take clicks      {} (want True)".format(clickable))
     print("corner is see-through    {} (want 0)".format(corner))
     print("buttons that fired       {}".format(sorted(hit)))
+    print("pointer on the cross     {} (want cancel)".format(hovered))
+    print("focus stayed where it was {} (want True)".format(kept_front))
 
     ok = (layered and unfocusable and clickable and corner == 0
-          and sorted(hit) == ["accept", "cancel"])
+          and sorted(hit) == ["accept", "cancel"] and hovered == "cancel"
+          and kept_front)
     print("RESULT:", "ok" if ok else "FAILED")
     return 0 if ok else 1
 

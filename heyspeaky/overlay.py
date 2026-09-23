@@ -351,6 +351,11 @@ class Overlay:
         self._shown_level = 0.0
         self._levels = deque([0.0] * theme.BARS, maxlen=theme.BARS)
 
+        # Which button the pointer is on, and how far each has grown, turned
+        # and risen towards it: the correction composer's buttons do the same.
+        self._hover = None
+        self._motion = {"cancel": [1.0, 0.0, 0.0], "accept": [1.0, 0.0, 0.0]}
+
         self._glass = None
         self._surface = Surface()
         self._opacity = 0.0
@@ -376,6 +381,10 @@ class Overlay:
         # is done with the blend function instead.
         if self._clickable:
             root.bind("<Button-1>", self._on_click)
+            # Pointing never focuses a window; only its drawing answers.
+            root.bind("<Motion>", self._on_motion)
+            root.bind("<Enter>", self._on_motion)
+            root.bind("<Leave>", self._on_leave)
         root.update_idletasks()
         self._apply_window_styles()
 
@@ -397,14 +406,58 @@ class Overlay:
                 self._press(name)
                 return
 
+    def _usable(self, name):
+        if name == "cancel":
+            return self._state in ("listening", "transcribing")
+        return self._state == "listening"
+
+    def _on_motion(self, event):
+        name = None
+        if self._glass is not None and self._visible:
+            for candidate, box in glass.button_boxes(self._glass).items():
+                if (box[0] <= event.x <= box[2] and box[1] <= event.y <= box[3]
+                        and self._usable(candidate)):
+                    name = candidate
+        self._set_hover(name)
+
+    def _on_leave(self, _event=None):
+        self._set_hover(None)
+
+    def _set_hover(self, name):
+        if name == self._hover:
+            return
+        self._hover = name
+        try:
+            self._root.configure(cursor="hand2" if name else "")
+        except tk.TclError:
+            pass
+
+    def _ease_buttons(self):
+        """One frame of each button moving towards how it should look."""
+        scale = self._scale
+        for name, motion in self._motion.items():
+            on = self._hover == name and self._usable(name)
+            targets = (theme.HOVER_GROW if on else 1.0,
+                       theme.HOVER_TURN if on and name == "cancel" else 0.0,
+                       theme.HOVER_LIFT * scale if on and name == "accept"
+                       else 0.0)
+            for index, target in enumerate(targets):
+                rate = 0.25 if index == 1 else 0.34
+                step = (target - motion[index]) * rate
+                motion[index] = target if abs(step) < 0.001 \
+                    else motion[index] + step
+
+    def _hover_frame(self):
+        return dict((name, (motion[0], int(round(motion[1] / 10.0)) * 10,
+                            motion[2]))
+                    for name, motion in self._motion.items())
+
     def _press(self, name):
         if name == "cancel":
             callback = self._on_cancel
-            allowed = self._state in ("listening", "transcribing")
         else:
             callback = self._on_accept
-            allowed = self._state == "listening"
-        if callback is None or not allowed:
+        if callback is None or not self._usable(name):
             return
         logger.info("Pill %s button clicked", name)
         # Off the Tk thread: the controller takes locks and stops the
@@ -453,6 +506,7 @@ class Overlay:
             text=self._text,
             status=self._status,
             label=self._label,
+            hover=self._hover_frame(),
         )
         self._present(frame)
 
@@ -474,6 +528,7 @@ class Overlay:
             self._shown_level += (target - self._shown_level) * 0.16
         if self._state == "listening":
             self._levels.append(self._shown_level)
+        self._ease_buttons()
         self._paint()
         self._anim_job = self._root.after(TICK_MS, self._tick)
 
@@ -593,6 +648,9 @@ class Overlay:
             self._stop_animation()
             self._root.withdraw()
             self._visible = False
+            self._hover = None
+            for motion in self._motion.values():
+                motion[:] = [1.0, 0.0, 0.0]
 
         if not self._visible:
             finish()
