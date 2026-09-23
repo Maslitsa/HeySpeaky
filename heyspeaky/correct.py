@@ -33,6 +33,8 @@ worth trusting if every entry in it was typed on purpose.
 
 import ctypes
 import logging
+import threading
+import time
 import tkinter as tk
 from ctypes import wintypes
 
@@ -95,6 +97,56 @@ def restore_foreground(handle):
     except Exception:
         logger.debug("SetForegroundWindow failed", exc_info=True)
         return False
+
+
+class OneAtATime(object):
+    """One correction from the key press until its box closes.
+
+    The owner's log, 22 September: Ctrl+Alt+Space asked for twice a second
+    apart, then two boxes cancelled in the same millisecond - one on top of
+    the other, twice that night. Space pressed again inside a held chord is a
+    fresh key-down, not a repeat, so the hotkey never had a reason to ignore
+    it. Two corrections at once also means two threads borrowing the
+    clipboard at once, each putting back what the other took.
+
+    The claim is taken on the key press, not when the box appears, because the
+    box only appears once Ctrl and Alt are up: the second press lands in the
+    gap before it.
+    """
+
+    # Reading the selection is the one step with no box on screen, and it
+    # gives up after the modifier timeout plus a moment for the clipboard. A
+    # claim older than this that never produced a box was lost on the way,
+    # and must not leave Ctrl+Alt+Space dead until the app is restarted.
+    STALE = 15.0
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._since = None
+        self.box = None
+
+    def begin(self, now=None):
+        """True if this press may start a correction."""
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            if self._since is not None:
+                if self.box is not None or now - self._since < self.STALE:
+                    return False
+                logger.warning("A correction never opened its box; "
+                               "starting a new one")
+            self._since = now
+            self.box = None
+            return True
+
+    def opened(self, box):
+        with self._lock:
+            if self._since is not None:
+                self.box = box
+
+    def end(self):
+        with self._lock:
+            self._since = None
+            self.box = None
 
 
 def _rgb(colour):
@@ -215,6 +267,16 @@ class CorrectionBox(object):
 
     def _px(self, value):
         return max(1, int(round(value * self.scale)))
+
+    def bring_forward(self):
+        """Ctrl+Alt+Space again while this box is open lands here."""
+        try:
+            self.top.deiconify()
+            self.top.lift()
+            self.top.focus_force()
+            self.entry.focus_set()
+        except tk.TclError:
+            pass
 
     # -- placing and dragging ---------------------------------------------
 

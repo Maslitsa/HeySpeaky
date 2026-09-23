@@ -1180,6 +1180,41 @@ class PersonalDictionary(unittest.TestCase):
         entries = dictionary.add(self.WRONG, self.NAME, entries=[])
         self.assertEqual(dictionary.apply("", entries), "")
 
+    def test_the_full_stop_selected_with_a_word_is_not_stored(self):
+        """The owner selected the last word of a sentence, full stop and all,
+        and "Мағжан." went to the model as a keyword with the dot on it."""
+        entries = dictionary.add("", self.NAME + ".", entries=[])
+        self.assertEqual(entries[0]["meant"], self.NAME)
+        entries = dictionary.add("«{}»,".format(self.WRONG), self.NAME,
+                                 entries=[])
+        self.assertEqual(entries[0]["heard"], self.WRONG)
+
+    def test_a_word_already_saved_with_its_dot_goes_out_without_it(self):
+        """His file has one already. It has to stop steering the model now,
+        not only after he happens to correct the same word again."""
+        dictionary.save([{"meant": self.NAME + ".", "hits": 1},
+                         {"meant": self.NAME, "heard": "Магжан", "hits": 1}],
+                        self.path)
+        self.assertEqual(dictionary.words(dictionary.load(self.path)),
+                         [self.NAME])
+
+    def test_punctuation_inside_a_word_is_part_of_it(self):
+        for word in ("Жан-Поль", "rock'n'roll", "Node.js", "C#", "C++",
+                     "т.е.", "e.g."):
+            self.assertEqual(dictionary.add("", word, entries=[])[0]["meant"],
+                             word)
+
+    def test_only_a_one_letter_abbreviation_keeps_its_last_dot(self):
+        """"т.е." ends in a dot because it is built of them. "Node.js" at the
+        end of a sentence does not, and neither does a plain word."""
+        for selected, stored in (("т.е.,", "т.е."), ("Node.js.", "Node.js"),
+                                 ("etc.", "etc")):
+            self.assertEqual(
+                dictionary.add("", selected, entries=[])[0]["meant"], stored)
+
+    def test_a_selection_of_nothing_but_punctuation_is_not_a_word(self):
+        self.assertEqual(dictionary.add("", " … ", entries=[]), [])
+
 
 class OldConfigsMoveForward(unittest.TestCase):
     """A measured default is worth nothing if it never reaches anyone.
@@ -1333,6 +1368,133 @@ class CorrectionKey(unittest.TestCase):
         listener = self.listener()
         self.send(listener, ("ctrl", "down"), ("alt", "down"), ("c", "down"))
         self.assertFalse(self.corrected.wait(0.3))
+
+
+try:
+    from heyspeaky import correct
+except Exception:           # no tkinter or no Pillow
+    correct = None
+
+try:
+    from heyspeaky import app as app_module
+except Exception:           # CI does not install the audio stack
+    app_module = None
+
+
+@unittest.skipIf(correct is None, "tkinter or Pillow is missing")
+class OneCorrectionAtATime(unittest.TestCase):
+    """Ctrl+Alt+Space pressed again while a correction is already under way.
+
+    From the owner's log, 22 September: "Correction asked for" twice, a
+    second apart, then two "Correction cancelled" in the same millisecond -
+    two boxes, one on top of the other, and it happened twice. Space pressed
+    again inside a held chord is a fresh key-down, not a repeat, so the
+    hotkey's own repeat guard never saw it.
+    """
+
+    def test_a_second_press_is_refused_while_the_first_is_running(self):
+        guard = correct.OneAtATime()
+        self.assertTrue(guard.begin())
+        self.assertFalse(guard.begin())
+
+    def test_the_next_one_is_allowed_once_the_box_has_closed(self):
+        guard = correct.OneAtATime()
+        guard.begin()
+        guard.end()
+        self.assertTrue(guard.begin())
+
+    def test_a_correction_that_never_opened_a_box_does_not_block_forever(self):
+        """Reading the selection is the only step without a box on screen,
+        and it gives up after a few seconds. A claim older than that has been
+        lost somewhere, and Ctrl+Alt+Space must not stay dead until restart."""
+        guard = correct.OneAtATime()
+        guard.begin(now=0.0)
+        self.assertFalse(guard.begin(now=5.0))
+        self.assertTrue(guard.begin(now=correct.OneAtATime.STALE + 1.0))
+
+    def test_an_open_box_is_never_given_up_on(self):
+        guard = correct.OneAtATime()
+        guard.begin(now=0.0)
+        guard.opened(object())
+        self.assertFalse(guard.begin(now=3600.0))
+
+
+@unittest.skipIf(app_module is None or correct is None,
+                 "the app's own packages are not installed")
+class CorrectionBoxIsNotDuplicated(unittest.TestCase):
+    """The same, through the app's own handlers, with a fake box."""
+
+    def setUp(self):
+        import types
+        self.boxes = []
+        self.refuse_to_open = False
+        test = self
+
+        class FakeBox(object):
+            def __init__(self, root, heard, on_done, scale=1.0):
+                if test.refuse_to_open:
+                    raise RuntimeError("no display")
+                self.heard = heard
+                self.on_done = on_done
+                self.raised = 0
+                test.boxes.append(self)
+
+            def bring_forward(self):
+                self.raised += 1
+
+        def slow_copy(timeout):
+            time.sleep(0.3)         # waiting for Ctrl and Alt to come up
+            return "Магжан"
+
+        for module, name, value in (
+                (correct, "CorrectionBox", FakeBox),
+                (correct, "foreground_window", lambda: None),
+                (correct, "restore_foreground", lambda handle: False),
+                (app_module.output, "copy_selection", slow_copy)):
+            self.addCleanup(setattr, module, name, getattr(module, name))
+            setattr(module, name, value)
+
+        self.app = object.__new__(app_module.App)
+        self.app.cfg = {"output": {"modifier_release_timeout": 1.0}}
+        self.app.root = None
+        self.app.overlay = types.SimpleNamespace(scale=1.0)
+        self.app.post = lambda func, *args: func(*args)
+        self.app._correction = correct.OneAtATime()
+
+    def settle(self):
+        time.sleep(0.8)
+
+    def test_two_presses_while_the_selection_is_read_open_one_box(self):
+        self.app._on_correct()
+        time.sleep(0.1)
+        self.app._on_correct()
+        self.settle()
+        self.assertEqual(len(self.boxes), 1)
+
+    def test_a_press_while_the_box_is_open_brings_it_forward(self):
+        self.app._on_correct()
+        self.settle()
+        self.app._on_correct()
+        self.settle()
+        self.assertEqual(len(self.boxes), 1)
+        self.assertEqual(self.boxes[0].raised, 1)
+
+    def test_closing_the_box_lets_the_next_press_open_another(self):
+        self.app._on_correct()
+        self.settle()
+        self.boxes[0].on_done(None)
+        self.app._on_correct()
+        self.settle()
+        self.assertEqual(len(self.boxes), 2)
+
+    def test_a_box_that_failed_to_open_does_not_block_the_next(self):
+        self.refuse_to_open = True
+        self.app._on_correct()
+        self.settle()
+        self.refuse_to_open = False
+        self.app._on_correct()
+        self.settle()
+        self.assertEqual(len(self.boxes), 1)
 
 
 @unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")

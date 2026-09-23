@@ -61,9 +61,28 @@ def _expand(path):
     return os.path.expandvars(os.path.expanduser(path))
 
 
+# What comes along when a word is selected at the end of a sentence or inside
+# quotes. Only ever cut from the ends: inside a word a dot, a hyphen or an
+# apostrophe belongs to it. The owner's first entry was "Мағжан." - selected
+# with its full stop - and it went to the model as a keyword with the dot on.
+_EDGE_MARKS = ".,;:!?…\"'«»„“”‘’()[]{}—–-¡¿ \t\r\n "
+
+
 def _clean(word):
-    """A word as it will be stored: trimmed, with the spaces inside kept."""
-    return unicodedata.normalize("NFC", (word or "").strip())
+    """A word as it will be stored: trimmed, with the spaces inside kept.
+
+    "т.е." and "e.g." keep their last dot, because it is the same dot they
+    are made of: the stretch before it is a single letter after another dot.
+    "Node.js." at the end of a sentence loses it, and so does a plain word.
+    """
+    word = unicodedata.normalize("NFC", word or "")
+    core = word.strip(_EDGE_MARKS)
+    if "." in core:
+        end = word.index(core) + len(core)
+        tail = core.rsplit(".", 1)[1]
+        if word[end:end + 1] == "." and len(tail) == 1 and tail.isalpha():
+            core += "."
+    return core
 
 
 def load(path=None):

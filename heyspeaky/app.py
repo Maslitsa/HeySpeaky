@@ -104,6 +104,7 @@ class App:
         self._last_peak_db = None
         self._max_timer = None
         self._quitting = False
+        self._correction = correct.OneAtATime()
 
         self.root = tk.Tk()
         self.root.title("HeySpeaky")
@@ -363,10 +364,22 @@ class App:
         watch the clipboard, which is far too long to sit in a keyboard hook:
         a low-level hook that overruns is the one Windows silently throws
         away. See the watchdog in hotkey.py for what that costs.
+
+        A second press while a correction is under way does not start another
+        one: see `correct.OneAtATime` for the night that opened two boxes.
         """
+        if not self._correction.begin():
+            logger.info("Correction already open; bringing it forward")
+            self.post(self._raise_correction)
+            return
         threading.Thread(
             target=self._collect_correction, name="correct", daemon=True
         ).start()
+
+    def _raise_correction(self):
+        box = self._correction.box
+        if box is not None:
+            box.bring_forward()
 
     def _collect_correction(self):
         came_from = correct.foreground_window()
@@ -382,15 +395,19 @@ class App:
     def _ask_correction(self, heard, came_from):
         """Opens the box. On the Tk thread, which owns every window here."""
         try:
-            correct.CorrectionBox(
+            box = correct.CorrectionBox(
                 self.root, heard,
                 lambda meant: self._correction_given(heard, meant, came_from),
                 scale=self.overlay.scale,
             )
         except Exception:
             logger.exception("Could not open the correction box")
+            self._correction.end()
+            return
+        self._correction.opened(box)
 
     def _correction_given(self, heard, meant, came_from):
+        self._correction.end()
         if meant is None:
             logger.info("Correction cancelled")
             correct.restore_foreground(came_from)
