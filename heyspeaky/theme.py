@@ -9,7 +9,7 @@ button. Nothing else. Whatever you said lands in the window you were typing
 in, so the pill has no reason to repeat it back at you.
 """
 
-# The correction box, Ctrl+Alt+Space. Same materials as the pill - the tint,
+# The correction box, Ctrl+Alt+Win. Same materials as the pill - the tint,
 # the bright top edge, the specular - so the two read as one app. It is a card
 # rather than a capsule, so its corner is a fixed radius instead of half its
 # height, and it is a window you type into, so it is nearly opaque where the

@@ -1315,6 +1315,20 @@ class OldConfigsMoveForward(unittest.TestCase):
         self.assertFalse(changed)
         self.assertEqual(cfg, {})
 
+    def test_the_old_correction_key_moves_to_the_new_one(self):
+        """"space" was the shipped default, and it is another program's
+        shortcut: a config saved while it was the default keeps it forever."""
+        cfg, changed = config_module._migrate(
+            {"hotkey": {"correct_key": "space"}})
+        self.assertTrue(changed)
+        self.assertEqual(cfg["hotkey"]["correct_key"],
+                         config_module.DEFAULTS["hotkey"]["correct_key"])
+
+    def test_a_correction_key_somebody_chose_is_left_alone(self):
+        cfg, changed = config_module._migrate({"hotkey": {"correct_key": "f9"}})
+        self.assertFalse(changed)
+        self.assertEqual(cfg["hotkey"]["correct_key"], "f9")
+
     def test_no_superseded_order_is_still_the_current_default(self):
         """A guard for whoever edits the list next: retiring the order that is
         currently shipped would rewrite every config on every start."""
@@ -1382,6 +1396,7 @@ class CorrectionKey(unittest.TestCase):
         listener = self.listener()
         self.send(listener, ("ctrl", "down"), ("alt", "down"))
         listener._engaged = True
+        listener._press_started = time.monotonic() - 5
         self.send(listener, ("space", "down"))
         self.assertTrue(self.cancelled.wait(2.0))
         self.assertFalse(self.corrected.is_set())
@@ -1420,6 +1435,123 @@ class CorrectionKey(unittest.TestCase):
         listener = self.listener()
         self.send(listener, ("ctrl", "down"), ("alt", "down"), ("c", "down"))
         self.assertFalse(self.corrected.wait(0.3))
+
+
+@unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
+class CorrectionOnTheWindowsKey(CorrectionKey):
+    """Ctrl+Alt+Win, because Ctrl+Alt+Space belongs to another program.
+
+    The owner pressed Ctrl+Alt+Space and a desktop assistant opened its own
+    window: a global shortcut registered by another app gets the keys first,
+    and a hook that only watches cannot stop it. Ctrl+Alt+Win is nobody's.
+    Pressed on his machine, fast and slow and Win first, it did not open the
+    Start menu either - Win alone did, which is how the check was checked.
+    """
+
+    def listener(self, correct_key="windows", on_correct=True):
+        return CorrectionKey.listener(self, correct_key, on_correct)
+
+    # The inherited tests press Space; with this key Space is just a key.
+    test_space_inside_the_chord_asks_for_a_correction = None
+    test_correcting_twice_does_not_go_hands_free = None
+    test_holding_space_asks_once = None
+    test_the_other_spelling_of_the_key_counts = None
+
+    def test_it_is_the_default(self):
+        self.assertEqual(config_module.DEFAULTS["hotkey"]["correct_key"],
+                         "windows")
+
+    def test_ctrl_alt_win_asks_for_a_correction(self):
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                  ("left windows", "down"))
+        self.assertTrue(self.corrected.wait(2.0))
+        self.assertFalse(self.cancelled.is_set())
+
+    def test_the_right_win_key_counts_too(self):
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                  ("right windows", "down"))
+        self.assertTrue(self.corrected.wait(2.0))
+
+    def test_win_pressed_first_counts_too(self):
+        """Three keys pressed "together" arrive in any order."""
+        listener = self.listener()
+        self.send(listener, ("left windows", "down"), ("ctrl", "down"),
+                  ("alt", "down"))
+        self.assertTrue(self.corrected.wait(2.0))
+
+    def test_holding_the_chord_asks_once(self):
+        listener = self.listener()
+        fired = []
+        listener._on_correct = lambda: fired.append(1)
+        self.send(listener, ("ctrl", "down"), ("alt", "down"))
+        for _ in range(5):
+            self.send(listener, ("left windows", "down"))
+        time.sleep(0.2)
+        self.assertEqual(len(fired), 1)
+
+    def test_correcting_twice_does_not_go_hands_free(self):
+        listener = self.listener()
+        for _ in range(2):
+            self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                      ("left windows", "down"), ("left windows", "up"),
+                      ("alt", "up"), ("ctrl", "up"))
+        self.assertTrue(self.corrected.wait(2.0))
+        self.assertFalse(self.latched.wait(0.3))
+
+    def test_win_just_after_the_recording_started_is_still_a_correction(self):
+        """Ctrl+Alt a little ahead of Win is enough to start a recording.
+        That was one gesture, and what it asked for was the box."""
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"))
+        listener._engaged = True
+        listener._press_started = time.monotonic() - 0.4
+        self.send(listener, ("left windows", "down"))
+        self.assertTrue(self.corrected.wait(2.0))
+        self.assertTrue(self.cancelled.wait(2.0))    # the stray recording
+
+    def test_space_is_now_just_another_key(self):
+        """It is another program's shortcut now, and cancels as any key."""
+        listener = self.listener()
+        self.send(listener, ("ctrl", "down"), ("alt", "down"),
+                  ("space", "down"))
+        self.assertFalse(self.corrected.wait(0.3))
+
+
+@unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
+class ACancelledChordStaysCancelled(unittest.TestCase):
+    """The owner's log, 22 September, 22:52:47: a recording cancelled by the
+    Win key, and 0.37 seconds later "Recording started" again - and then the
+    same once more. Ctrl and Alt were still down after Win came up, and the
+    chord armed itself afresh as if they had just been pressed."""
+
+    def test_releasing_the_other_key_does_not_start_another_recording(self):
+        engaged = []
+        listener = HotkeyListener(
+            {
+                "engage_delay": 0.1,
+                "tap_max": 0.0,
+                "accept_altgr": False,
+                "cancel_on_other_key": True,
+                "double_tap_gap": 0.5,
+                "health_check_seconds": 0,
+                "min_reinstall_seconds": 60,
+                "correct_key": "",
+            },
+            on_engage=lambda: engaged.append(1),
+            on_tap=lambda: None,
+            on_hold_release=lambda: None,
+            on_cancel=lambda: None,
+        )
+        for name, kind in (("ctrl", "down"), ("alt", "down")):
+            listener._on_key_event(_Event(name, kind))
+        time.sleep(0.3)
+        self.assertEqual(len(engaged), 1)
+        for name, kind in (("c", "down"), ("c", "up")):
+            listener._on_key_event(_Event(name, kind))
+        time.sleep(0.4)                  # Ctrl and Alt still held
+        self.assertEqual(len(engaged), 1)
 
 
 try:

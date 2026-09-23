@@ -22,7 +22,7 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
 | `heyspeaky/languages.py` | the languages list and its tray grouping |
 | `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
-| `heyspeaky/correct.py` | Ctrl+Alt+Space: the box that asks what it should have said |
+| `heyspeaky/correct.py` | Ctrl+Alt+Win: the box that asks what it should have said |
 | `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
 | `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
 | `heyspeaky/diagnostics.py` | the problem report people send you |
@@ -165,17 +165,29 @@ without jargon, and say what you actually did and what you could not do.
   `dictionary.PATH` at an empty file for the whole run, because that file is
   read fresh on every transcription: without it the keyword tests pass on a
   clean CI runner and fail on any machine that has actually used the feature.
-- **Ctrl+Alt+Space is the only key carved out of `cancel_on_other_key`, and
-  only while nothing is being recorded.** During a recording Space still
-  means somebody is typing a shortcut and the recording stops, which is the
-  behaviour that was there first and is worth keeping. The correction also
-  marks the chord dirty, because two corrections in a row are two chords
-  released quickly - the exact shape of the double tap that goes hands-free.
-  And it is one correction at a time (`correct.OneAtATime`), claimed on the
-  key press rather than when the box appears: the box waits for Ctrl and Alt
-  to come up, and a second Space inside a held chord is a fresh key-down,
-  not a repeat. The owner's log showed two boxes open on top of each other.
-  A press while the box is open brings it forward instead.
+- **The correction key is Ctrl+Alt+Win, not Ctrl+Alt+Space.** Space was the
+  first choice, and on the owner's machine another program owns
+  Ctrl+Alt+Space as a global shortcut: it gets the keys first, and a hook
+  that only watches cannot take them back. Pressed on his machine, fast,
+  slow and Win first, Ctrl+Alt+Win did not open the Start menu (Win alone
+  did, which is how the check was checked). `_migrate` moves a stored
+  "space" to the new default. The three keys are accepted in any order.
+- **The correction key is the only one carved out of `cancel_on_other_key`**,
+  while nothing is being recorded or within `CHORD_SLOP` of a recording the
+  same chord started - Ctrl+Alt a little ahead of Win is one gesture, and it
+  asked for the box. Later in a recording it cancels like any other key.
+  The correction also marks the chord dirty, because two corrections in a
+  row are two chords released quickly - the exact shape of the double tap
+  that goes hands-free. And it is one correction at a time
+  (`correct.OneAtATime`), claimed on the key press rather than when the box
+  appears: the box waits for Ctrl and Alt to come up, and the key pressed
+  again inside a held chord is a fresh key-down, not a repeat. The owner's
+  log showed two boxes open on top of each other. A press while the box is
+  open brings it forward instead.
+- **A chord that has been used stays used until Ctrl and Alt come up**
+  (`_spend_chord_locked`). Clearing it on a cancel let the chord re-arm the
+  moment the other key was released: the owner's log has a recording
+  cancelled by Win and a new one starting 0.37 s later, twice.
 - **The correction box takes focus and the pill never does.** They are
   opposite windows and both are right: dictation is worthless if it steals
   the caret, and a box you cannot type into is worthless too. The box is an

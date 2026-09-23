@@ -213,9 +213,10 @@ DEFAULTS = {
         # Held with the chord, this key asks what the selected words should
         # have been and remembers the answer. See heyspeaky/correct.py. It is
         # exempt from cancel_on_other_key, but only while nothing is being
-        # recorded: during a recording Space still means a shortcut is being
-        # typed. "" turns it off.
-        "correct_key": "space",
+        # recorded, or in the first moment of a recording the chord itself
+        # started. It was "space" until Ctrl+Alt+Space turned out to belong
+        # to another program. "" turns it off.
+        "correct_key": "windows",
         # How often to check the keyboard hook is still alive. Windows drops
         # low-level hooks silently, after a sleep or if a callback ever
         # overruns its timeout, and the only symptom is that Ctrl+Alt stops
@@ -347,6 +348,10 @@ SUPERSEDED_LANGUAGES = [
     ["en", "ru", "de", "kk"],
 ]
 
+# The same, for the correction key: "space" shipped as the default and is
+# another program's global shortcut on the owner's machine.
+SUPERSEDED_CORRECT_KEYS = ["space"]
+
 
 def _migrate(user_config):
     """Brings an old config.json forward. Returns it and whether it changed.
@@ -365,6 +370,15 @@ def _migrate(user_config):
             changed = True
             logger.info("Upgraded the language order from %s to %s",
                         stored, wanted)
+    hotkey = user_config.get("hotkey") or {}
+    stored_key = hotkey.get("correct_key")
+    if stored_key in SUPERSEDED_CORRECT_KEYS:
+        wanted_key = DEFAULTS["hotkey"]["correct_key"]
+        if stored_key != wanted_key:
+            hotkey["correct_key"] = wanted_key
+            changed = True
+            logger.info("Moved the correction key from %s to %s",
+                        stored_key, wanted_key)
     return user_config, changed
 
 

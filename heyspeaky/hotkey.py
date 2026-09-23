@@ -124,10 +124,23 @@ def _cursor_position():
         return None
 
 
-# Ctrl+Alt+Space asks what the last words should have been. The names the
-# keyboard library uses for one key are not stable across layouts, so both
-# spellings are here.
-CORRECTION_KEYS = {"space", "spacebar"}
+# Held with Ctrl+Alt, this asks what the selected words should have been.
+# It was Space until the owner found Ctrl+Alt+Space already taken by another
+# program on his machine: a shortcut registered with Windows reaches its
+# owner first, and a hook that only watches cannot take it back. Ctrl+Alt+Win
+# is nobody's, and pressed there it did not open the Start menu. The keyboard
+# library names one key several ways, so each setting brings its spellings.
+CORRECTION_KEYS = {
+    "windows": frozenset({"windows", "left windows", "right windows"}),
+    "space": frozenset({"space", "spacebar"}),
+}
+
+# Three keys pressed "together" land a little apart, and Ctrl+Alt ahead of
+# the third by more than the engage delay has already started a recording.
+# A correction key this soon after the chord began is part of the same
+# gesture: the recording is dropped and the box opens. Later than this it is
+# somebody who was dictating, and the key cancels as any other would.
+CHORD_SLOP = 1.0
 
 CTRL_KEYS = {"ctrl", "left ctrl", "right ctrl"}
 ALT_KEYS = {"alt", "left alt", "right alt"}
@@ -154,13 +167,15 @@ class HotkeyListener:
         # One key has several names depending on the layout, so a config
         # naming any of them accepts all of them. An empty value turns the
         # correction key off without disturbing anything else.
-        wanted = str(config.get("correct_key", "space")).lower().strip()
-        if not wanted:
-            self._correct_keys = frozenset()
-        elif wanted in CORRECTION_KEYS:
-            self._correct_keys = CORRECTION_KEYS
-        else:
-            self._correct_keys = frozenset([wanted])
+        wanted = str(config.get("correct_key", "windows")).lower().strip()
+        self._correct_keys = frozenset([wanted]) if wanted else frozenset()
+        for names in CORRECTION_KEYS.values():
+            if wanted in names:
+                self._correct_keys = names
+        # Set once the correction has fired for the key being held, so that
+        # neither Windows' key repeat nor the other two keys arriving after it
+        # can ask twice.
+        self._correction_fired = False
 
         self._lock = threading.RLock()
         self._pressed = set()
@@ -457,26 +472,36 @@ class HotkeyListener:
                 self._classify(k) == "other" for k in self._pressed
             )
 
-            # Ctrl+Alt+Space is the correction key. It is checked before the
-            # cancel rule below and only when nothing is being recorded, so
-            # that during a recording Space still means "I am typing a
-            # shortcut, stop". Marking the chord dirty stops the release from
-            # counting as a tap, which would otherwise go hands-free the
-            # moment somebody corrected two words in a row.
+            # Ctrl+Alt+Win is the correction chord, in whichever order the
+            # three arrive. It is checked before the cancel rule below, and
+            # never during a hands-free recording or deep into a held one:
+            # there the key means "stop", as any other key does. Marking the
+            # chord dirty stops the release from counting as a tap, which
+            # would otherwise go hands-free the moment somebody corrected two
+            # words in a row.
+            holding_key = any(k in self._correct_keys for k in self._pressed)
+            if not holding_key:
+                self._correction_fired = False
             if (
                 self._on_correct is not None
-                and name in self._correct_keys
-                and event.event_type == keyboard.KEY_DOWN
-                and not repeat
-                and not self._engaged
-                and not self._latched
+                and holding_key
                 and has_ctrl
                 and has_alt
+                and event.event_type == keyboard.KEY_DOWN
+                and not repeat
+                and not self._correction_fired
+                and not self._latched
+                and (not self._engaged or time.monotonic()
+                     - self._press_started < CHORD_SLOP)
             ):
-                self._chord_dirty = True
-                self._cancel_timer()
-                self._chord_taps = []
-                logger.info("Correction asked for")
+                self._correction_fired = True
+                dropped = self._engaged
+                self._spend_chord_locked()
+                logger.info("Correction asked for%s",
+                            " (dropping the recording it had just started)"
+                            if dropped else "")
+                if dropped:
+                    self._fire(self._on_cancel)
                 self._fire(self._on_correct)
                 return
 
@@ -489,7 +514,7 @@ class HotkeyListener:
                 and event.event_type == keyboard.KEY_DOWN
             ):
                 logger.info("Cancelled by '%s'", name)
-                self._reset_locked()
+                self._spend_chord_locked()
                 self._fire(self._on_cancel)
                 return
 
@@ -556,6 +581,21 @@ class HotkeyListener:
         self._combo_active = False
         self._engaged = False
         self._chord_dirty = False
+        self._chord_taps = []
+
+    def _spend_chord_locked(self):
+        """This press of Ctrl+Alt has been used; nothing more comes of it.
+
+        The chord stays marked as active, so that letting go of the other key
+        while Ctrl and Alt are still down is not mistaken for a fresh press.
+        Clearing it instead is what the owner's log caught on 22 September: a
+        recording cancelled by the Win key at 22:52:47, and a new one started
+        0.37 seconds later by the same unbroken Ctrl+Alt - twice.
+        """
+        self._cancel_timer()
+        self._engaged = False
+        self._combo_active = True
+        self._chord_dirty = True
         self._chord_taps = []
 
     def _start_timer(self):

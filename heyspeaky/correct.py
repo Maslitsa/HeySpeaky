@@ -1,4 +1,4 @@
-r"""Ctrl+Alt+Space: say what the words should have been.
+r"""Ctrl+Alt+Win: say what the words should have been.
 
 The owner asked for this in so many words: mark the part that came out wrong,
 type the right version over it, and stop having to do it again. What it can
@@ -102,9 +102,9 @@ def restore_foreground(handle):
 class OneAtATime(object):
     """One correction from the key press until its box closes.
 
-    The owner's log, 22 September: Ctrl+Alt+Space asked for twice a second
+    The owner's log, 22 September: the correction key asked for twice a second
     apart, then two boxes cancelled in the same millisecond - one on top of
-    the other, twice that night. Space pressed again inside a held chord is a
+    the other, twice that night. The key pressed again inside a held chord is a
     fresh key-down, not a repeat, so the hotkey never had a reason to ignore
     it. Two corrections at once also means two threads borrowing the
     clipboard at once, each putting back what the other took.
@@ -117,7 +117,7 @@ class OneAtATime(object):
     # Reading the selection is the one step with no box on screen, and it
     # gives up after the modifier timeout plus a moment for the clipboard. A
     # claim older than this that never produced a box was lost on the way,
-    # and must not leave Ctrl+Alt+Space dead until the app is restarted.
+    # and must not leave Ctrl+Alt+Win dead until the app is restarted.
     STALE = 15.0
 
     def __init__(self):
@@ -269,7 +269,7 @@ class CorrectionBox(object):
         return max(1, int(round(value * self.scale)))
 
     def bring_forward(self):
-        """Ctrl+Alt+Space again while this box is open lands here."""
+        """Ctrl+Alt+Win again while this box is open lands here."""
         try:
             self.top.deiconify()
             self.top.lift()

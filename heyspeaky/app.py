@@ -358,7 +358,7 @@ class App:
     # -- corrections -------------------------------------------------------
 
     def _on_correct(self):
-        """Ctrl+Alt+Space, off the keyboard thread.
+        """Ctrl+Alt+Win, off the keyboard thread.
 
         Reading the selection has to wait for Ctrl and Alt to come up and then
         watch the clipboard, which is far too long to sit in a keyboard hook:
