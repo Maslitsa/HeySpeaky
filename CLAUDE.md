@@ -224,6 +224,15 @@ without jargon, and say what you actually did and what you could not do.
   was selected, leaves the old contents sitting there looking like a
   selection - sends Ctrl+C only once Ctrl and Alt are up, and puts back what
   was there. The same modifier wait is why `deliver` exists in that shape.
+  "Up" means what Windows says (`GetAsyncKeyState`), not the keyboard
+  library's list of held keys, which goes stale when a release never reaches
+  its hook. Ctrl+C goes by key code, a step at a time, and is tried once more
+  if the clipboard's sequence number never moved. Every read logs a line -
+  how many characters, from what class of window, whether the window
+  answered - and never the text. The owner had nine empty boxes in a row on
+  23 September and the log could not say why; simulated keys could not
+  reproduce it faithfully either, because the library drops some injected
+  events. That line is how the next one gets explained.
 - **OpenAI is the default and local is a fallback.** Measured on the owner's
   laptop: OpenAI got a four-language clip completely right; local `base` lost
   most of the Russian and Kazakh, `small` took 4-7 s, `large-v3-turbo` 17-19 s.

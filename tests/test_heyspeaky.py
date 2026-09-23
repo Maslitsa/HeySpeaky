@@ -1795,6 +1795,117 @@ class CorrectionBoxIsNotDuplicated(unittest.TestCase):
 
 
 @unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
+class ReadingTheSelection(unittest.TestCase):
+    """Ctrl+Alt+Win, and the selected words have to reach the box.
+
+    The owner selected text, pressed the chord nine times on 23 September
+    and got an empty box every time. Nothing in the log said why. These hold
+    the parts of the path that can be held without a real keyboard: when the
+    keys count as up, how Ctrl+C is sent and retried, and that the log says
+    what happened without saying what the text was.
+    """
+
+    WORD = "Маржан"
+
+    def setUp(self):
+        from heyspeaky import output
+        self.output = output
+        self.clipboard = {"text": "what was there before", "seq": 1}
+        self.sent = []
+        self.answers = []       # what each Ctrl+C does to the clipboard
+
+        def clear():
+            self.clipboard.update(text="", seq=self.clipboard["seq"] + 1)
+            return True
+
+        def send():
+            self.sent.append(1)
+            answer = self.answers.pop(0) if self.answers else None
+            if answer is not None:
+                self.clipboard.update(text=answer,
+                                      seq=self.clipboard["seq"] + 1)
+
+        def put(text):
+            self.clipboard.update(text=text, seq=self.clipboard["seq"] + 1)
+            return True
+
+        for name, value in (
+                ("read_clipboard", lambda: self.clipboard["text"]),
+                ("clear_clipboard", clear),
+                ("copy_to_clipboard", put),
+                ("_clipboard_sequence", lambda: self.clipboard["seq"]),
+                ("_send_copy", send),
+                ("_foreground_class", lambda: "Notepad"),
+                ("wait_for_modifiers_released", lambda timeout: True)):
+            self.addCleanup(setattr, output, name, getattr(output, name, None))
+            setattr(output, name, value)
+
+    def test_the_selection_comes_back_and_the_clipboard_is_restored(self):
+        self.answers = [self.WORD]
+        self.assertEqual(self.output.copy_selection(1.0, settle=0.2),
+                         self.WORD)
+        self.assertEqual(self.clipboard["text"], "what was there before")
+
+    def test_a_copy_that_never_arrived_is_tried_again(self):
+        """A Ctrl+C the window never acted on leaves the clipboard exactly as
+        it was. One more try costs a fraction of a second; an empty box
+        costs the whole correction."""
+        self.answers = [None, self.WORD]
+        self.assertEqual(self.output.copy_selection(1.0, settle=0.15),
+                         self.WORD)
+        self.assertEqual(len(self.sent), 2)
+
+    def test_a_window_that_answered_with_nothing_is_not_asked_twice(self):
+        """It copied, and there was no text: nothing was selected."""
+        self.answers = [""]
+        self.assertEqual(self.output.copy_selection(1.0, settle=0.15), "")
+        self.assertEqual(len(self.sent), 1)
+
+    def test_the_log_says_how_much_and_from_where_but_not_what(self):
+        self.answers = [self.WORD]
+        with self.assertLogs("heyspeaky.output", level="INFO") as logs:
+            self.output.copy_selection(1.0, settle=0.2)
+        said = "\n".join(logs.output)
+        self.assertIn("6 chars", said)
+        self.assertIn("Notepad", said)
+        self.assertNotIn(self.WORD, said)
+
+    def test_keys_count_as_up_when_windows_says_so(self):
+        """Not when the keyboard library's own list says so. That list is
+        kept from the events its hook has seen, and a release that never
+        reached the hook - after Ctrl+Alt+Del or Win+L, or an injected event
+        the library chose to drop - leaves a key held in it for good."""
+        import keyboard
+        stale = keyboard.is_pressed
+        self.addCleanup(setattr, keyboard, "is_pressed", stale)
+        keyboard.is_pressed = lambda name: True
+        real = hotkey._key_down
+        self.addCleanup(setattr, hotkey, "_key_down", real)
+        hotkey._key_down = lambda vk: False
+        started = time.monotonic()
+        self.assertTrue(hotkey.wait_for_modifiers_released(1.0))
+        self.assertLess(time.monotonic() - started, 0.5)
+
+    def test_a_key_that_is_really_held_is_waited_for(self):
+        held = {0x5B}                       # the left Win key
+        real = hotkey._key_down
+        self.addCleanup(setattr, hotkey, "_key_down", real)
+        hotkey._key_down = lambda vk: vk in held
+        threading.Timer(0.15, held.clear).start()
+        started = time.monotonic()
+        self.assertTrue(hotkey.wait_for_modifiers_released(2.0))
+        self.assertGreaterEqual(time.monotonic() - started, 0.12)
+
+    def test_giving_up_names_the_key(self):
+        real = hotkey._key_down
+        self.addCleanup(setattr, hotkey, "_key_down", real)
+        hotkey._key_down = lambda vk: vk == 0x12      # Alt, for ever
+        with self.assertLogs("heyspeaky.hotkey", level="WARNING") as logs:
+            self.assertFalse(hotkey.wait_for_modifiers_released(0.1))
+        self.assertIn("alt", "\n".join(logs.output))
+
+
+@unittest.skipIf(HotkeyListener is None, "the keyboard package is missing")
 class HookWatchdog(unittest.TestCase):
     """When the watchdog may replace the hook, and when it must not.
 

@@ -45,6 +45,21 @@ _kernel32.GlobalUnlock.argtypes = [wintypes.HANDLE]
 _kernel32.GlobalUnlock.restype = wintypes.BOOL
 _kernel32.GlobalFree.argtypes = [wintypes.HANDLE]
 _kernel32.GlobalFree.restype = wintypes.HANDLE
+_user32.GetClipboardSequenceNumber.argtypes = []
+_user32.GetClipboardSequenceNumber.restype = wintypes.DWORD
+_user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD,
+                                ctypes.c_size_t]
+_user32.keybd_event.restype = None
+_user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
+_user32.MapVirtualKeyW.restype = wintypes.UINT
+_user32.GetForegroundWindow.restype = wintypes.HWND
+_user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR,
+                                  ctypes.c_int]
+_user32.GetClassNameW.restype = ctypes.c_int
+
+VK_CONTROL = 0x11
+VK_C = 0x43
+KEYEVENTF_KEYUP = 0x0002
 
 
 def copy_to_clipboard(text):
@@ -125,7 +140,42 @@ def clear_clipboard():
         _user32.CloseClipboard()
 
 
-def copy_selection(modifier_timeout=5.0, settle=0.4):
+def _clipboard_sequence():
+    """A number Windows moves on every time anything writes the clipboard."""
+    try:
+        return int(_user32.GetClipboardSequenceNumber())
+    except Exception:
+        return 0
+
+
+def _send_copy():
+    """Ctrl+C, by key code, with a moment between each step.
+
+    By code rather than by the name "c": a name is looked up in tables the
+    keyboard library built from whichever layout was active when it loaded,
+    and the owner types in four languages. And a step at a time rather than
+    all four in one burst, which some windows take as a key that was never
+    really held.
+    """
+    for code, up in ((VK_CONTROL, False), (VK_C, False), (VK_C, True),
+                     (VK_CONTROL, True)):
+        _user32.keybd_event(code, _user32.MapVirtualKeyW(code, 0),
+                            KEYEVENTF_KEYUP if up else 0, 0)
+        time.sleep(0.012)
+
+
+def _foreground_class():
+    """What kind of window is in front: its class, never its title, which
+    can be the name of somebody's document."""
+    try:
+        buffer = ctypes.create_unicode_buffer(128)
+        _user32.GetClassNameW(_user32.GetForegroundWindow(), buffer, 128)
+        return buffer.value or "?"
+    except Exception:
+        return "?"
+
+
+def copy_selection(modifier_timeout=5.0, settle=0.6, tries=2):
     """Whatever is selected in the window in front, via Ctrl+C.
 
     There is no way to read another program's selection directly, so this
@@ -135,25 +185,49 @@ def copy_selection(modifier_timeout=5.0, settle=0.4):
 
     Ctrl+C cannot be sent while Ctrl+Alt is still held, for the same reason
     `deliver` waits: the target would see Ctrl+Alt+C.
+
+    Whether the window acted on it is read off the clipboard's sequence
+    number. A Ctrl+C that never arrived leaves it where it was, and is tried
+    once more; a window that answered with no text had nothing selected, and
+    is not asked again. The owner got an empty box nine times in a row with
+    nothing in the log to say which of those it was, so it says now - how
+    much, from what kind of window, never the words themselves.
     """
     previous = read_clipboard()
-    wait_for_modifiers_released(modifier_timeout)
-    clear_clipboard()
-    try:
-        keyboard.send("ctrl+c")
-    except Exception:
-        logger.exception("Could not send Ctrl+C")
-        if previous:
-            copy_to_clipboard(previous)
-        return ""
+    started = time.monotonic()
+    released = wait_for_modifiers_released(modifier_timeout)
+    waited = time.monotonic() - started
 
-    deadline = time.monotonic() + settle
     selection = ""
-    while time.monotonic() < deadline:
-        selection = read_clipboard()
-        if selection:
+    answered = False
+    attempt = 0
+    for attempt in range(1, max(1, tries) + 1):
+        clear_clipboard()
+        before = _clipboard_sequence()
+        try:
+            _send_copy()
+        except Exception:
+            logger.exception("Could not send Ctrl+C")
             break
-        time.sleep(0.02)
+        deadline = time.monotonic() + settle
+        while time.monotonic() < deadline:
+            if _clipboard_sequence() != before:
+                answered = True
+                selection = read_clipboard()
+                if selection:
+                    break
+            time.sleep(0.02)
+        if selection or answered:
+            break
+        time.sleep(0.05)
+
+    logger.info(
+        "Selection: %d chars from %s, %d %s; keys up after %.2fs%s; "
+        "the window %s",
+        len(selection.strip()), _foreground_class(), attempt,
+        "try" if attempt == 1 else "tries", waited,
+        "" if released else " (gave up waiting)",
+        "answered" if answered else "never answered")
 
     # Put back what the person had, whether or not anything was selected.
     if previous:

@@ -624,16 +624,43 @@ class HotkeyListener:
         threading.Thread(target=callback, daemon=True).start()
 
 
+# The modifiers a keystroke we send must not land on top of, by the virtual
+# key codes Windows itself uses for them.
+_MODIFIER_KEYS = (("ctrl", (0x11,)), ("alt", (0x12,)), ("shift", (0x10,)),
+                  ("windows", (0x5B, 0x5C)))
+
+
+def _key_down(vk):
+    """Whether Windows says this key is down at this moment."""
+    try:
+        return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
+    except Exception:
+        return False
+
+
+def held_modifiers():
+    """The modifiers Windows says are held, by name."""
+    return [name for name, codes in _MODIFIER_KEYS
+            if any(_key_down(code) for code in codes)]
+
+
 def wait_for_modifiers_released(timeout=5.0):
-    """Blocks until Ctrl/Alt/Shift/Win are all up, or the timeout expires."""
+    """Blocks until Ctrl/Alt/Shift/Win are all up, or the timeout expires.
+
+    It asks Windows, not the keyboard library. The library keeps its own list
+    of held keys, built from the events its hook has seen, and a release that
+    never reached the hook - after Ctrl+Alt+Del or Win+L, or an injected event
+    the library decided to drop - leaves that key held in its list for good.
+    Seen on the owner's machine with a simulated chord: every key released,
+    and the library still had a modifier down five seconds later.
+    """
     deadline = time.monotonic() + timeout
-    watched = ("ctrl", "alt", "shift", "windows")
-    while time.monotonic() < deadline:
-        try:
-            if not any(keyboard.is_pressed(key) for key in watched):
-                return True
-        except (ValueError, ImportError):
+    while True:
+        held = held_modifiers()
+        if not held:
             return True
+        if time.monotonic() >= deadline:
+            logger.warning("Modifiers still held after %.1fs: %s", timeout,
+                           ", ".join(held))
+            return False
         time.sleep(0.02)
-    logger.warning("Modifiers still held after %.1fs", timeout)
-    return False
