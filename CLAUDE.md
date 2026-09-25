@@ -241,6 +241,30 @@ without jargon, and say what you actually did and what you could not do.
   panel drew nothing at all, and only `tools/panel_check.py` showed it. The
   tray icon is the waveform: white, the gradient while recording, grey dots
   while paused.
+- **There are two looks, and the glass stays exactly as it was.** The
+  owner sent a reel of a macOS dictation app, liked its pill, and asked for
+  it as a second look to try - "keep the current one too". Mono
+  (`overlay.style: "mono"`, switched in the tray panel under Look) is a
+  black capsule with eight bars and nothing to click: red while listening,
+  blue with a travelling wave while thinking, shrinking away when the words
+  land, and it appears just above the mouse pointer and stays there. All of
+  it was measured off the reel's frames, not guessed: the macOS window
+  buttons (12 points, 20 apart) made 3.0 pixels of the video a point, which
+  put the pill at 108 x 58 - the same height as the glass, and less than
+  half its length, which is what the owner meant by ours being "too big".
+  Its colours are the medians of its pixels, and the pointer offset (25
+  right, 12 above) comes from the frames where the pointer shows. The
+  numbers are in `theme.py` under `MONO_`. Every click passes through it,
+  since it has no buttons. `tools/live_check.py --style mono` puts it on
+  the real screen and checks focus, click-through and the pointer.
+- **The mono sound is rebuilt from the reel, not copied from it.** It
+  played twice in the reel, identically, the moment the words landed: two
+  notes a fourth apart, about 500 and 670 Hz, six plucks over a fifth of a
+  second, each gone in 5-9 ms. `sound.VOICES["blip"]` is those numbers -
+  every start, pitch, loudness and decay read off the recording - and its
+  envelope matches the original at 0.94. The end sound is "auto" by
+  default: blip with mono, drip with the glass; `_migrate` moves a stored
+  "drip", the old default, to "auto".
 - **Never draw something translucent straight onto an RGBA frame.**
   `ImageDraw` on an RGBA picture replaces the pixel, alpha and all; it does
   not lay one colour over another. The panel's separator was a line of

@@ -34,6 +34,7 @@ updates through a queue for exactly that reason.
 import ctypes
 import logging
 import threading
+import time
 import tkinter as tk
 from collections import deque
 from ctypes import wintypes
@@ -183,6 +184,17 @@ def _cursor_work_area():
     width = user32.GetSystemMetrics(0)
     height = user32.GetSystemMetrics(1)
     return 0, 0, width, height
+
+
+def _pointer():
+    """Where the mouse pointer is, in screen pixels, or None."""
+    point = _POINT()
+    try:
+        if ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+            return (point.x, point.y)
+    except Exception:
+        pass
+    return None
 
 
 def _monitor_scale():
@@ -363,6 +375,12 @@ class Overlay:
         self._motion = {"cancel": [1.0, 0.0, 0.0], "accept": [1.0, 0.0, 0.0]}
 
         self._glass = None
+        # Mono: when the pill appeared, for the bars' own movement, and when
+        # it began to shrink away after the words landed.
+        self._shown_at = 0.0
+        self._collapse_at = None
+        # Mono: the pointer where the pill appeared, kept for its whole stay.
+        self._anchor = None
         self._surface = Surface()
         self._opacity = 0.0
         self._visible = False
@@ -397,15 +415,22 @@ class Overlay:
     def _hwnd(self):
         return window_handle(self._root)
 
+    def _mono(self):
+        """The second look: a black capsule with eight bars and nothing to
+        click. Read each time, so a switch in the tray panel takes effect
+        the next time the pill appears."""
+        return self._cfg.get("style") == "mono"
+
     def _apply_window_styles(self):
-        """Layered, focus-proof and Alt+Tab invisible."""
-        layered_styles(self._hwnd(), self._clickable)
+        """Layered, focus-proof and Alt+Tab invisible. Mono has no buttons,
+        so every click goes through it."""
+        layered_styles(self._hwnd(), self._clickable and not self._mono())
 
     # -- the two buttons ---------------------------------------------------
 
     def _on_click(self, event):
         """Works out which button was hit, if either."""
-        if self._glass is None or not self._visible:
+        if self._glass is None or not self._visible or self._mono():
             return
         for name, box in glass.button_boxes(self._glass).items():
             if box[0] <= event.x <= box[2] and box[1] <= event.y <= box[3]:
@@ -419,7 +444,7 @@ class Overlay:
 
     def _on_motion(self, event):
         name = None
-        if self._glass is not None and self._visible:
+        if self._glass is not None and self._visible and not self._mono():
             for candidate, box in glass.button_boxes(self._glass).items():
                 if (box[0] <= event.x <= box[2] and box[1] <= event.y <= box[3]
                         and self._usable(candidate)):
@@ -471,6 +496,10 @@ class Overlay:
         threading.Thread(target=callback, daemon=True).start()
 
     def _window_size(self):
+        if self._mono():
+            return (int(round(theme.MONO_WINDOW * self._scale)),
+                    int(round((theme.MONO_HEIGHT + 2 * theme.MONO_MARGIN)
+                              * self._scale)))
         margin = int(round(theme.SHADOW_MARGIN * self._scale))
         return (int(round(theme.WIDTH * self._scale)),
                 int(round(theme.HEIGHT * self._scale)) + margin * 2)
@@ -481,8 +510,12 @@ class Overlay:
         return self._scale
 
     def _place(self, lift=0):
-        """Docks the pill to the bottom centre of the monitor with the mouse."""
+        """Docks the pill to the bottom centre of the monitor with the mouse.
+        Mono appears over the pointer instead, as in the reel it is from."""
         width, height = self._window_size()
+        if self._mono() and self._anchor is not None:
+            self._place_at_pointer(width, height, lift)
+            return
         left, _top, right, bottom = _cursor_work_area()
         x = left + ((right - left) - width) // 2
         margin_bottom = int(round(float(self._cfg["margin_bottom"])
@@ -491,10 +524,40 @@ class Overlay:
         self._geometry = (x, y, width, height)
         self._root.geometry("{}x{}+{}+{}".format(width, height, x, y))
 
+    def _place_at_pointer(self, width, height, lift):
+        """Just above where the pointer was when the pill appeared, and on
+        the screen whatever corner the pointer is in."""
+        point_x, point_y = self._anchor
+        left, top, right, bottom = _cursor_work_area()
+        margin = int(round(theme.MONO_MARGIN * self._scale))
+        x = int(round(point_x + theme.MONO_POINTER_RIGHT * self._scale
+                      - width / 2.0))
+        y = int(round(point_y - theme.MONO_POINTER_ABOVE * self._scale
+                      - (height - margin))) + lift
+        if y < top:
+            # No room above the pointer: just below it instead.
+            y = int(round(point_y + 24 * self._scale)) - margin + lift
+        x = max(left - margin, min(x, right - width + margin))
+        y = max(top - margin, min(y, bottom - height + margin))
+        self._geometry = (x, y, width, height)
+        self._root.geometry("{}x{}+{}+{}".format(width, height, x, y))
+
     # -- the capsule -------------------------------------------------------
+
+    def _mono_message(self):
+        """What the mono capsule says instead of showing bars: only what
+        went wrong, or a message shown on its own - as the glass does."""
+        if self._state == "error" or (self._state == "done"
+                                      and self._collapse_at is None):
+            return self._text or self._status
+        return ""
 
     def _rebuild(self):
         """Rebuilds the parts that do not change from frame to frame."""
+        if self._mono():
+            self._glass = glass.mono_prepare(self._scale,
+                                             self._mono_message())
+            return
         self._glass = glass.prepare(rim=(self._state == "listening"),
                                     scale=self._scale)
 
@@ -502,6 +565,16 @@ class Overlay:
 
     def _paint(self):
         if self._glass is None:
+            return
+        if isinstance(self._glass, glass.MonoGlass):
+            now = time.monotonic()
+            collapse = 0.0
+            if self._collapse_at is not None:
+                collapse = min(1.0, (now - self._collapse_at)
+                               / theme.MONO_COLLAPSE)
+            self._present(glass.mono_paint(
+                self._glass, self._state, self._shown_level,
+                now - self._shown_at, collapse))
             return
         frame = glass.paint(
             self._glass,
@@ -536,6 +609,12 @@ class Overlay:
             self._levels.append(self._shown_level)
         self._ease_buttons()
         self._paint()
+        if (self._collapse_at is not None and time.monotonic()
+                - self._collapse_at >= theme.MONO_COLLAPSE):
+            # Shrunk to nothing: gone, without a fade after it.
+            self._anim_job = None
+            self._gone()
+            return
         self._anim_job = self._root.after(TICK_MS, self._tick)
 
     def _start_animation(self):
@@ -587,6 +666,9 @@ class Overlay:
         self._state = state
         self._status = status
         self._text = ""
+        self._collapse_at = None
+        self._shown_at = time.monotonic()
+        self._anchor = _pointer() if self._mono() else None
         if state == "listening":
             self._levels = deque([0.0] * theme.BARS, maxlen=theme.BARS)
             self._level = 0.0
@@ -629,9 +711,20 @@ class Overlay:
         self._label = label or ""
 
     def flash(self, state, text, status="", hold=None):
-        """Shows a terminal state briefly, then fades out."""
+        """Shows a terminal state briefly, then fades out.
+
+        Mono has no tick to turn green: once the words have landed the pill
+        shrinks away, as in the reel it was taken from. A message on its own
+        - a setting changed, nothing heard - is shown as text instead."""
         self._cancel_jobs()
         was_visible = self._visible
+        if (self._mono() and state == "done" and was_visible
+                and self._state in ("listening", "transcribing")):
+            self._state = "done"
+            self._level = 0.0
+            self._collapse_at = time.monotonic()
+            self._start_animation()
+            return
         self._state = state
         self._text = text or ""
         self._status = status
@@ -640,25 +733,29 @@ class Overlay:
         if not was_visible:
             self.show(state, status)
             self._text = text or ""
+            if self._mono():
+                # Mono sizes its capsule to the message when it is built.
+                self._rebuild()
         else:
             self._rebuild()
         self._paint()
         delay = int((hold or float(self._cfg["hide_delay"])) * 1000)
         self._hide_job = self._root.after(delay, self.hide)
 
+    def _gone(self):
+        """Off the screen at once, and ready for the next time."""
+        self._stop_animation()
+        self._root.withdraw()
+        self._visible = False
+        self._hover = None
+        self._collapse_at = None
+        for motion in self._motion.values():
+            motion[:] = [1.0, 0.0, 0.0]
+
     def hide(self):
         """Fades the pill out and takes the window off screen."""
         self._cancel_jobs()
-
-        def finish():
-            self._stop_animation()
-            self._root.withdraw()
-            self._visible = False
-            self._hover = None
-            for motion in self._motion.values():
-                motion[:] = [1.0, 0.0, 0.0]
-
         if not self._visible:
-            finish()
+            self._gone()
             return
-        self._fade_to(0.0, then=finish)
+        self._fade_to(0.0, then=self._gone)

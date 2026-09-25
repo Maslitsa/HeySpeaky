@@ -15,6 +15,12 @@ stale desktop, that a click at the centre of each button reaches the
 callback, and that the real pointer over the cross makes it answer while the
 window in front stays in front. The picture is the pill twice: as it is, and
 with the pointer on the cross. Exit code 0 if all of that holds.
+
+    .venv\Scripts\python.exe tools\live_check.py --style mono
+
+The mono look instead: listening, thinking, shrinking away when the words
+land, and a message, photographed on the real screen; the window must let
+every click through to what is under it, since mono has no buttons.
 """
 
 import argparse
@@ -45,13 +51,117 @@ class _Click(object):
         self.y = y
 
 
+def mono_check(args):
+    """The mono look on the real screen."""
+    enable_dpi_awareness()
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = ctypes.c_void_p
+    user32.WindowFromPoint.restype = ctypes.c_void_p
+    user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+    in_front = user32.GetForegroundWindow()
+    root = tk.Tk()
+    config = dict(DEFAULTS["overlay"], style="mono")
+    overlay = Overlay(root, config)
+    # A new process's first window is handed the front by Windows. Give it
+    # back, so what is checked is the pill, not this script starting up.
+    root.update()
+    user32.SetForegroundWindow(in_front)
+    root.update()
+
+    from PIL import Image, ImageDraw, ImageGrab
+
+    def run(seconds, level=None):
+        for step in range(max(1, int(seconds / 0.02))):
+            if level is not None:
+                overlay.set_level(level(step))
+            root.update()
+            time.sleep(0.02)
+
+    def photo():
+        x, y, width, height = overlay._geometry
+        return ImageGrab.grab(bbox=(x - 20, y - 10, x + width + 20,
+                                    y + height + 10), all_screens=True)
+
+    shots = []
+
+    class _Point(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    pointer = _Point()
+    user32.GetCursorPos(ctypes.byref(pointer))
+    overlay.show("listening")
+    run(args.seconds, lambda step: abs(__import__("math").sin(step * 0.3)))
+    x, y, width, height = overlay._geometry
+    left, top, right, bottom = overlay._glass.box
+    over_pointer = (x + left <= pointer.x <= x + right
+                    and (y + bottom <= pointer.y or y + top >= pointer.y))
+    shots.append(("listening", photo()))
+
+    middle = _Point(x + (left + right) // 2, y + (top + bottom) // 2)
+    under = user32.WindowFromPoint(middle)
+    hwnd = int(root.wm_frame(), 16)
+    passes_clicks = under != hwnd
+    style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+
+    overlay.set_state("transcribing")
+    run(0.5)
+    shots.append(("thinking", photo()))
+    overlay.flash("done", "the words", "")
+    run(0.09)
+    shots.append(("words landed", photo()))
+    run(0.5)
+    gone = not overlay._visible
+    overlay.flash("error", "", "Too quiet", hold=0.8)
+    run(0.35)
+    shots.append(("a message", photo()))
+    run(1.2)
+    now_front = user32.GetForegroundWindow()
+    kept_front = now_front == in_front
+    if not kept_front:
+        name = ctypes.create_unicode_buffer(128)
+        user32.GetClassNameW(ctypes.c_void_p(now_front), name, 128)
+        print("in front now: a {} window{}".format(
+            name.value, " - this one" if now_front == hwnd else ""))
+    root.destroy()
+
+    widest = max(image.size[0] for _name, image in shots)
+    strip = Image.new("RGB", (widest, sum(image.size[1] + 18
+                                          for _name, image in shots)),
+                      (24, 24, 26))
+    drawing = ImageDraw.Draw(strip)
+    top = 0
+    for name, image in shots:
+        drawing.text((6, top + 3), name, fill=(220, 220, 225))
+        strip.paste(image, (0, top + 18))
+        top += image.size[1] + 18
+    strip.save(args.out)
+
+    print("saved", args.out)
+    print("layered                   {} (want True)".format(
+        bool(style & WS_EX_LAYERED)))
+    print("never takes focus         {} (want True)".format(
+        bool(style & WS_EX_NOACTIVATE)))
+    print("clicks pass straight on   {} (want True)".format(passes_clicks))
+    print("gone after the words      {} (want True)".format(gone))
+    print("appears at the pointer    {} (want True)".format(over_pointer))
+    print("focus stayed where it was {} (want True)".format(kept_front))
+    ok = (bool(style & WS_EX_LAYERED) and bool(style & WS_EX_NOACTIVATE)
+          and passes_clicks and gone and kept_front and over_pointer)
+    print("RESULT:", "ok" if ok else "FAILED")
+    return 0 if ok else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description="Show the pill for real")
     parser.add_argument("--out", default="live-pill.png",
                         help="where to save the photograph")
     parser.add_argument("--seconds", type=float, default=0.8,
                         help="how long to run the waveform before the shot")
+    parser.add_argument("--style", choices=("glass", "mono"),
+                        default="glass", help="which look to check")
     args = parser.parse_args()
+    if args.style == "mono":
+        return mono_check(args)
 
     hit = []
     enable_dpi_awareness()

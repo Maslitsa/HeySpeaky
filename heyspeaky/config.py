@@ -328,12 +328,17 @@ DEFAULTS = {
         # them to whatever is underneath. Set to false to make the whole pill
         # untouchable again.
         "buttons_clickable": True,
+        # "glass": the dark glass pill with a cross and a tick. "mono": a
+        # small black capsule with eight bars, red while it listens and blue
+        # while it thinks, and nothing to click. Switch it in the tray panel.
+        "style": "glass",
     },
     "sound": {
         # Played when the text has been inserted. One of drip, breath, tap,
-        # bowl, or "none" for silence. The files are built on this machine the
+        # bowl, blip, or "none" for silence; "auto" plays drip with the glass
+        # look and blip with mono. The files are built on this machine the
         # first time they are needed; nothing is downloaded.
-        "finish": "drip",
+        "finish": "auto",
         # 0 to 1. Deliberately quiet.
         "volume": 0.18,
     },
@@ -357,6 +362,9 @@ SUPERSEDED_LANGUAGES = [
 # The same, for the correction key: "space" shipped as the default and is
 # another program's global shortcut on the owner's machine.
 SUPERSEDED_CORRECT_KEYS = ["space"]
+
+# The end sound: "drip" was the default before the sound followed the look.
+SUPERSEDED_FINISH = ["drip"]
 
 
 def _migrate(user_config):
@@ -385,6 +393,13 @@ def _migrate(user_config):
             changed = True
             logger.info("Moved the correction key from %s to %s",
                         stored_key, wanted_key)
+    sound = user_config.get("sound") or {}
+    stored_finish = sound.get("finish")
+    if stored_finish in SUPERSEDED_FINISH:
+        sound["finish"] = DEFAULTS["sound"]["finish"]
+        changed = True
+        logger.info("The end sound now follows the look (was %s)",
+                    stored_finish)
     return user_config, changed
 
 

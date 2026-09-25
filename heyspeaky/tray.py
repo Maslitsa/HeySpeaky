@@ -89,6 +89,8 @@ class Tray:
         key_state=None,
         local_models=None,
         on_local_model=None,
+        look=None,
+        on_look=None,
     ):
         self._config_path = config_path
         self._log_dir = log_dir
@@ -112,6 +114,8 @@ class Tray:
         self._key_state = key_state
         self._local_models = local_models
         self._on_local_model = on_local_model
+        self._look = look
+        self._on_look = on_look
         self._update_version = ""
         self._busy = False
 
@@ -423,6 +427,7 @@ class Tray:
             "update": self._update_version,
             "key": self._key_state() if self._key_state else "saved",
             "local": self._local_models() if self._local_models else {},
+            "look": self._look() if self._look else "glass",
             "catalog": list(offered),
             "names": dict((code, language_names.name(code))
                           for code in offered),
@@ -451,6 +456,11 @@ class Tray:
             target = self._make_language_toggle(action[len("lang:"):])
         elif action.startswith("backend:"):
             target = self._make_backend_setter(action[len("backend:"):])
+        elif action.startswith("look:") and self._on_look:
+            style = action[len("look:"):]
+
+            def target():
+                self._on_look(style)
         elif action.startswith("model:") and self._on_local_model:
             name = action[len("model:"):]
 

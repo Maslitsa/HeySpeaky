@@ -46,7 +46,7 @@ FOCUS_GRACE_MS = 150
 # What stays open after a click and what closes: a switch you flip should be
 # seen to flip; a row that opens something else is done with the panel.
 STAYS_OPEN = ("pin:", "backend:", "pause", "lang:", "more-languages", "back",
-              "model:")
+              "model:", "look:")
 
 SEARCH_PROMPT = "Type a language"
 
@@ -86,6 +86,8 @@ def mask(key):
     return key[:7] + "\u2022" * 8 + key[-4:]
 
 _BACKENDS = (("OpenAI", "cloud"), ("This laptop", "local"))
+# The pill's two looks: the glass, and mono - the black pill from the reel.
+_LOOKS = (("Glass", "glass"), ("Mono", "mono"))
 
 
 class Item(object):
@@ -260,7 +262,8 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
         model.get("backend", "cloud")) \
         if model.get("backend", "cloud") in ("cloud", "local") else 0
     add("segmented", "backend", "", px(theme.SEGMENT_HEIGHT),
-        ([label for label, _value in _BACKENDS], chosen))
+        ([label for label, _value in _BACKENDS], chosen,
+         ["backend:" + value for _label, value in _BACKENDS]))
     y += px(theme.SEGMENT_HEIGHT) + gap(4)
     local = model.get("local") or {}
     if local.get("busy"):
@@ -269,7 +272,17 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
     else:
         model_hint = localmodels.label(local.get("current", ""))
     add("row", "models", "Model on this laptop", row, None, hint=model_hint)
-    y += row + gap(2)
+    y += row + gap(6)
+
+    add("label", None, "Look", px(14))
+    y += px(14) + px(theme.LABEL_GAP)
+    looks = [value for _label, value in _LOOKS]
+    look = model.get("look", "glass")
+    add("segmented", "look", "", px(theme.SEGMENT_HEIGHT),
+        ([label for label, _value in _LOOKS],
+         looks.index(look) if look in looks else 0,
+         ["look:" + value for value in looks]))
+    y += px(theme.SEGMENT_HEIGHT) + gap(6)
 
     add("switch", "pause", "Pause Ctrl+Alt", row, bool(model.get("paused")))
     y += row + gap(6)
@@ -314,10 +327,10 @@ def hit(items, x, y):
         left, top, right, bottom = item.rect
         if left <= x < right and top <= y < bottom:
             if item.kind == "segmented":
-                labels = item.extra[0]
+                labels, _chosen, actions = item.extra
                 index = int((x - left) / float(right - left) * len(labels))
                 index = max(0, min(len(labels) - 1, index))
-                return item, "backend:" + _BACKENDS[index][1]
+                return item, actions[index]
             return item, item.key
     return None, None
 

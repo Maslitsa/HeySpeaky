@@ -14,6 +14,7 @@ Tk thread.
 
 import ctypes
 import logging
+import math
 import logging.handlers
 import queue
 import subprocess
@@ -193,6 +194,8 @@ class App:
             key_state=self._key_flow.state,
             local_models=self._local_models.state,
             on_local_model=self._local_models.choose,
+            look=lambda: self.cfg["overlay"].get("style", "glass"),
+            on_look=self._on_tray_look,
         )
 
     # -- speech detection --------------------------------------------------
@@ -715,10 +718,16 @@ class App:
             label += " · local ({})".format(self.router.last_fallback)
         state = "done" if status in ("inserted", "copied") else "error"
         if state == "done":
-            settings = self.cfg.get("sound", {})
-            sound.play(settings.get("finish", sound.DEFAULT),
-                       float(settings.get("volume", sound.VOLUME)))
+            self._play_finish()
         self.post(self.overlay.flash, state, text, label)
+
+    def _play_finish(self):
+        """The end sound: the one set, or with "auto" the one that belongs
+        to the look - blip with mono, drip with the glass."""
+        settings = self.cfg.get("sound", {})
+        sound.play(sound.for_look(settings.get("finish", "auto"),
+                                  self.cfg["overlay"].get("style", "glass")),
+                   float(settings.get("volume", sound.VOLUME)))
 
     def _start_max_timer(self):
         self._cancel_max_timer()
@@ -822,6 +831,40 @@ class App:
         self.post(
             self.overlay.flash, "done", "", "Using {}".format(label), 1.4
         )
+
+    def _on_tray_look(self, style):
+        """Glass or mono, from the tray panel; shown at once with a short
+        pretend dictation, so the new look is seen rather than imagined."""
+        if style not in ("glass", "mono"):
+            return
+        self.cfg["overlay"]["style"] = style
+        config_module.save(self.cfg)
+        logger.info("Look is now %s", style)
+        with self._state_lock:
+            idle = self.state == IDLE
+        if idle:
+            self.post(self._preview_look)
+
+    def _preview_look(self, step=0):
+        """About two seconds: listening to made-up speech, thinking, the
+        words landing with the end sound. On the Tk thread, a step at a time,
+        and it gives way the moment a real dictation starts."""
+        with self._state_lock:
+            if self.state != IDLE and step > 0:
+                return
+        if step == 0:
+            self.overlay.show("listening")
+        if step < 60:
+            speech = abs(math.sin(step * 0.33)) * (0.55 + 0.45 * math.sin(
+                step * 0.07))
+            self.overlay.set_level(speech)
+            self.root.after(20, self._preview_look, step + 1)
+        elif step == 60:
+            self.overlay.set_state("transcribing")
+            self.root.after(650, self._preview_look, step + 1)
+        else:
+            self._play_finish()
+            self.overlay.flash("done", "", "")
 
     def _local_model_chosen(self, name):
         """A model picked in the tray, now on disk: load it. Waits for a

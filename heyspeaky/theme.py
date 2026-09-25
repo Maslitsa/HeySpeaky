@@ -109,6 +109,44 @@ CARET_BLINK = 0.53
 # rather than appearing whole; taking one off draws it back out.
 CHECK_DRAW_RATE = 0.22
 
+# Mono: the second look, and the owner's choice to try beside the glass. A
+# black capsule with eight thick bars and nothing else - no cross, no tick -
+# red while it listens, blue while it thinks, gone when the words land. Taken
+# from a reel he sent of a macOS dictation app he liked, and measured off its
+# frames on 25 September: the window buttons of macOS are 12 points across
+# and 20 apart, which made 3.0 pixels of that video a point, and the pill
+# 342 x 184 of them. A macOS point and one of Windows' logical pixels are
+# within a few per cent of the same size on a laptop screen, so these are
+# the same pill at the same physical size. The colours are the medians of
+# its own pixels.
+MONO_HEIGHT = 58
+MONO_WIDTH = 108
+MONO_BARS = 8
+MONO_BAR_WIDTH = 4.1
+MONO_BAR_PITCH = 8.7
+MONO_BAR_MIN = 8.8
+MONO_BAR_MAX = 18.0
+MONO_FILL = (10, 7, 11)
+MONO_LISTEN = (217, 45, 52)
+MONO_THINK = (2, 103, 197)
+MONO_THINK_LIT = (40, 124, 226)
+MONO_GLOW = 2.2
+MONO_GLOW_ALPHA = 0.42
+# Room either side of the capsule for a message ("Too quiet"), and for the
+# shadow underneath. The empty part of the window lets clicks through.
+MONO_WINDOW = 300
+MONO_MARGIN = 12
+MONO_SHADOW_ALPHA = 0.12
+# When the words land it shrinks to about half and is gone, in this long.
+MONO_COLLAPSE = 0.26
+# Where it appears: over the mouse pointer, where it was when the recording
+# began, and it stays there if the pointer moves on - in the reel it held its
+# place while he went to switch the Wi-Fi off. Measured off the frames where
+# the pointer shows: the capsule's centre 25 points right of the pointer's
+# tip and its bottom 12 points above it.
+MONO_POINTER_RIGHT = 25
+MONO_POINTER_ABOVE = 12
+
 # The pill itself.
 WIDTH = 248
 HEIGHT = 54

@@ -139,7 +139,19 @@ downloaded speech models. A folder that is a git clone is left where it is.
 | Click the tick on the pill | Finishes now. |
 | Click the cross on the pill, or press any other key | Cancels. Nothing is inserted. |
 | Select a word it got wrong, press Ctrl+Alt+Win | Type what you said. It remembers, and gets it right next time. |
-| Click the tray icon | Status, your languages (just start typing to find one, in English, Russian, Kazakh or its own name), your OpenAI key, OpenAI or local, which model runs on your laptop, pause the hotkey, your words, settings, a problem report. Quit asks for a second click. |
+| Click the tray icon | Status, your languages (just start typing to find one, in English, Russian, Kazakh or its own name), your OpenAI key, OpenAI or local, which model runs on your laptop, the look (glass or mono), pause the hotkey, your words, settings, a problem report. Quit asks for a second click. |
+
+### Two looks
+
+Click the tray icon, then **Look**:
+
+- **Glass**: the dark glass pill above the taskbar, with a cross to cancel
+  and a tick to finish.
+- **Mono**: a small black pill that appears right above your mouse pointer,
+  with red bars while it listens and blue while it works, a soft two-note
+  sound, and gone the moment your words land.
+
+Switching shows the new look straight away with a short pretend dictation.
 
 ### Choosing the model on your laptop
 

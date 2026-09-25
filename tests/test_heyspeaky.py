@@ -2899,5 +2899,163 @@ class TheCommitCheckGuardsTheInstaller(unittest.TestCase):
             self.assertEqual(precommit.script_problems(ROOT / name), [], name)
 
 
+class TheMonoLook(unittest.TestCase):
+    """The second look, from the reel the owner sent: a black capsule,
+    eight bars, red listening, blue thinking, gone when the words land."""
+
+    def test_the_capsule_has_the_reel_s_proportions(self):
+        mono = glass.mono_prepare(1.0)
+        left, top, right, bottom = mono.box
+        self.assertEqual((right - left, bottom - top), (108, 58))
+        self.assertAlmostEqual((right - left) / float(bottom - top), 1.86,
+                               places=1)
+
+    def vivid_runs(self, frame, y):
+        runs, inside = 0, False
+        for x in range(frame.size[0]):
+            r, g, b, a = frame.getpixel((x, y))
+            vivid = a > 200 and max(r, g, b) - min(r, g, b) > 90
+            if vivid and not inside:
+                runs += 1
+            inside = vivid
+        return runs
+
+    def test_eight_bars_red_while_listening_blue_while_thinking(self):
+        mono = glass.mono_prepare(2.0)
+        middle = (mono.box[1] + mono.box[3]) // 2
+        heard = glass.mono_paint(mono, "listening", 0.8, 0.3)
+        thinking = glass.mono_paint(mono, "transcribing", 0.0, 0.3)
+        self.assertEqual(self.vivid_runs(heard, middle), 8)
+        self.assertEqual(self.vivid_runs(thinking, middle), 8)
+        red = [heard.getpixel((x, middle)) for x in range(heard.size[0])]
+        red = max(red, key=lambda p: p[0] - p[2])
+        blue = [thinking.getpixel((x, middle))
+                for x in range(thinking.size[0])]
+        blue = max(blue, key=lambda p: p[2] - p[0])
+        self.assertGreater(red[0], red[2] + 100)
+        self.assertGreater(blue[2], blue[0] + 100)
+        self.assertEqual(heard.getpixel((0, 0))[3], 0)
+        inside = heard.getpixel((mono.box[0] + 8, middle))
+        self.assertEqual(inside[:3], theme.MONO_FILL)
+        self.assertEqual(inside[3], 255)
+
+    def test_quiet_bars_are_short_but_never_dots(self):
+        quiet = glass.mono_heights("listening", 0.0, 1.0)
+        loud = glass.mono_heights("listening", 1.0, 1.0)
+        self.assertLess(max(quiet), 0.3)
+        self.assertGreater(theme.MONO_BAR_MIN, theme.MONO_BAR_WIDTH * 2)
+        middle = len(loud) // 2
+        self.assertGreater(loud[middle] + loud[middle - 1],
+                           loud[0] + loud[-1] + 0.8)
+
+    def test_it_shrinks_while_black_and_is_gone_at_the_end(self):
+        mono = glass.mono_prepare(1.0)
+        centre = ((mono.box[0] + mono.box[2]) // 2 - 30,
+                  (mono.box[1] + mono.box[3]) // 2)
+        half = glass.mono_paint(mono, "done", 0.0, 0.5, collapse=0.5)
+        self.assertEqual(half.getpixel(centre)[3], 255)
+        self.assertEqual(half.getpixel((mono.box[0] + 2, centre[1]))[3], 0)
+        gone = glass.mono_paint(mono, "done", 0.0, 0.5, collapse=1.0)
+        self.assertIsNone(gone.getchannel("A").getbbox())
+
+    def test_a_message_widens_the_capsule(self):
+        plain = glass.mono_prepare(1.0)
+        said = glass.mono_prepare(1.0, "Loading speech models, one moment")
+        self.assertGreater(said.box[2] - said.box[0],
+                           plain.box[2] - plain.box[0])
+        self.assertLessEqual(said.box[2], said.window[0])
+
+    def test_the_glass_pill_is_untouched(self):
+        """The mono look is added beside the glass, not over it."""
+        pill = glass.render("listening", levels=[0.5] * theme.BARS)
+        self.assertEqual(pill.size, (theme.WIDTH, theme.HEIGHT
+                                     + 2 * theme.SHADOW_MARGIN))
+
+
+class TheMonoSound(unittest.TestCase):
+    """The reel's sound, rebuilt from numbers measured off it."""
+
+    def test_two_notes_a_fourth_apart(self):
+        from heyspeaky import sound
+        pitches = sorted(set(round(tone[0]) for tone
+                             in sound.VOICES["blip"]["tones"]))
+        self.assertEqual(pitches, [500, 669, 670, 671])
+        self.assertAlmostEqual(669 / 500.0, 4 / 3.0, places=1)
+
+    def test_the_sound_follows_the_look_unless_one_was_chosen(self):
+        from heyspeaky import sound
+        self.assertEqual(sound.for_look("auto", "mono"), "blip")
+        self.assertEqual(sound.for_look("auto", "glass"), "drip")
+        self.assertEqual(sound.for_look("bowl", "mono"), "bowl")
+        self.assertEqual(sound.for_look("none", "mono"), "none")
+
+    def test_the_old_default_is_carried_forward(self):
+        stored = {"sound": {"finish": "drip"}}
+        config_module._migrate(stored)
+        self.assertEqual(stored["sound"]["finish"], "auto")
+        chosen = {"sound": {"finish": "bowl"}}
+        config_module._migrate(chosen)
+        self.assertEqual(chosen["sound"]["finish"], "bowl")
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class ChoosingTheLook(_PanelModel, unittest.TestCase):
+    """Glass or mono, from the tray panel."""
+
+    def look(self, **model):
+        _size, items = panel_module.layout(self.model(**model), 1.25)
+        return [item for item in items if item.key == "look"][0]
+
+    def test_the_switch_shows_the_look_in_use(self):
+        self.assertEqual(self.look().extra[1], 0)
+        self.assertEqual(self.look(look="mono").extra[1], 1)
+
+    def test_each_half_of_the_switch_chooses_its_look(self):
+        _size, items = panel_module.layout(self.model(), 1.25)
+        switch = [item for item in items if item.key == "look"][0]
+        left, top, right, bottom = switch.rect
+        middle = (top + bottom) // 2
+        self.assertEqual(panel_module.hit(items, left + 4, middle)[1],
+                         "look:glass")
+        self.assertEqual(panel_module.hit(items, right - 4, middle)[1],
+                         "look:mono")
+        backend = [item for item in items if item.key == "backend"][0]
+        self.assertEqual(panel_module.hit(items, backend.rect[2] - 4,
+                                          middle - top + backend.rect[1])[1],
+                         "backend:local")
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class MonoAppearsAtThePointer(unittest.TestCase):
+    """In the reel the pill appears just above the mouse pointer, and stays
+    where it appeared."""
+
+    def overlay(self, anchor):
+        import types
+        from heyspeaky import overlay as overlay_module
+        real = overlay_module._cursor_work_area
+        self.addCleanup(setattr, overlay_module, "_cursor_work_area", real)
+        overlay_module._cursor_work_area = lambda: (0, 0, 1920, 1040)
+        pill = object.__new__(overlay_module.Overlay)
+        pill._scale, pill._anchor = 1.0, anchor
+        pill._cfg = {"style": "mono", "margin_bottom": 14}
+        pill._root = types.SimpleNamespace(geometry=lambda text: None)
+        return pill
+
+    def test_just_above_the_pointer(self):
+        pill = self.overlay((500, 500))
+        pill._place()
+        x, y, width, height = pill._geometry
+        margin = theme.MONO_MARGIN
+        self.assertEqual(x + width / 2.0, 500 + theme.MONO_POINTER_RIGHT)
+        self.assertEqual(y + height - margin, 500 - theme.MONO_POINTER_ABOVE)
+
+    def test_below_it_when_there_is_no_room_above(self):
+        pill = self.overlay((500, 20))
+        pill._place()
+        _x, y, _width, _height = pill._geometry
+        self.assertGreater(y + theme.MONO_MARGIN, 20)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

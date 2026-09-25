@@ -524,6 +524,199 @@ def render(state="listening", levels=None, text="", status="", label="",
     return out
 
 
+# -- mono: the second look ----------------------------------------------------
+#
+# The owner liked a black pill in a reel he sent and asked for it as a second
+# look, beside the glass rather than instead of it. It has no buttons and no
+# glass: a black capsule, eight bars, red while listening, blue while the
+# words are worked out, and a shrink to nothing when they land. Every number
+# is in theme.py under MONO_, with where it was measured.
+
+
+class MonoGlass(object):
+    """What stays still while the mono pill is up: the window's size and
+    where the capsule sits in it."""
+
+    __slots__ = ("window", "box", "scale", "message")
+
+    def __init__(self, window, box, scale, message=""):
+        self.window = window
+        self.box = box
+        self.scale = scale
+        self.message = message
+
+
+def _mono_font(scale):
+    return font(max(9, int(round(theme.FONT_SIZE * scale))), medium=True)
+
+
+def mono_prepare(scale=1.0, message=""):
+    """The window and the capsule's place in it. With a message the capsule
+    widens to hold it, up to the window; without one it is the pill."""
+    window = (int(round(theme.MONO_WINDOW * scale)),
+              int(round((theme.MONO_HEIGHT + 2 * theme.MONO_MARGIN) * scale)))
+    height = int(round(theme.MONO_HEIGHT * scale))
+    width = int(round(theme.MONO_WIDTH * scale))
+    if message:
+        measure = ImageDraw.Draw(Image.new("L", (1, 1)))
+        wanted = int(math.ceil(measure.textlength(message,
+                                                  font=_mono_font(scale))))
+        width = max(width, wanted + int(height * 0.9))
+    margin = int(round(theme.MONO_MARGIN * scale))
+    width = min(width, window[0] - 2 * margin)
+    left = (window[0] - width) // 2
+    top = (window[1] - height) // 2
+    return MonoGlass(window, (left, top, left + width, top + height), scale,
+                     message)
+
+
+def _mono_shadow(size, scale):
+    """The capsule's shadow, drawn once for each size it is shown at."""
+    key = ("mono-shadow", size, round(scale, 3))
+    if key in _sprite_cache:
+        return _sprite_cache[key]
+    blur = max(2, int(round(8 * scale)))
+    canvas = (size[0] + blur * 4, size[1] + blur * 4)
+    mask = Image.new("L", canvas, 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (blur * 2, blur * 2 + int(round(3 * scale)),
+         blur * 2 + size[0] - 1, blur * 2 + size[1] - 1 + int(round(3 * scale))),
+        radius=size[1] // 2, fill=int(255 * theme.MONO_SHADOW_ALPHA))
+    shadow = Image.new("RGBA", canvas, (0, 0, 0, 0))
+    shadow.putalpha(mask.filter(ImageFilter.GaussianBlur(blur / 1.5)))
+    _sprite_cache[key] = shadow
+    return shadow
+
+
+def mono_bar(width, height, tallest, colour):
+    """One of the eight bars, with the light around it in its own colour:
+    a halo that hugs the bar like the glow of a tube, as the reel's do."""
+    height = max(2, int(height))
+    key = ("mono-bar", width, height, tallest, colour)
+    if key in _sprite_cache:
+        return _sprite_cache[key]
+    halo = max(1, int(round(theme.MONO_GLOW * width / 4.1)))
+    size = (width + halo * 4, tallest + halo * 4)
+    face = Image.new("RGBA", size, (0, 0, 0, 0))
+    glow = sprite((width + halo * 2, height + halo * 2),
+                  (width + halo * 2) // 2, colour).copy()
+    glow.putalpha(glow.getchannel("A").point(
+        lambda value: int(value * theme.MONO_GLOW_ALPHA)))
+    top = halo * 2 + (tallest - height) // 2
+    face.alpha_composite(glow, (halo, top - halo))
+    face = face.filter(ImageFilter.GaussianBlur(halo / 1.8))
+    bar = sprite((width, height), width // 2, colour)
+    face.alpha_composite(bar, (halo * 2, top))
+    _sprite_cache[key] = face
+    return face
+
+
+def mono_heights(state, level, now, count=theme.MONO_BARS):
+    """How tall each bar is, 0 at its shortest and 1 at its tallest.
+
+    Listening, the loudness lifts the middle most, the way the reel's bars
+    stood 28 pixels at the ends and 56 in the middle while he spoke; a
+    little movement of their own keeps them alive when he pauses, and they
+    never fall to dots. Thinking, a wave runs across them.
+    """
+    heights = []
+    level = max(0.0, min(1.0, level))
+    middle = (count - 1) / 2.0
+    for index in range(count):
+        if state == "listening":
+            drift = 0.35 * math.sin(now * 1.7 + index * 0.9)
+            bell = math.exp(-((index - middle - drift) / 1.9) ** 2)
+            pulse = 0.5 + 0.5 * math.sin(now * (5.3 + index * 0.7)
+                                         + index * 1.9)
+            share = (level * bell * (0.82 + 0.18 * pulse)
+                     + 0.14 * pulse * (0.35 + 0.65 * level))
+        else:
+            wave = 0.5 + 0.5 * math.sin(now * 2 * math.pi * 1.6
+                                        - index * 0.75)
+            share = 0.30 + 0.70 * wave
+        heights.append(max(0.0, min(1.0, share)))
+    return heights
+
+
+def mono_paint(mono, state="listening", level=0.0, now=0.0, collapse=0.0):
+    """One frame of the mono pill. `collapse` runs 0 to 1 as it shrinks
+    away once the words have landed."""
+    frame = Image.new("RGBA", mono.window, (0, 0, 0, 0))
+    scale = mono.scale
+    left, top, right, bottom = mono.box
+    collapse = max(0.0, min(1.0, collapse))
+    shrink = 1.0 - 0.45 * (1.0 - (1.0 - collapse) ** 2)
+    width = max(2, int(round((right - left) * shrink)))
+    height = max(2, int(round((bottom - top) * shrink)))
+    cx, cy = (left + right) / 2.0, (top + bottom) / 2.0
+    x0, y0 = int(round(cx - width / 2.0)), int(round(cy - height / 2.0))
+
+    shadow = _mono_shadow((width, height), scale)
+    blur = (shadow.size[0] - width) // 2
+    frame.alpha_composite(shadow, (x0 - blur, y0 - blur))
+    capsule = sprite((width, height), height // 2, theme.MONO_FILL)
+    frame.alpha_composite(capsule, (x0, y0))
+
+    if mono.message:
+        drawing = ImageDraw.Draw(frame)
+        colour = theme.STATE_COLOURS["error"] if state == "error" \
+            else theme.TEXT_LIGHT
+        text = _fit(mono.message, drawing, _mono_font(scale),
+                    max(10, width - int(height * 0.8)))
+        drawing.text((cx, cy), text, font=_mono_font(scale),
+                     fill=colour + (255,), anchor="mm")
+    else:
+        bars_fade = max(0.0, 1.0 - collapse * 1.15)
+        if bars_fade > 0.01:
+            bar_width = max(2, int(round(theme.MONO_BAR_WIDTH * scale
+                                         * shrink)))
+            pitch = theme.MONO_BAR_PITCH * scale * shrink
+            shortest = theme.MONO_BAR_MIN * scale * shrink
+            tallest = int(math.ceil(theme.MONO_BAR_MAX * scale * shrink))
+            count = theme.MONO_BARS
+            first = cx - pitch * (count - 1) / 2.0
+            layer = Image.new("RGBA", mono.window, (0, 0, 0, 0))
+            for index, share in enumerate(mono_heights(state, level, now,
+                                                       count)):
+                bar_height = int(round(shortest + (tallest - shortest)
+                                       * share))
+                if state == "listening":
+                    colour = theme.MONO_LISTEN
+                else:
+                    # The wave is lit as well as tall, as it is in the reel.
+                    colour = _mix(theme.MONO_THINK, theme.MONO_THINK_LIT,
+                                  round(share * 4) / 4.0 * 0.6)
+                face = mono_bar(bar_width, bar_height, tallest, colour)
+                spread = (face.size[0] - bar_width) // 2
+                x = int(round(first + index * pitch - bar_width / 2.0))
+                layer.alpha_composite(face, (x - spread,
+                                             int(round(cy - face.size[1]
+                                                       / 2.0))))
+            if bars_fade < 0.999:
+                layer.putalpha(layer.getchannel("A").point(
+                    lambda value: int(value * bars_fade)))
+            frame.alpha_composite(layer)
+
+    if collapse > 0.7:
+        # Black while it shrinks, as in the reel; gone only at the very end.
+        fade = max(0.0, 1.0 - (collapse - 0.7) / 0.3)
+        frame.putalpha(frame.getchannel("A").point(
+            lambda value: int(value * fade)))
+    return frame
+
+
+def mono_render(state="listening", level=0.6, now=0.4, message="",
+                collapse=0.0, scale=1.0, backdrop=None):
+    """Prepare and paint together, for tools and tests."""
+    mono = mono_prepare(scale, message)
+    frame = mono_paint(mono, state, level, now, collapse)
+    if backdrop is None:
+        return frame
+    out = backdrop.convert("RGBA").resize(frame.size, Image.LANCZOS)
+    out.alpha_composite(frame)
+    return out
+
+
 # -- the correction composer -------------------------------------------------
 
 def _px(value, scale):
@@ -1242,7 +1435,7 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
             _place_over(frame, face, (left + right) / 2.0 - face.size[0] / 2.0,
                         middle - face.size[1] / 2.0)
         elif kind == "segmented":
-            labels, chosen = item.extra
+            labels, chosen = item.extra[0], item.extra[1]
             face = segmented(right - left, bottom - top, labels,
                              motion.get(item.key, chosen), scale)
             _place_over(frame, face, left, top)

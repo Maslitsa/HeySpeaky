@@ -76,8 +76,36 @@ VOICES = {
         ],
         "noise": (0.10, 0.004, 0.055, 1800.0, 400.0),
     },
+    # The mono look's sound: two notes a fourth apart, about 500 and 670 Hz,
+    # each a pluck that is gone in a few milliseconds, falling over each
+    # other and fading in a fifth of a second. Measured off the reel the
+    # owner sent, where it played twice, identically, the moment the words
+    # landed: every pluck's start, pitch, loudness and decay below is a
+    # number read from that recording. Built here from those numbers, like
+    # the rest - the recording itself is not copied.
+    "blip": {
+        "seconds": 0.30,
+        "tones": [
+            (500.0, 500.0, 0.0, 0.62, 0.0093, 0.000, 0.0015),
+            (669.0, 669.0, 0.0, 0.67, 0.0093, 0.000, 0.0015),
+            (669.0, 669.0, 0.0, 0.99, 0.0061, 0.066, 0.0010),
+            (500.0, 500.0, 0.0, 0.63, 0.0072, 0.089, 0.0010),
+            (671.0, 671.0, 0.0, 0.30, 0.0054, 0.133, 0.0010),
+            (500.0, 500.0, 0.0, 0.08, 0.0063, 0.178, 0.0010),
+            (670.0, 670.0, 0.0, 0.05, 0.0054, 0.198, 0.0010),
+        ],
+        "noise": None,
+    },
 }
 DEFAULT = "drip"
+
+
+def for_look(finish, style):
+    """The voice to play: `finish` as set, with "auto" meaning the one that
+    belongs to the look - blip with mono, drip with the glass."""
+    if finish in (None, "", "auto"):
+        return "blip" if style == "mono" else DEFAULT
+    return finish
 # Quiet on purpose. This is meant to be noticed, not heard.
 VOLUME = 0.18
 
