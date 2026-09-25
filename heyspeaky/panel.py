@@ -14,10 +14,11 @@ is white with dark ink, like the tick; everything else is the cross's grey;
 the only colour is the waveform's gradient, on the pause switch when it is
 on.
 
-Two things were added for the owner. The OpenAI key: copy it from wherever
-OpenAI shows it and click one row - see `apikey.py`. And typing: whatever is
-typed while the panel is open goes into a search at the top of the language
-list, because scrolling ninety names for your own is the slow way.
+Added for the owner since: the OpenAI key - click the row, paste the key
+into the field that opens, Save (`apikey.py`); the model this laptop uses,
+each with its size and what it costs in speed (`localmodels.py`); and
+typing - on the first page whatever is typed goes into a search at the top
+of the language list, because scrolling ninety names is the slow way.
 
 Quit asks twice. The panel opens right over the tray, so the bottom row is
 the first thing the pointer meets on its way up, and that row was Quit.
@@ -32,7 +33,7 @@ import logging
 import time
 import tkinter as tk
 
-from . import glass, keymap, languages, overlay, theme
+from . import glass, keymap, languages, localmodels, overlay, theme
 
 logger = logging.getLogger("heyspeaky.panel")
 
@@ -45,20 +46,44 @@ FOCUS_GRACE_MS = 150
 # What stays open after a click and what closes: a switch you flip should be
 # seen to flip; a row that opens something else is done with the panel.
 STAYS_OPEN = ("pin:", "backend:", "pause", "lang:", "more-languages", "back",
-              "key")
+              "model:")
 
 SEARCH_PROMPT = "Type a language"
 
-# What the key row says, by the state `apikey.KeyFlow` is in: its label,
-# the hint on its right, and whether it asks to be noticed.
+KEY_PROMPT = "Paste your key here"
+
+# What the key row on the first page says, by the state `apikey.KeyFlow` is
+# in: its label, the hint on its right, and whether it asks to be noticed.
+# Until there is a key it comes first, in the accent colour.
 KEY_ROWS = {
-    "missing": ("Add your OpenAI key", "copy it, click here", "accent"),
-    "waiting": ("Add your OpenAI key", "copy it, click again", "accent"),
+    "missing": ("Add your OpenAI key", "", "accent"),
+    "invalid": ("Add your OpenAI key", "", "accent"),
+    "refused": ("Add your OpenAI key", "refused", "accent"),
     "checking": ("Checking the key", "a moment", "accent"),
-    "refused": ("OpenAI refused that key", "copy another", "accent"),
-    "offline": ("OpenAI key", "saved, not checked", None),
+    "offline": ("OpenAI key", "saved", None),
+    "done": ("OpenAI key", "saved", None),
     "saved": ("OpenAI key", "saved", None),
 }
+
+# The line under the key field, by the same state.
+KEY_HINTS = {
+    "missing": "Ctrl+V to paste it, then Save.",
+    "saved": "A key is saved. Paste a new one to replace it.",
+    "invalid": "That is not an OpenAI key. Those start with sk-.",
+    "checking": "Checking it with OpenAI...",
+    "refused": "OpenAI refused that key. Nothing was changed.",
+    "offline": "Saved. OpenAI could not be reached to check it.",
+    "done": "Saved. HeySpeaky uses it from now on.",
+}
+
+
+def mask(key):
+    """A key as the field shows it: enough to recognise, never enough to
+    use - and never the whole thing on the screen of someone presenting."""
+    key = key or ""
+    if len(key) <= 12:
+        return "\u2022" * len(key)
+    return key[:7] + "\u2022" * 8 + key[-4:]
 
 _BACKENDS = (("OpenAI", "cloud"), ("This laptop", "local"))
 
@@ -80,11 +105,12 @@ class Item(object):
         return "Item({!r}, {!r})".format(self.kind, self.key)
 
 
-CLICKABLE = ("chip", "segmented", "switch", "row", "back", "language")
+CLICKABLE = ("chip", "segmented", "switch", "row", "back", "language",
+             "button", "model")
 
 
 def layout(model, scale=1.0, page="main", scroll=0.0, query="",
-           quit_armed=False):
+           quit_armed=False, key_text=""):
     """Lays the panel out: its card size, and every part in window pixels.
 
     `model` is what the tray knows - see `Tray.panel_model`. Arithmetic and
@@ -111,6 +137,46 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
         return px(value)
 
     names = model.get("names", {})
+    key_state = model.get("key", "saved")
+
+    if page == "key":
+        add("back", "back", "OpenAI key", row)
+        y += row + gap(6)
+        add("keyfield", "keyfield", mask(key_text), px(theme.SEARCH_HEIGHT),
+            KEY_PROMPT)
+        y += px(theme.SEARCH_HEIGHT) + gap(8)
+        add("hint", None, KEY_HINTS.get(key_state, KEY_HINTS["missing"]),
+            px(16))
+        y += px(16) + gap(10)
+        add("button", "key-save", "Save", px(theme.PANEL_CHIP_HEIGHT + 4),
+            bool(key_text.strip()) and key_state != "checking")
+        y += px(theme.PANEL_CHIP_HEIGHT + 4) + gap(8)
+        add("row", "key-page", "Get a key from OpenAI", row, "more")
+        y += row
+        return (width, y - margin + pad), items
+
+    if page == "models":
+        local = model.get("local") or {}
+        add("back", "back", "Model on this laptop", row)
+        y += row + gap(4)
+        add("hint", None, "Bigger hears better, but is slower and heavier.",
+            px(16))
+        y += px(16) + gap(8)
+        tall = px(theme.MODEL_ROW_HEIGHT)
+        for name, label, megabytes, note in localmodels.MODELS:
+            if local.get("busy") == name:
+                right_text = "downloading {:.0f}%".format(
+                    100 * float(local.get("progress") or 0.0))
+            elif local.get("failed") == name:
+                right_text = "download failed"
+            elif (local.get("have") or {}).get(name):
+                right_text = "downloaded"
+            else:
+                right_text = localmodels.size_text(megabytes)
+            add("model", "model:" + name, label, tall,
+                (local.get("current") == name, right_text), note)
+            y += tall
+        return (width, y - margin + pad), items
 
     if page == "languages":
         add("back", "back", "Languages", row)
@@ -159,7 +225,6 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
     add("status", None, model.get("status", ""), header, dot)
     y += header + gap(8)
 
-    key_state = model.get("key", "saved")
     key_label, key_hint, key_look = KEY_ROWS.get(key_state, KEY_ROWS["saved"])
     if key_look == "accent":
         # Nothing works without it, so it comes first until it is there.
@@ -196,7 +261,15 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
         if model.get("backend", "cloud") in ("cloud", "local") else 0
     add("segmented", "backend", "", px(theme.SEGMENT_HEIGHT),
         ([label for label, _value in _BACKENDS], chosen))
-    y += px(theme.SEGMENT_HEIGHT) + gap(6)
+    y += px(theme.SEGMENT_HEIGHT) + gap(4)
+    local = model.get("local") or {}
+    if local.get("busy"):
+        model_hint = "downloading {:.0f}%".format(
+            100 * float(local.get("progress") or 0.0))
+    else:
+        model_hint = localmodels.label(local.get("current", ""))
+    add("row", "models", "Model on this laptop", row, None, hint=model_hint)
+    y += row + gap(2)
 
     add("switch", "pause", "Pause Ctrl+Alt", row, bool(model.get("paused")))
     y += row + gap(6)
@@ -208,7 +281,7 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
             "accent")
         y += row
     if key_look != "accent":
-        add("row", "key", key_label, row, None, hint=key_hint)
+        add("row", "key", key_label, row, "more", hint=key_hint)
         y += row
     for key, label in (("words", "Your words"), ("settings", "Settings"),
                        ("logs", "Logs"), ("report", "Save a problem report")):
@@ -278,12 +351,17 @@ class TrayPanel(object):
     """The panel's window. One at a time; on the Tk thread, like all of them.
 
     `model` is a callable returning the tray's current state; `act` is
-    called with an action key when something is clicked.
+    called with an action key when something is clicked. `submit_key` is
+    handed the key pasted into the key page - never through `act`, whose
+    action names end up in the log.
     """
 
     def __init__(self, root, model, act, scale=1.0, anchor=None,
-                 on_closed=None):
+                 on_closed=None, submit_key=None):
         self._root = root
+        self._submit_key = submit_key
+        self._key_text = ""
+        self._back_job = None
         self._model_source = model
         self._act = act
         self._on_closed = on_closed
@@ -357,7 +435,7 @@ class TrayPanel(object):
         size = getattr(self, "_size", None)
         self._size, self._items = layout(
             self._model, self.scale, self._page, self._scroll, self._query,
-            self._armed())
+            self._armed(), self._key_text)
         # The glass only changes with the size, and typing into the search
         # lays the panel out again on every key.
         if self._card is None or self._size != size:
@@ -452,7 +530,7 @@ class TrayPanel(object):
                                   0.28)
                 self._motion[item.key] = value
                 busy = busy or value != goal
-        if self._page == "languages":
+        if self._page in ("languages", "key"):
             self._turn = _approach(self._turn, self._turn_goal, 0.12)
             busy = busy or self._turn != self._turn_goal
             if self._flare_at is not None:
@@ -519,7 +597,7 @@ class TrayPanel(object):
         """The search caret, on and off while the language list is open.
         A blink is one frame, not a stream of them."""
         self._caret_job = None
-        if self._closed or self._page != "languages":
+        if self._closed or self._page not in ("languages", "key"):
             return
         self._caret_on = not self._caret_on
         self._schedule()
@@ -549,7 +627,16 @@ class TrayPanel(object):
         if fresh != self._model:
             self._model = fresh
             self._refit()
+            if (self._page == "key" and fresh.get("key") == "done"
+                    and self._back_job is None):
+                # Saved: say so for a moment, then back to the first page.
+                self._back_job = self.window.after(1400, self._saved_back)
         self._idle_job = self.window.after(IDLE_MS, self._watch)
+
+    def _saved_back(self):
+        self._back_job = None
+        if not self._closed and self._page == "key":
+            self.press("back")
 
     def _refit(self):
         size = self._size
@@ -597,8 +684,13 @@ class TrayPanel(object):
     # -- the keyboard ------------------------------------------------------
 
     def _key(self, event):
-        """Typing goes into the language search, from either page."""
+        """Typing goes into the key field on its page, and into the language
+        search from the first page or the language list."""
         if self._closing_at is not None:
+            return "break"
+        if self._page == "key":
+            return self._key_into_field(event)
+        if self._page == "models":
             return "break"
         keysym = getattr(event, "keysym", "") or ""
         if keysym == "BackSpace":
@@ -616,6 +708,53 @@ class TrayPanel(object):
         if text and text.strip() or (text == " " and self._query):
             self.type_into_search(text)
         return "break"
+
+    def _key_into_field(self, event):
+        keysym = getattr(event, "keysym", "") or ""
+        control = bool(getattr(event, "state", 0) & 0x4)
+        if control and getattr(event, "keycode", 0) == 0x56:
+            # Ctrl+V by the key, not the letter: on a Russian or Kazakh
+            # layout the same key is "м".
+            try:
+                pasted = self.window.clipboard_get()
+            except tk.TclError:
+                pasted = ""
+            self.type_key("".join(pasted.split()))
+        elif keysym == "BackSpace":
+            self.type_key(None)
+        elif keysym in ("Return", "KP_Enter"):
+            self.press("key-save")
+        elif not control:
+            text = keymap.typed_char(getattr(event, "keycode", 0)) \
+                or (event.char if (event.char or "").isprintable() else "")
+            if text.strip():
+                self.type_key(text.strip())
+        return "break"
+
+    def type_key(self, text):
+        """Adds `text` to the key field, or takes a character off for None.
+        Public, for the live check."""
+        if text is None:
+            self._key_text = self._key_text[:-1]
+        else:
+            self._key_text = (self._key_text + text)[:300]
+            self._turn_goal += theme.GLOW_NUDGE / 360.0
+            self._flare_at = time.monotonic()
+        self._start_blinking()
+        self._refit()
+
+    def _save_key(self):
+        text = self._key_text
+        if not text.strip() or self._submit_key is None:
+            return
+        # The panel keeps the key only until it is handed over.
+        self._key_text = ""
+        try:
+            self._submit_key(text)
+        except Exception:
+            logger.exception("The tray panel could not hand the key over")
+        self.window.after(60, self._watch_once)
+        self._refit()
 
     def type_into_search(self, text):
         """Adds `text` to the search, or takes a letter off for None; opens
@@ -648,11 +787,14 @@ class TrayPanel(object):
         if self._quit_armed_at is not None:
             self._quit_armed_at = None
             self._refit()
+        elif self._page == "key" and self._key_text:
+            self._key_text = ""
+            self._refit()
         elif self._page == "languages" and self._query:
             self._query = ""
             self._scroll = 0.0
             self._refit()
-        elif self._page == "languages":
+        elif self._page != "main":
             self.press("back")
         else:
             self.close()
@@ -665,9 +807,24 @@ class TrayPanel(object):
             self._refit()
             return
         if action == "back":
-            self._page, self._query = "main", ""
+            self._page, self._query, self._key_text = "main", "", ""
             self._hover_key = None
             self._refit()
+            return
+        if action == "key":
+            self._page, self._key_text = "key", ""
+            self._hover_key = None
+            self._turn_goal += 1.0
+            self._start_blinking()
+            self._refit()
+            return
+        if action == "models":
+            self._page = "models"
+            self._hover_key = None
+            self._refit()
+            return
+        if action == "key-save":
+            self._save_key()
             return
         if action == "quit" and not self._armed():
             self._quit_armed_at = time.monotonic()
@@ -726,7 +883,9 @@ class TrayPanel(object):
 
     def _destroy(self):
         self._closed = True
-        for job in (self._job, self._idle_job, self._caret_job):
+        self._key_text = ""
+        for job in (self._job, self._idle_job, self._caret_job,
+                    self._back_job):
             if job is not None:
                 try:
                     self.window.after_cancel(job)

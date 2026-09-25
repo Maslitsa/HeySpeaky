@@ -197,6 +197,26 @@ class TranscriptionEngine:
             except Exception:
                 logger.debug("Could not reap %s", child, exc_info=True)
 
+    def reload(self):
+        """Builds the recorder again, for a local model chosen in the tray.
+
+        RealtimeSTT takes its model once, when the recorder is made, so a new
+        model means a new recorder. Until it is ready, Ctrl+Alt says the
+        models are loading, as it does at startup. Never while recording:
+        the caller checks.
+        """
+        with self._lock:
+            recorder, self._recorder = self._recorder, None
+            self._ready.clear()
+            self._recording = self._active = False
+        if recorder is not None:
+            try:
+                recorder.shutdown()
+            except Exception:
+                logger.debug("Recorder shutdown raised", exc_info=True)
+        self._reap_workers()
+        self.start()
+
     def shutdown(self):
         """Releases the recorder and its worker process."""
         self._shutdown.set()

@@ -35,6 +35,7 @@ from . import output
 from . import sound
 from . import languages
 from . import levels
+from . import localmodels
 from . import panel as panel_module
 from .engine import TranscriptionEngine
 from .hotkey import HotkeyListener
@@ -167,6 +168,10 @@ class App:
             read_clipboard=output.read_clipboard,
             clear_clipboard=output.clear_clipboard,
             on_saved=self._key_saved)
+        self._local_models = localmodels.LocalModels(
+            cfg, on_chosen=self._local_model_chosen,
+            save=lambda: config_module.save(self.cfg))
+        self._told_no_key = False
         self.tray = Tray(
             config_module.CONFIG_PATH,
             config_module.LOG_DIR,
@@ -184,8 +189,10 @@ class App:
             on_update=self._on_tray_update,
             on_panel=(self._on_tray_panel
                       if cfg.get("tray", {}).get("panel", True) else None),
-            on_key=self._key_flow.press,
+            on_key_page=self._key_flow.open_page,
             key_state=self._key_flow.state,
+            local_models=self._local_models.state,
+            on_local_model=self._local_models.choose,
         )
 
     # -- speech detection --------------------------------------------------
@@ -266,8 +273,9 @@ class App:
     def _on_ready(self):
         self.tray.set_status("Ready · hold Ctrl+Alt to dictate")
         logger.info("Engine ready")
-        if self.router.preferred == "cloud" \
+        if self.router.preferred == "cloud" and not self._told_no_key \
                 and not self.router.cloud.available():
+            self._told_no_key = True
             # Said once, where it can be acted on: the tray panel has a row
             # that takes the key straight off the clipboard.
             logger.info("No OpenAI key yet; asking for one in the tray")
@@ -815,6 +823,19 @@ class App:
             self.overlay.flash, "done", "", "Using {}".format(label), 1.4
         )
 
+    def _local_model_chosen(self, name):
+        """A model picked in the tray, now on disk: load it. Waits for a
+        recording in progress to finish rather than cutting it off."""
+        with self._state_lock:
+            busy = self.state != IDLE
+        if busy:
+            threading.Timer(1.0, self._local_model_chosen, (name,)).start()
+            return
+        logger.info("Loading the %s model chosen in the tray", name)
+        self.tray.set_status("Loading {}...".format(
+            localmodels.label(name)))
+        self.engine.reload()
+
     def _key_saved(self):
         """A key came in from the tray. Saving one means OpenAI is wanted,
         so a laptop still set to transcribe on its own is switched over."""
@@ -887,7 +908,7 @@ class App:
         self._panel = panel_module.TrayPanel(
             self.root, self.tray.panel_model, self.tray.panel_act,
             scale=self.overlay.scale, anchor=anchor,
-            on_closed=self._panel_closed)
+            on_closed=self._panel_closed, submit_key=self._key_flow.submit)
 
     def _panel_closed(self, closed):
         if closed is self._panel:

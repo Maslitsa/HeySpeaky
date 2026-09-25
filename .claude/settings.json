@@ -12,6 +12,18 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/session_brief.py",
+            "timeout": 30,
+            "statusMessage": "Reading the app's log"
+          }
+        ]
+      }
     ]
   }
 }

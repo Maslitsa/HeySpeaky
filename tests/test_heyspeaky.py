@@ -2494,28 +2494,31 @@ from heyspeaky import apikey  # noqa: E402
 
 
 class AddingTheKeyFromTheTray(unittest.TestCase):
-    """Copy the key, click one row: no PowerShell, no reinstall."""
+    """Click the icon, click "Add your OpenAI key", paste, Save: the steps
+    the owner described. No PowerShell, no reinstall."""
 
     KEY = "sk-proj-" + "Ab3_" * 12
 
-    def flow(self, clipboard, verdict="ok", has_key=False):
+    def flow(self, clipboard="", verdict="ok", has_key=False):
         self.clipboard = {"text": clipboard}
-        self.saved, self.opened, self.told = [], [], []
+        self.saved, self.opened, self.told, self.checked = [], [], [], []
         self.have = {"key": has_key}
 
         def save(config, key):
             self.saved.append(key)
             self.have["key"] = True
 
-        flow = apikey.KeyFlow(
+        def checker(key):
+            self.checked.append(key)
+            return verdict
+
+        return apikey.KeyFlow(
             {"transcription": {"cloud": {}}},
             has_key=lambda: self.have["key"],
             read_clipboard=lambda: self.clipboard["text"],
             clear_clipboard=lambda: self.clipboard.update(text=""),
             on_saved=lambda: self.told.append(1),
-            open_page=self.opened.append,
-            checker=lambda key: verdict, saver=save)
-        return flow
+            open_page=self.opened.append, checker=checker, saver=save)
 
     def settle(self, flow):
         deadline = time.monotonic() + 2.0
@@ -2529,44 +2532,56 @@ class AddingTheKeyFromTheTray(unittest.TestCase):
                      "Bearer " + self.KEY):
             self.assertFalse(apikey.looks_like_key(text), text)
 
-    def test_a_copied_key_is_checked_saved_and_taken_off_the_clipboard(self):
-        flow = self.flow(self.KEY)
+    def test_a_pasted_key_is_checked_saved_and_taken_off_the_clipboard(self):
+        flow = self.flow(clipboard=self.KEY)
         self.assertEqual(flow.state(), "missing")
-        self.assertEqual(flow.press(), "checking")
-        self.assertEqual(self.clipboard["text"], "")
+        self.assertEqual(flow.submit(" " + self.KEY + "\n"), "checking")
         self.settle(flow)
         self.assertEqual(self.saved, [self.KEY])
         self.assertEqual(self.told, [1])
-        self.assertEqual(flow.state(), "saved")
+        self.assertEqual(self.clipboard["text"], "")
+        self.assertEqual(flow.state(), "done")
 
-    def test_no_key_on_the_clipboard_opens_the_page_where_keys_are_made(self):
-        flow = self.flow("some text somebody copied")
-        self.assertEqual(flow.press(), "waiting")
-        self.assertEqual(self.opened, [apikey.KEYS_PAGE])
-        self.assertEqual(self.clipboard["text"], "some text somebody copied")
-        self.assertEqual(flow.state(), "waiting")
+    def test_a_clipboard_holding_something_else_is_left_alone(self):
+        flow = self.flow(clipboard="a shopping list")
+        flow.submit(self.KEY)
+        self.settle(flow)
+        self.assertEqual(self.saved, [self.KEY])
+        self.assertEqual(self.clipboard["text"], "a shopping list")
+
+    def test_something_that_is_not_a_key_is_turned_away_at_once(self):
+        flow = self.flow()
+        self.assertEqual(flow.submit("my password 123"), "invalid")
+        self.assertEqual((self.checked, self.saved), ([], []))
+        self.assertEqual(flow.state(), "invalid")
 
     def test_a_refused_key_is_not_saved(self):
-        flow = self.flow(self.KEY, verdict="refused", has_key=True)
-        flow.press()
+        flow = self.flow(verdict="refused", has_key=True)
+        flow.submit(self.KEY)
         self.settle(flow)
         self.assertEqual(self.saved, [])
         self.assertEqual(flow.state(), "refused")
 
     def test_a_key_that_could_not_be_checked_is_saved_anyway(self):
-        flow = self.flow(self.KEY, verdict="offline")
-        flow.press()
+        flow = self.flow(verdict="offline")
+        flow.submit(self.KEY)
         self.settle(flow)
         self.assertEqual(self.saved, [self.KEY])
         self.assertEqual(flow.state(), "offline")
 
     def test_the_key_never_reaches_the_log(self):
-        flow = self.flow(self.KEY)
+        flow = self.flow(clipboard=self.KEY)
         with self.assertLogs("heyspeaky.apikey", level="INFO") as logs:
-            flow.press()
+            flow.submit(self.KEY)
             self.settle(flow)
-        self.assertNotIn(self.KEY, "\n".join(logs.output))
-        self.assertNotIn(self.KEY[:12], "\n".join(logs.output))
+        said = "\n".join(logs.output)
+        self.assertNotIn(self.KEY, said)
+        self.assertNotIn(self.KEY[:12], said)
+
+    def test_the_row_under_the_field_opens_the_page_where_keys_are_made(self):
+        flow = self.flow()
+        flow.open_page()
+        self.assertEqual(self.opened, [apikey.KEYS_PAGE])
 
     def test_the_file_holds_the_key_and_nothing_else(self):
         folder = tempfile.mkdtemp()
@@ -2588,6 +2603,166 @@ class AddingTheKeyFromTheTray(unittest.TestCase):
         rows = [item for item in items if item.kind == "row"]
         self.assertNotEqual(rows[0].key, "key")
         self.assertIn("key", [item.key for item in rows])
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class TheKeyPage(_PanelModel, unittest.TestCase):
+    """The field the key is pasted into."""
+
+    KEY = AddingTheKeyFromTheTray.KEY
+
+    def page(self, key_text="", **model):
+        _size, items = panel_module.layout(self.model(**model), 1.25, "key",
+                                           key_text=key_text)
+        return dict((item.kind, item) for item in items)
+
+    def panel(self, clipboard):
+        import types
+        panel = object.__new__(panel_module.TrayPanel)
+        self.acts, self.handed = [], []
+        panel._page, panel._key_text, panel._query = "key", "", ""
+        panel._turn_goal, panel._flare_at, panel._caret_job = 0.0, None, None
+        panel._quit_armed_at, panel._closing_at = None, None
+        panel._hover_key = None
+        panel._refit = lambda: None
+        panel._act = self.acts.append
+        panel._submit_key = self.handed.append
+        panel.window = types.SimpleNamespace(
+            after=lambda *_: None, after_cancel=lambda *_: None,
+            clipboard_get=lambda: clipboard)
+        return panel
+
+    def test_the_key_is_never_shown_whole(self):
+        shown = self.page(self.KEY)["keyfield"].label
+        self.assertNotIn(self.KEY, shown)
+        self.assertTrue(shown.startswith(self.KEY[:7]))
+        self.assertTrue(shown.endswith(self.KEY[-4:]))
+        self.assertIn("•", shown)
+
+    def test_save_is_ready_only_with_something_to_save(self):
+        self.assertFalse(self.page("")["button"].extra)
+        self.assertTrue(self.page(self.KEY)["button"].extra)
+        self.assertFalse(self.page(self.KEY, key="checking")["button"].extra)
+
+    def test_ctrl_v_pastes_and_enter_hands_it_over_but_not_through_act(self):
+        import types
+        panel = self.panel(" " + self.KEY + "\r\n")
+        panel._key_into_field(types.SimpleNamespace(
+            keysym="Cyrillic_em", keycode=0x56, state=0x4, char="\x16"))
+        self.assertEqual(panel._key_text, self.KEY)
+        panel._key_into_field(types.SimpleNamespace(
+            keysym="Return", keycode=0x0D, state=0, char="\r"))
+        self.assertEqual(self.handed, [self.KEY])
+        self.assertEqual(panel._key_text, "")
+        self.assertEqual(self.acts, [])
+
+    def test_escape_empties_the_field_before_it_leaves_the_page(self):
+        panel = self.panel("")
+        panel._key_text = "sk-something"
+        panel._escape()
+        self.assertEqual((panel._page, panel._key_text), ("key", ""))
+        panel._escape()
+        self.assertEqual(panel._page, "main")
+
+    def test_the_page_is_drawn(self):
+        size, items = panel_module.layout(self.model(), 1.25, "key",
+                                          key_text=self.KEY)
+        card = glass.panel_card(size[0], size[1], 1.25)
+        frame = glass.panel_frame(card, items, 1.25)
+        button = [item for item in items if item.kind == "button"][0]
+        middle = frame.getpixel(((button.rect[0] + button.rect[2]) // 2 - 30,
+                                 (button.rect[1] + button.rect[3]) // 2))
+        self.assertGreater(sum(middle[:3]), 600)        # white, ready
+
+
+from heyspeaky import localmodels  # noqa: E402
+
+
+class ChoosingTheModelOnThisLaptop(unittest.TestCase):
+    """People choose: bigger hears better, and is slower and heavier."""
+
+    def models(self, have=("base", "small"), fetch_ok=True):
+        self.cfg = {"model": {"final": "base", "download_root": None}}
+        self.saves, self.chosen, self.fetched = [], [], []
+        self.release = threading.Event()
+        self.on_disk = set(have)
+
+        def fetch(name):
+            self.fetched.append(name)
+            self.release.wait(2.0)
+            if not fetch_ok:
+                raise IOError("no network")
+            self.on_disk.add(name)
+
+        return localmodels.LocalModels(
+            self.cfg, on_chosen=self.chosen.append,
+            save=lambda: self.saves.append(1),
+            is_downloaded=lambda name, cache: name in self.on_disk,
+            fetch=fetch)
+
+    def wait_for(self, condition):
+        deadline = time.monotonic() + 2.0
+        while not condition() and time.monotonic() < deadline:
+            time.sleep(0.02)
+
+    def test_a_model_on_disk_is_switched_to_at_once(self):
+        models = self.models()
+        models.choose("small")
+        self.assertEqual(self.cfg["model"]["final"], "small")
+        self.assertEqual((self.chosen, self.saves, self.fetched),
+                         (["small"], [1], []))
+
+    def test_a_model_not_on_disk_is_downloaded_first(self):
+        models = self.models()
+        models.choose("medium")
+        self.wait_for(lambda: self.fetched)
+        self.assertEqual(models.state()["busy"], "medium")
+        self.assertEqual(self.cfg["model"]["final"], "base")
+        self.release.set()
+        self.wait_for(lambda: self.chosen)
+        self.assertEqual(self.chosen, ["medium"])
+        self.assertEqual(self.cfg["model"]["final"], "medium")
+        self.assertEqual(models.state()["busy"], "")
+
+    def test_a_failed_download_changes_nothing_and_says_so(self):
+        models = self.models(fetch_ok=False)
+        models.choose("medium")
+        self.release.set()
+        self.wait_for(lambda: models.state()["failed"])
+        self.assertEqual(models.state()["failed"], "medium")
+        self.assertEqual(self.cfg["model"]["final"], "base")
+        self.assertEqual(self.chosen, [])
+
+    def test_only_models_it_knows_can_be_chosen(self):
+        models = self.models()
+        models.choose("../../somewhere")
+        self.assertEqual((self.chosen, self.fetched), ([], []))
+
+    def test_every_choice_says_how_big_it_is(self):
+        for name, label, megabytes, note in localmodels.MODELS:
+            self.assertGreater(megabytes, 10, name)
+            self.assertTrue(note, name)
+        self.assertEqual(localmodels.size_text(1622), "1.6 GB")
+        self.assertEqual(localmodels.size_text(148), "148 MB")
+
+    @unittest.skipIf(panel_module is None, "tkinter is missing")
+    def test_the_panel_lists_them_with_what_they_cost(self):
+        local = {"current": "base", "have": {"base": True, "small": True},
+                 "busy": "medium", "progress": 0.42, "failed": ""}
+        model = _PanelModel().model(local=local)
+        _size, items = panel_module.layout(model, 1.25, "models")
+        rows = dict((item.key, item) for item in items
+                    if item.kind == "model")
+        self.assertEqual(len(rows), len(localmodels.MODELS))
+        self.assertEqual(rows["model:base"].extra, (True, "downloaded"))
+        self.assertEqual(rows["model:small"].extra, (False, "downloaded"))
+        self.assertEqual(rows["model:medium"].extra, (False,
+                                                      "downloading 42%"))
+        self.assertEqual(rows["model:large-v3-turbo"].extra, (False,
+                                                              "1.6 GB"))
+        _size, first = panel_module.layout(model, 1.25)
+        row = [item for item in first if item.key == "models"][0]
+        self.assertEqual(row.hint, "downloading 42%")
 
 
 class TheShortcutsHaveAnIcon(unittest.TestCase):
@@ -2647,6 +2822,81 @@ class TheLogSaysWhyCtrlAltDidNothing(unittest.TestCase):
         self.assertIn("a character key", said)
         self.assertNotIn("'q'", said)
         self.assertNotIn(" q ", said)
+
+
+def _tool(name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        name, str(ROOT / "tools" / (name + ".py")))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TheSessionBrief(unittest.TestCase):
+    """What every session used to gather by hand, in twenty lines."""
+
+    LOG = [
+        "2026-09-20 10:00:00,000 INFO    heyspeaky          HeySpeaky running",
+        "2026-09-25 09:00:00,000 INFO    heyspeaky          HeySpeaky running",
+        "2026-09-25 09:01:00,000 INFO    heyspeaky          Final transcript "
+        "(cloud): 40 chars",
+        "2026-09-25 09:02:00,000 INFO    heyspeaky.output   Selection: 6 chars"
+        " from claude.exe (Chrome_WidgetWin_1), 1 try; keys up after 0.20s;"
+        " the window answered",
+        "2026-09-25 09:03:00,000 INFO    heyspeaky.output   Selection: 0 chars"
+        " from Chrome_WidgetWin_1, 2 tries; keys up after 0.14s; the window "
+        "never answered",
+        "2026-09-25 09:04:00,000 WARNING heyspeaky          Another instance "
+        "is already running; exiting",
+        "  a traceback line with no stamp",
+    ]
+
+    def test_it_counts_only_what_is_recent(self):
+        import datetime
+        brief = _tool("session_brief")
+        facts = brief.summarise(self.LOG, datetime.datetime(2026, 9, 24))
+        self.assertEqual(facts["counts"]["starts"], 1)
+        self.assertEqual(facts["counts"]["dictations"], 1)
+        self.assertEqual(facts["counts"]["second copy refused"], 1)
+        self.assertEqual(dict(facts["read"]), {"claude.exe": 1})
+        self.assertEqual(dict(facts["empty"]), {"Chrome_WidgetWin_1": 1})
+        self.assertEqual(len(facts["warnings"]), 1)
+
+    def test_line_endings_alone_are_not_a_difference(self):
+        brief = _tool("session_brief")
+        here, there = Path(tempfile.mkdtemp()), Path(tempfile.mkdtemp())
+        (here / "a.py").write_bytes(b"x = 1\ny = 2\n")
+        (there / "a.py").write_bytes(b"x = 1\r\ny = 2\r\n")
+        (here / "b.py").write_bytes(b"x = 1\n")
+        (there / "b.py").write_bytes(b"x = 2\n")
+        (here / "c.py").write_bytes(b"new\n")
+        self.assertEqual(brief.drift(here, there, ["a.py", "b.py", "c.py"]),
+                         (["b.py"], ["c.py"]))
+
+
+class TheCommitCheckGuardsTheInstaller(unittest.TestCase):
+    """install.ps1 is how everyone updates: a broken one breaks everyone."""
+
+    @unittest.skipUnless(sys.platform == "win32", "needs PowerShell")
+    def test_a_script_that_is_not_ascii_or_does_not_parse_is_stopped(self):
+        precommit = _tool("precommit")
+        folder = Path(tempfile.mkdtemp())
+        (folder / "fine.ps1").write_text("Write-Host 'hello'\n")
+        (folder / "cyrillic.ps1").write_text(
+            "Write-Host 'привет'\n", encoding="utf-8")
+        (folder / "broken.ps1").write_text("function f { if (\n")
+        self.assertEqual(precommit.script_problems(folder / "fine.ps1"), [])
+        self.assertIn("ASCII", precommit.script_problems(
+            folder / "cyrillic.ps1")[0])
+        self.assertIn("does not parse", precommit.script_problems(
+            folder / "broken.ps1")[0])
+
+    @unittest.skipUnless(sys.platform == "win32", "needs PowerShell")
+    def test_the_real_installers_pass(self):
+        precommit = _tool("precommit")
+        for name in ("install.ps1", "uninstall.ps1"):
+            self.assertEqual(precommit.script_problems(ROOT / name), [], name)
 
 
 if __name__ == "__main__":

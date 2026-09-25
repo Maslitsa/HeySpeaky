@@ -2,16 +2,14 @@
 
 The owner asked for this to be low effort for anyone, and before it the only
 way to add or change a key was to run the installer again with the key in a
-PowerShell command. Now: copy the key wherever OpenAI shows it, and click one
-row in the tray panel. The row reads the clipboard, and if what is there
-looks like a key it is checked with OpenAI and saved where the installer
-saves it. The clipboard is emptied as soon as the key is read, so it is not
-left there to be pasted into a chat by accident. If there is no key on the
-clipboard, the row opens the page where keys are made, and asks for the
-same click again once one is copied.
+PowerShell command. Now: click the HeySpeaky icon, click "Add your OpenAI
+key", paste it into the field that opens, and press Save - the steps the
+owner described himself. The key is checked with OpenAI before it replaces
+anything, saved where the installer saves it, and taken off the clipboard
+if that is where it came from. A row under the field opens the page where
+keys are made.
 
-The key is never logged, never shown, and never put in config.json.
-"""
+The key is never logged, never shown whole, and never put in config.json."""
 
 import logging
 import os
@@ -32,8 +30,8 @@ _KEY = re.compile(r"^sk-[A-Za-z0-9_\-]{20,}$")
 
 # How long a state that is only news lasts before the row goes back to
 # saying whether there is a key.
-_LASTS = {"waiting": 180.0, "refused": 60.0, "offline": 20.0,
-          "checking": 60.0}
+_LASTS = {"invalid": 30.0, "refused": 60.0, "offline": 20.0,
+          "checking": 60.0, "done": 4.0}
 
 CREATE_NO_WINDOW = 0x08000000
 
@@ -96,12 +94,13 @@ def check(key, timeout=10.0):
 
 
 class KeyFlow(object):
-    """What the key row in the tray panel does, and what it says.
+    """What the OpenAI key page in the tray panel does, and what it says.
 
     `has_key` answers whether the app has a key now; `read_clipboard` and
-    `clear_clipboard` are the clipboard; `on_saved` is told after a key is
-    saved. All of them are passed in, so the flow can be tried without a
-    real clipboard, a browser or OpenAI.
+    `clear_clipboard` are the clipboard, used only to take the key off it
+    once it is saved; `on_saved` is told after a key is saved. All of them
+    are passed in, so the flow can be tried without a real clipboard, a
+    browser or OpenAI.
     """
 
     def __init__(self, config, has_key, read_clipboard, clear_clipboard,
@@ -120,7 +119,7 @@ class KeyFlow(object):
         self._since = 0.0
 
     def state(self):
-        """missing, waiting, checking, refused, offline or saved."""
+        """missing, invalid, checking, refused, offline, done or saved."""
         with self._lock:
             news, since = self._news, self._since
         if news is not None and time.monotonic() - since < _LASTS[news]:
@@ -135,38 +134,32 @@ class KeyFlow(object):
             self._news = news
             self._since = time.monotonic()
 
-    def press(self):
-        """The row was clicked. Returns at once; the check runs on its own."""
+    def open_page(self):
+        """Where keys are made, in the browser."""
+        try:
+            self._open_page(KEYS_PAGE)
+        except Exception:
+            logger.exception("Could not open the keys page")
+
+    def submit(self, text):
+        """The Save button: `text` is whatever was pasted into the field.
+        Returns at once; the check with OpenAI runs on its own thread."""
+        key = (text or "").strip()
         if self.state() == "checking":
             return "checking"
-        try:
-            text = (self._read() or "").strip()
-        except Exception:
-            text = ""
-        if not looks_like_key(text):
-            # Nothing to take: show where keys come from, and wait for the
-            # same click once one is copied.
-            logger.info("No key on the clipboard; opening the keys page")
-            try:
-                self._open_page(KEYS_PAGE)
-            except Exception:
-                logger.exception("Could not open the keys page")
-            self._say("waiting")
-            return "waiting"
-        try:
-            self._clear()
-        except Exception:
-            logger.warning("Could not empty the clipboard after reading a key")
+        if not looks_like_key(key):
+            self._say("invalid")
+            return "invalid"
         self._say("checking")
-        threading.Thread(target=self._check_and_save, args=(text,),
+        threading.Thread(target=self._check_and_save, args=(key,),
                          name="apikey", daemon=True).start()
         return "checking"
 
     def _check_and_save(self, key):
         verdict = self._check(key)
         if verdict == "refused":
-            logger.info("OpenAI refused the key from the clipboard; "
-                        "the old one, if any, is kept")
+            logger.info("OpenAI refused the pasted key; the old one, if any, "
+                        "is kept")
             self._say("refused")
             return
         try:
@@ -175,10 +168,17 @@ class KeyFlow(object):
             logger.exception("Could not save the key")
             self._say("refused")
             return
-        logger.info("OpenAI key saved from the clipboard (%s)",
+        logger.info("OpenAI key saved from the tray (%s)",
                     "checked" if verdict == "ok"
                     else "OpenAI could not be reached to check it")
-        self._say("offline" if verdict == "offline" else None)
+        # Pasted from the clipboard, most likely: do not leave it there to
+        # be pasted into a chat by accident. Anything else is left alone.
+        try:
+            if (self._read() or "").strip() == key:
+                self._clear()
+        except Exception:
+            logger.warning("Could not take the key off the clipboard")
+        self._say("offline" if verdict == "offline" else "done")
         if self._on_saved is not None:
             try:
                 self._on_saved()

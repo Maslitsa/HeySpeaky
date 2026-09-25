@@ -101,6 +101,8 @@ QUIT_ARMED = 3.0
 # search-bar challenge there and is where the composer's ring came from.
 # The ring spreads less here, to stay inside the card.
 SEARCH_HEIGHT = 34
+# A model on the laptop takes two lines: its name, and what it costs.
+MODEL_ROW_HEIGHT = 44
 SEARCH_SPREAD = 7
 CARET_BLINK = 0.53
 # A tick draws itself in, stroke by stroke, the way uiverse's checkboxes do,

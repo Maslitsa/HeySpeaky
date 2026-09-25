@@ -76,6 +76,32 @@ def interpreter():
     return None
 
 
+def script_problems(path):
+    """install.ps1 and uninstall.ps1 are how everyone gets HeySpeaky, and
+    Windows PowerShell 5.1 mangles anything that is not ASCII: one that is
+    not ASCII, or does not parse, breaks every install at once."""
+    path = Path(path)
+    if not path.exists():
+        return []
+    if any(byte > 127 for byte in path.read_bytes()):
+        return ["{} has characters outside ASCII, which Windows PowerShell "
+                "5.1 mangles".format(path.name)]
+    literal = str(path).replace("'", "''")
+    # UTF-8 both ways: on a Russian Windows the parser explains itself in
+    # Russian, and the console's own code page turns that into noise.
+    check = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+         "[Console]::OutputEncoding = [Text.Encoding]::UTF8; $e = $null;"
+         " [void][System.Management.Automation.Language.Parser]::ParseFile('"
+         + literal + "', [ref]$null, [ref]$e); if ($e.Count) {"
+         " $e | ForEach-Object { $_.Message }; exit 1 }"],
+        cwd=str(ROOT), capture_output=True, encoding="utf-8", errors="replace")
+    if check.returncode != 0:
+        said = (check.stdout or check.stderr).strip().splitlines()[:2]
+        return ["{} does not parse: {}".format(path.name, " / ".join(said))]
+    return []
+
+
 def problems():
     found = []
 
@@ -83,6 +109,10 @@ def problems():
         if any(part in name.lower() for part in FORBIDDEN_NAMES):
             found.append("{} looks like a key, a recording or a private tally"
                          .format(name))
+
+    for name in staged():
+        if name.lower().endswith(".ps1"):
+            found.extend(script_problems(ROOT / name))
 
     diff = staged_text()
     if KEY.search(diff):

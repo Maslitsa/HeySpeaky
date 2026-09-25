@@ -38,18 +38,19 @@ starts HeySpeaky with Windows and launches it. Then hold Ctrl+Alt and talk.
 
 OpenAI is much more accurate than the model on your computer, and it is the
 only option that keeps up when you switch language in the middle of a
-sentence. Adding the key takes two clicks:
+sentence. Adding the key:
 
 1. Create a key at
    [platform.openai.com/api-keys](https://platform.openai.com/api-keys) and
    copy it.
 2. Click the HeySpeaky icon in the tray, then **Add your OpenAI key**.
+3. Paste it into the field with Ctrl+V and press **Save**.
 
-HeySpeaky takes the key off the clipboard, checks it with OpenAI, saves it to
+HeySpeaky checks the key with OpenAI, saves it to
 `%APPDATA%\HeySpeaky\openai.key` where only your account can read it, and
-empties the clipboard so the key is not left there to be pasted by accident.
-If nothing is copied yet, the same click opens the page where keys are made.
-To change the key later, copy the new one and click **OpenAI key**.
+takes it off the clipboard so it is not left there to be pasted by accident.
+The field shows it masked. A row under it opens the page where keys are
+made. To change the key later, do the same with the new one.
 
 Or give it to the installer, which does the same checks: put the key between
 the quotes and paste the whole line into PowerShell instead:
@@ -138,7 +139,24 @@ downloaded speech models. A folder that is a git clone is left where it is.
 | Click the tick on the pill | Finishes now. |
 | Click the cross on the pill, or press any other key | Cancels. Nothing is inserted. |
 | Select a word it got wrong, press Ctrl+Alt+Win | Type what you said. It remembers, and gets it right next time. |
-| Click the tray icon | Status, your languages (just start typing to find one, in English, Russian, Kazakh or its own name), your OpenAI key, OpenAI or local, pause the hotkey, your words, settings, a problem report. Quit asks for a second click. |
+| Click the tray icon | Status, your languages (just start typing to find one, in English, Russian, Kazakh or its own name), your OpenAI key, OpenAI or local, which model runs on your laptop, pause the hotkey, your words, settings, a problem report. Quit asks for a second click. |
+
+### Choosing the model on your laptop
+
+Click the tray icon, then **Model on this laptop**. Bigger models hear
+better, especially with more than one language, and are slower and larger:
+
+| Model | Download | What to expect |
+| --- | --- | --- |
+| Tiny | 78 MB | fastest, makes the most mistakes |
+| Base | 148 MB | fast, the usual choice |
+| Small | 486 MB | better, a few seconds a sentence |
+| Medium | 1.5 GB | good, slow without a graphics card |
+| Large v3 Turbo | 1.6 GB | the best, slow without a graphics card |
+
+One you have not used yet is downloaded when you pick it, with the progress
+shown in the panel. With OpenAI selected, the laptop's model only steps in
+when OpenAI cannot be reached.
 
 <div align="center">
 <img src="docs/img/overlay-done.png" width="620" alt="Done state with a green dot and the final transcript in white"><br>

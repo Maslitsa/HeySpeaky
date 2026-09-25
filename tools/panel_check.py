@@ -12,7 +12,8 @@ pinned and the pause switched on, the language list, scrolled, and closed.
 
 It moves the real pointer over one row, for the hover, and puts it back.
 It also types into the language search with real keys - in the Kazakh
-layout, if this machine has it - and clicks Quit once, which must not quit.
+layout, if this machine has it - clicks Quit once, which must not quit,
+pastes a made-up key into the key page, and opens the list of models.
 """
 
 import argparse
@@ -47,6 +48,7 @@ class StandIn(object):
         self.state = {"pinned": "", "paused": False, "backend": "cloud",
                       "yours": ["kk", "ru", "en", "de"], "key": "missing"}
         self.done = []
+        self.submitted = []
 
     def model(self):
         offered = languages.catalog(self.state["yours"])
@@ -61,15 +63,20 @@ class StandIn(object):
             "usage": "This month: $0.42 · 118 dictations",
             "update": "",
             "key": self.state["key"],
+            "local": {"current": "base", "busy": "", "progress": 0.0,
+                      "failed": "", "have": {"base": True, "small": True,
+                                             "large-v3-turbo": True}},
             "catalog": list(offered),
             "names": dict((code, languages.name(code)) for code in offered),
         }
 
+    def submit(self, key):
+        self.submitted.append(key)
+        self.state["key"] = "done"
+
     def act(self, action):
         self.done.append(action)
-        if action == "key":
-            self.state["key"] = "saved"
-        elif action.startswith("pin:"):
+        if action.startswith("pin:"):
             self.state["pinned"] = action[4:]
         elif action == "pause":
             self.state["paused"] = not self.state["paused"]
@@ -101,6 +108,7 @@ def photograph(panel):
 def main():
     parser = argparse.ArgumentParser(description="Show the tray panel")
     parser.add_argument("--out", help="save the strip of moments here")
+    parser.add_argument("--frames", help="also save each moment in this folder")
     parser.add_argument("--scale", type=float)
     args = parser.parse_args()
 
@@ -123,7 +131,8 @@ def main():
     stand_in = StandIn()
     closed = []
     panel = TrayPanel(root, stand_in.model, stand_in.act, scale=scale,
-                      anchor=anchor, on_closed=closed.append)
+                      anchor=anchor, on_closed=closed.append,
+                      submit_key=stand_in.submit)
     problems = []
     shots = []
     pump(root, 0.4)
@@ -146,8 +155,31 @@ def main():
     shots.append(("no key yet", photograph(panel)))
     panel.press("key")
     pump(root, 0.5)
-    if stand_in.state["key"] != "saved" or not panel.open:
-        problems.append("the key row did not do its job and stay open")
+    shots.append(("the key page", photograph(panel)))
+    made_up = "sk-proj-" + "Demo" * 10
+    panel.type_key(made_up)
+    pump(root, 0.3)
+    field = [item for item in panel._items if item.kind == "keyfield"][0]
+    if made_up in field.label or not field.label.endswith(made_up[-4:]):
+        problems.append("the key field does not mask the key")
+    shots.append(("a key pasted", photograph(panel)))
+    panel.press("key-save")
+    pump(root, 0.4)
+    if stand_in.submitted != [made_up] or any(
+            made_up in action for action in stand_in.done):
+        problems.append("the key did not reach the tray, or went through act")
+    shots.append(("saved", photograph(panel)))
+    pump(root, 1.6)
+    if panel._page != "main":
+        problems.append("the key page did not go back after saving")
+    panel.press("models")
+    pump(root, 0.4)
+    rows = [item for item in panel._items if item.kind == "model"]
+    if len(rows) != 5:
+        problems.append("the model list shows {} models".format(len(rows)))
+    shots.append(("models", photograph(panel)))
+    panel.press("back")
+    pump(root, 0.3)
 
     row = [item for item in panel._items if item.key == "settings"][0]
     user32.SetCursorPos(x + (row.rect[0] + row.rect[2]) // 2,
@@ -252,6 +284,12 @@ def main():
     if len(closed) != 2:
         problems.append("a row that opens something did not close it")
 
+    if args.frames:
+        folder = Path(args.frames)
+        folder.mkdir(parents=True, exist_ok=True)
+        for index, (name, image) in enumerate(shots):
+            image.save(str(folder / "{:02d} {}.png".format(
+                index, "".join(c if c.isalnum() else " " for c in name))))
     if args.out:
         from PIL import Image, ImageDraw
         width = sum(image.size[0] for _n, image in shots)

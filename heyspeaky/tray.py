@@ -85,8 +85,10 @@ class Tray:
         usage_text=None,
         on_update=None,
         on_panel=None,
-        on_key=None,
+        on_key_page=None,
         key_state=None,
+        local_models=None,
+        on_local_model=None,
     ):
         self._config_path = config_path
         self._log_dir = log_dir
@@ -106,8 +108,10 @@ class Tray:
         self._usage_text = usage_text
         self._on_update = on_update
         self._on_panel = on_panel
-        self._on_key = on_key
+        self._on_key_page = on_key_page
         self._key_state = key_state
+        self._local_models = local_models
+        self._on_local_model = on_local_model
         self._update_version = ""
         self._busy = False
 
@@ -418,6 +422,7 @@ class Tray:
             "usage": self._usage_text() if self._usage_text else "",
             "update": self._update_version,
             "key": self._key_state() if self._key_state else "saved",
+            "local": self._local_models() if self._local_models else {},
             "catalog": list(offered),
             "names": dict((code, language_names.name(code))
                           for code in offered),
@@ -436,8 +441,8 @@ class Tray:
             "report": self._report,
             "quit": self._quit,
         }
-        if self._on_key is not None:
-            handlers["key"] = self._on_key
+        if self._on_key_page is not None:
+            handlers["key-page"] = self._on_key_page
         if action in handlers:
             target = handlers[action]
         elif action.startswith("pin:"):
@@ -446,6 +451,11 @@ class Tray:
             target = self._make_language_toggle(action[len("lang:"):])
         elif action.startswith("backend:"):
             target = self._make_backend_setter(action[len("backend:"):])
+        elif action.startswith("model:") and self._on_local_model:
+            name = action[len("model:"):]
+
+            def target():
+                self._on_local_model(name)
         else:
             logger.warning("The tray panel asked for %r", action)
             return

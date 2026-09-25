@@ -1139,9 +1139,11 @@ def search_ring(field, window, scale):
     return ring
 
 
-def _search_field(frame, drawing, item, scale, motion, muted, faint):
-    """The language search: the composer's field and ring, a lens, the
-    words typed so far or what to type, and a caret."""
+def _search_field(frame, drawing, item, scale, motion, muted, faint,
+                  lens=True):
+    """The language search, and the key field: the composer's field and
+    ring, a lens for the search, the words typed so far or what to type,
+    and a caret."""
     left, top, right, bottom = item.rect
     height = bottom - top
     ring = search_ring(item.rect, frame.size, scale)
@@ -1152,9 +1154,12 @@ def _search_field(frame, drawing, item, scale, motion, muted, faint):
     face = sprite((right - left, height), height // 2, theme.FIELD_FILL)
     _place_over(frame, face, left, top)
     middle = (top + bottom) / 2.0
-    lens = _px(14, scale)
-    _magnifier(drawing, left + _px(16, scale), middle, lens, faint)
-    text_left = left + _px(30, scale)
+    if lens:
+        _magnifier(drawing, left + _px(16, scale), middle, _px(14, scale),
+                   faint)
+        text_left = left + _px(30, scale)
+    else:
+        text_left = left + _px(16, scale)
     body = font(max(9, _px(theme.FONT_SIZE, scale)))
     typed = item.label or ""
     if typed:
@@ -1201,7 +1206,8 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
         middle = (top + bottom) / 2.0
         lit = hover.get(item.key, 0.0)
         kind = item.kind
-        if kind in ("row", "switch", "back", "language") and lit > 0.005:
+        if kind in ("row", "switch", "back", "language", "model") \
+                and lit > 0.005:
             fill = Image.new("RGBA", (right - left, bottom - top),
                              (255, 255, 255, int(255 * theme.ROW_HOVER * lit)))
             shape = sprite((right - left, bottom - top),
@@ -1291,6 +1297,41 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
             frame.alpha_composite(line, (int(left), int(middle)))
         elif kind == "search":
             _search_field(frame, drawing, item, scale, motion, muted, faint)
+        elif kind == "keyfield":
+            _search_field(frame, drawing, item, scale, motion, muted, faint,
+                          lens=False)
+        elif kind == "button":
+            # The one thing to press on its page: white with dark ink, like
+            # the tick, once there is something to save; the cross's grey
+            # until then.
+            ready = bool(item.extra)
+            face = _pill_label(
+                right - left, bottom - top,
+                theme.ACCEPT_FILL if ready else theme.CANCEL_FILL,
+                item.label, theme.ACCEPT_GLYPH if ready else faint,
+                font(max(9, _px(theme.FONT_SIZE, scale)), medium=True))
+            grow = 1.0 + 0.03 * lit if ready else 1.0
+            if grow > 1.002:
+                face = face.resize((int(round(face.size[0] * grow)),
+                                    int(round(face.size[1] * grow))),
+                                   Image.LANCZOS)
+            _place_over(frame, face, (left + right) / 2.0 - face.size[0] / 2.0,
+                        middle - face.size[1] / 2.0)
+        elif kind == "model":
+            chosen, aside = item.extra
+            inset = _px(10, scale)
+            upper = top + (bottom - top) * 0.36
+            lower = top + (bottom - top) * 0.70
+            drawing.text((left + inset, upper), item.label, font=body,
+                         fill=theme.TEXT_LIGHT + (255,), anchor="lm")
+            drawing.text((left + inset, lower), item.hint, font=small,
+                         fill=faint + (255,), anchor="lm")
+            if chosen:
+                _check(drawing, right - inset - _px(6, scale), middle,
+                       _px(11, scale), theme.TEXT_LIGHT)
+            elif aside:
+                drawing.text((right - inset, middle), aside, font=small,
+                             fill=muted + (255,), anchor="rm")
         elif kind == "footer":
             drawing.text((left, middle), item.label, font=small,
                          fill=faint + (255,), anchor="lm")

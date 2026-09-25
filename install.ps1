@@ -443,8 +443,8 @@ function Use-KeyFromCommand {
 }
 
 function Write-KeyHint {
-    Write-Note 'To add one later: copy the key, click the HeySpeaky icon in the tray,'
-    Write-Note 'and click "Add your OpenAI key".'
+    Write-Note 'To add one later: click the HeySpeaky icon in the tray, click'
+    Write-Note '"Add your OpenAI key", paste it and press Save.'
 }
 
 function Set-ApiKey {
@@ -1034,13 +1034,14 @@ function Invoke-Install {
   Everything else is in the HeySpeaky icon in the tray - click it:
     Language, +          the languages you speak (just type to find one)
     Transcribed by       OpenAI or this computer
-    OpenAI key           copy your key, then click this row
+    OpenAI key           click it, paste your key, Save
+    Model on this laptop tiny to large; bigger hears better, runs slower
 
   Something wrong?   double-click CHECKUP.bat in the folder above
   Remove it          double-click UNINSTALL.bat in the same folder
 
-  To add or change your OpenAI key: copy it, click the tray icon, and
-  click "OpenAI key". Keys are made at $KeysPage
+  To add or change your OpenAI key: click the tray icon, click
+  "OpenAI key", paste it and press Save. Keys are made at $KeysPage
 "@
 }
 

@@ -24,7 +24,8 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
 | `heyspeaky/correct.py` | Ctrl+Alt+Win: the box that asks what it should have said |
 | `heyspeaky/panel.py` | the tray panel: what a click on the tray icon opens |
-| `heyspeaky/apikey.py` | the OpenAI key from the clipboard, one click in the tray |
+| `heyspeaky/apikey.py` | the OpenAI key: pasted into the tray panel, checked, saved |
+| `heyspeaky/localmodels.py` | which model transcribes on this laptop, and its download |
 | `heyspeaky/keymap.py` | typing what the keyboard layout means, not what Tk decoded |
 | `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
 | `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
@@ -39,6 +40,7 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/correction_check.py` | the same, for the correction composer: hovers, clicks, drags |
 | `tools/panel_check.py` | the same, for the tray panel, typing in Kazakh |
 | `tools/make_icon.py` | draws the shortcuts' icon; the installer runs it |
+| `tools/session_brief.py` | a session's starting facts; runs when a session starts |
 | `tools/try_demo.py` | runs a recording through both backends |
 
 ## Rules that cost something to learn
@@ -250,15 +252,29 @@ without jargon, and say what you actually did and what you could not do.
   the owner quit by accident again and again. One click turns it into
   "Click again to quit" in red for `theme.QUIT_ARMED` seconds; Esc takes it
   back.
-- **The key comes from the clipboard** (`apikey.py`). The owner wanted adding
-  a key to be as little work as possible, and the only way was rerunning the
-  installer with the key in a PowerShell line. Now: copy it, click the row.
-  The row is first in the panel, in the accent colour, until there is a key.
-  The clipboard is emptied the moment a key is read off it, the key is
-  checked with OpenAI before it replaces anything, and a key OpenAI refuses
-  never overwrites a working one. No key on the clipboard opens the page
-  where keys are made. Saving one switches a laptop set to local over to
-  OpenAI, and a start with no key says so once, in a notification.
+- **The key is pasted into the tray panel** (`apikey.py`). The owner
+  described the steps himself: click the icon, "Add your OpenAI key", a
+  field appears, paste, Save. The only way before was rerunning the
+  installer with the key in a PowerShell line. The row is first in the
+  panel, in the accent colour, until there is a key. Ctrl+V is caught by
+  the key, not the letter, because on a Russian layout the same key is
+  "м". The field shows the key masked, the panel drops it the moment Save
+  hands it over - through `submit_key`, never through `act`, whose action
+  names reach the log - and it is checked with OpenAI before it replaces
+  anything: a key OpenAI refuses never overwrites a working one. If the
+  clipboard still holds that key afterwards, it is emptied. Saving one
+  switches a laptop set to local over to OpenAI, and a start with no key
+  says so once, in a notification.
+- **People choose the local model** (`localmodels.py`). The owner did not
+  want it decided for them: bigger hears better and is slower and heavier.
+  The panel lists tiny, base, small, medium and large-v3-turbo with their
+  download sizes; one not on disk is downloaded first, with a percentage
+  worked out by watching the files arrive, because faster-whisper reports
+  none. The engine then rebuilds its recorder (`engine.reload`) - RealtimeSTT
+  takes its model once, when it is made - and never mid-recording. Measured
+  on 25 September with a synthesised English sentence: base wrote it out in
+  Cyrillic, and after switching to small, in 8.5 s, it came back word for
+  word.
 - **Typing in the panel is a language search.** Scrolling ninety names was
   the owner's complaint. Anything typed while the panel is open goes into a
   field at the top of the language list - the composer's field and ring,
@@ -298,6 +314,15 @@ without jargon, and say what you actually did and what you could not do.
   with the chord pressed fast and slow and let go in every order, read a
   Chrome selection every time. The cause is not known yet; the program name
   in that line is what will say where to look.
+- **A session starts with a brief, not a ritual** (`tools/session_brief.py`,
+  a SessionStart hook in `.claude/settings.json`). Every session used to
+  begin by hand: tail the installed app's log and count what was unusual,
+  diff the installed copy file by file. It is now twenty lines computed in
+  under a second: repo state, which files differ from the installed copy
+  (line endings aside), the log's events counted by kind, which programs
+  selections came from, and the warning lines. It prints counts and program
+  names, never anything dictated. The commit check also refuses an
+  `install.ps1` or `uninstall.ps1` that is not ASCII or does not parse.
 - **A Ctrl+Alt that does nothing now leaves a line.** After a restart the
   owner said Ctrl+Alt did nothing, and the log could not tell that apart
   from nothing being pressed. It now notes the first key the hook hears after
