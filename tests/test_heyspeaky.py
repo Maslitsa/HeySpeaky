@@ -2972,6 +2972,78 @@ class TheCommitCheckGuardsTheInstaller(unittest.TestCase):
             self.assertEqual(precommit.script_problems(ROOT / name), [], name)
 
 
+class ANewInstallStartsWithThisComputersLanguages(unittest.TestCase):
+    """The defaults are the owner's four. A new install anywhere else was
+    told to expect Kazakh, Russian, English and German, and a language the
+    list leaves out is the one the model mishears."""
+
+    def use(self, found):
+        real = languages.from_this_computer
+        self.addCleanup(setattr, languages, "from_this_computer", real)
+        languages.from_this_computer = lambda: list(found)
+        folder = Path(tempfile.mkdtemp())
+        original = config_module.CONFIG_PATH
+        self.addCleanup(setattr, config_module, "CONFIG_PATH", original)
+        config_module.CONFIG_PATH = folder / "config.json"
+        return config_module.CONFIG_PATH
+
+    def test_windows_names_become_the_model_s_codes_english_last(self):
+        self.assertEqual(
+            languages.from_locales(["en-US", "kk-KZ", "ru-RU", "de-DE"]),
+            ["kk", "ru", "de", "en"])
+        self.assertEqual(languages.from_locales(["es-ES", "en-US", "es-MX"]),
+                         ["es", "en"])
+        self.assertEqual(languages.from_locales(["nb-NO", "fil-PH", "xx-YY",
+                                                 ""]), ["no", "tl"])
+        self.assertEqual(languages.from_locales(["en-GB"]), ["en"])
+
+    def test_no_more_than_five_and_english_still_in(self):
+        many = ["fr-FR", "it-IT", "pl-PL", "tr-TR", "uk-UA", "cs-CZ", "en-US"]
+        self.assertEqual(languages.from_locales(many),
+                         ["fr", "it", "pl", "tr", "en"])
+
+    def test_a_new_config_json_starts_with_them(self):
+        import json
+        path = self.use(["uk", "en"])
+        cfg = config_module.load()
+        self.assertEqual(cfg["transcription"]["cloud"]["languages"],
+                         ["uk", "en"])
+        self.assertEqual(cfg["model"]["language_menu"],
+                         languages.menu_for(["uk", "en"]))
+        written = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(written["transcription"]["cloud"]["languages"],
+                         ["uk", "en"])
+
+    def test_an_existing_config_json_keeps_its_own(self):
+        import json
+        path = self.use(["uk", "en"])
+        path.write_text(json.dumps({"transcription": {"cloud": {
+            "languages": ["kk", "ru", "en", "de"]}}}), encoding="utf-8")
+        cfg = config_module.load()
+        self.assertEqual(cfg["transcription"]["cloud"]["languages"],
+                         ["kk", "ru", "en", "de"])
+
+    def test_a_language_switched_off_stays_off_after_a_restart(self):
+        """Measured before the fix: switch German and Kazakh off, restart,
+        and the list came back as kk, de, ru, en - both at the front."""
+        self.use([])
+        cfg = config_module.load()
+        cfg["transcription"]["cloud"]["languages"] = ["ru", "en"]
+        cfg["model"]["language_menu"] = languages.menu_for(["ru", "en"])
+        config_module.save(cfg)
+        again = config_module.load()
+        languages.reconcile(again)
+        self.assertEqual(again["transcription"]["cloud"]["languages"],
+                         ["ru", "en"])
+
+    def test_nothing_from_windows_keeps_the_defaults(self):
+        self.use([])
+        cfg = config_module.load()
+        self.assertEqual(
+            cfg["transcription"]["cloud"]["languages"],
+            config_module.DEFAULTS["transcription"]["cloud"]["languages"])
+
+
 class TheMonoLook(unittest.TestCase):
     """The second look, from the reel the owner sent: a black capsule,
     eight bars, red listening, blue thinking, gone when the words land."""

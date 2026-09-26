@@ -135,6 +135,15 @@ without jargon, and say what you actually did and what you could not do.
   whichever language it is most likely to mishear. A language switched on from
   the tray is inserted at the front for the same reason.
   `tools/language_drill.py` is how any of this gets re-measured.
+- **A new install starts with the computer's own languages**
+  (`languages.from_this_computer`): the language Windows's menus are in,
+  then every keyboard layout, English last, five at most. The defaults are
+  the owner's four, and on anybody else's computer the model was told to
+  expect Kazakh. An existing config.json keeps its list. And
+  `language_menu` is stored whole, never merged with the default
+  (`config._WHOLE`): merged, a language switched off in the tray came back
+  after a restart, at the front of the list - measured, "ru, en" became
+  "kk, de, ru, en". The owner never saw it because he keeps all four.
 - **A new default reaches nobody who already has a config.json.** That file
   is the user's and the installer never overwrites it, so the owner was still
   running the measured-worse language order a day after it was replaced, and

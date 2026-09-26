@@ -403,11 +403,19 @@ def _migrate(user_config):
     return user_config, changed
 
 
+# Settings that are one value made of pairs rather than a group of settings:
+# a stored one replaces the default whole. Merged, a language switched off in
+# the tray came back after a restart, at the front of the list - the default
+# menu still named it, and languages.reconcile() keeps whatever either names.
+_WHOLE = ("language_menu",)
+
+
 def _deep_merge(base, override):
     """Returns base updated with override, recursing into nested dicts."""
     result = copy.deepcopy(base)
     for key, value in (override or {}).items():
-        if isinstance(value, dict) and isinstance(result.get(key), dict):
+        if (isinstance(value, dict) and isinstance(result.get(key), dict)
+                and key not in _WHOLE):
             result[key] = _deep_merge(result[key], value)
         else:
             result[key] = value
@@ -464,11 +472,30 @@ def load():
         except (OSError, ValueError) as exc:
             logger.warning("Ignoring unreadable config.json: %s", exc)
     else:
+        user_config = _first_config()
         try:
             CONFIG_PATH.write_text(
-                json.dumps(DEFAULTS, indent=2, ensure_ascii=False),
+                json.dumps(user_config, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
         except OSError as exc:
             logger.warning("Could not write default config.json: %s", exc)
     return _deep_merge(DEFAULTS, user_config)
+
+
+def _first_config():
+    """A new install's settings: the defaults, with this computer's languages
+    in place of the owner's four (see `languages.from_this_computer`). An
+    existing config.json is never touched: its list is somebody's choice."""
+    first = copy.deepcopy(DEFAULTS)
+    try:
+        from . import languages
+        codes = languages.from_this_computer()
+    except Exception:
+        logger.debug("Could not read this computer's languages", exc_info=True)
+        codes = []
+    if codes:
+        first["transcription"]["cloud"]["languages"] = codes
+        first["model"]["language_menu"] = languages.menu_for(codes)
+        logger.info("Languages from this computer: %s", ", ".join(codes))
+    return first

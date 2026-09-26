@@ -297,3 +297,62 @@ def native_label(code):
     if not native or native.casefold() == name(code).casefold():
         return ""
     return native if _drawable(native) else ""
+
+
+# -- a new install's languages ------------------------------------------------
+#
+# The defaults are the owner's own four. On anybody else's computer they are
+# somebody else's languages: a new install in Madrid told the model to expect
+# Kazakh, Russian, English and German, and a language the list leaves out is
+# the one it mishears. Windows knows what a person speaks - the language its
+# menus are in, and the keyboards they type with - so a new install starts
+# from those, and the tray changes them after.
+
+# Windows's names that are not the model's.
+_WINDOWS_CODES = {"nb": "no", "nn": "no", "fil": "tl", "iw": "he"}
+
+
+def from_locales(names, most=5):
+    """The languages to start with, from Windows locale names such as
+    "kk-KZ", in the order given: the model's codes, each once, English last -
+    the front of the list is where a language counts, and the model leans to
+    English unasked - and no more than `most`."""
+    codes = []
+    for locale in names:
+        code = (locale or "").split("-")[0].lower()
+        code = _WINDOWS_CODES.get(code, code)
+        if code in NAMES and code not in codes:
+            codes.append(code)
+    english = "en" in codes
+    codes = [code for code in codes if code != "en"]
+    codes = codes[:most - 1] if english else codes[:most]
+    if english:
+        codes.append("en")
+    return codes
+
+
+def from_this_computer():
+    """`from_locales` for this computer: the language its menus are in, then
+    every keyboard layout it has, in Windows's order. An empty list if
+    Windows will not say."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+
+        def locale(langid):
+            buffer = ctypes.create_unicode_buffer(85)
+            if kernel32.LCIDToLocaleName(langid, buffer, 85, 0):
+                return buffer.value
+            return ""
+
+        names = [locale(kernel32.GetUserDefaultUILanguage())]
+        count = user32.GetKeyboardLayoutList(0, None)
+        layouts = (ctypes.c_void_p * max(1, count))()
+        count = user32.GetKeyboardLayoutList(count, layouts)
+        for index in range(count):
+            # A layout's low word is its language.
+            names.append(locale((layouts[index] or 0) & 0xFFFF))
+        return from_locales(names)
+    except Exception:
+        return []
