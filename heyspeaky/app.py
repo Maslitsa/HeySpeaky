@@ -545,11 +545,19 @@ class App:
         too_short = elapsed < float(self.cfg["recording"]["min_seconds"])
         too_quiet = not self._had_speech()
         if too_short or too_quiet:
+            # How loud it really was, as the dictation line says it: silence
+            # sits near the room's floor, and a voice the detector missed
+            # does not. Without this the line could not tell them apart.
+            with self._audio_lock:
+                heard = diagnostics.audio_stats(b"".join(self._audio_chunks),
+                                                self._sample_rate)
             logger.info(
-                "Discarding recording: %.2fs, peak %.2f, speech run %d "
-                "(short=%s quiet=%s)",
+                "Discarding recording: %.2fs, peak %.2f, loudest %.0f dB, "
+                "average %.0f dB, speech run %d (short=%s quiet=%s)",
                 elapsed,
                 self._peak_level,
+                heard["peak_db"],
+                heard["rms_db"],
                 self._speech_run_max,
                 too_short,
                 too_quiet,

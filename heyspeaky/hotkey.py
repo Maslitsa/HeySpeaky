@@ -107,6 +107,19 @@ class _POINT(ctypes.Structure):
     _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
 
 
+def _in_front():
+    """The program in front, by file name, for the refresh line. Where the
+    hook went quiet is what sorts the refreshes into kinds: the lock screen,
+    an elevated window whose keys no ordinary hook is shown, or an ordinary
+    window - where the input was most likely a wheel or a click. Imported
+    here rather than at the top because `output` imports this module."""
+    try:
+        from . import output
+        return output._foreground_program()
+    except Exception:
+        return "?"
+
+
 def _cursor_position():
     """Where the pointer is, or None if Windows will not say.
 
@@ -297,18 +310,21 @@ class HotkeyListener:
             reason = self._dead_hook_reason(moved, resumed)
             if reason is None:
                 continue
+            self._refresh(reason)
 
-            self._count_refresh()
-            logger.info("Keyboard hook %s; refreshing the hook (#%d)",
-                        reason, self.reinstalls)
-            with self._lock:
-                self._reset_locked()
-                self._pressed.clear()
-            self._uninstall()
-            try:
-                self._install()
-            except Exception:
-                logger.exception("Could not reinstall the keyboard hook")
+    def _refresh(self, reason):
+        """Unhooks and hooks again, saying why, and what was in front."""
+        self._count_refresh()
+        logger.info("Keyboard hook %s; %s in front; refreshing the hook (#%d)",
+                    reason, _in_front(), self.reinstalls)
+        with self._lock:
+            self._reset_locked()
+            self._pressed.clear()
+        self._uninstall()
+        try:
+            self._install()
+        except Exception:
+            logger.exception("Could not reinstall the keyboard hook")
 
     def _cursor_moved(self):
         """Whether the pointer has moved since the previous check."""

@@ -1861,6 +1861,39 @@ class OneCorrectionAtATime(unittest.TestCase):
         self.assertFalse(guard.begin(now=3600.0))
 
 
+@unittest.skipIf(app_module is None,
+                 "the app's own packages are not installed")
+class ADiscardedRecordingSaysHowLoudItWas(unittest.TestCase):
+    """Four "Nothing heard" in a row on 26 September, then one that worked.
+    The line gave only the meter's level, which cannot tell a press with
+    nothing said from a voice the detector missed; decibels, as the
+    dictation line gives them, can."""
+
+    def test_the_line_gives_the_loudness_in_decibels(self):
+        import types
+        app = object.__new__(app_module.App)
+        app.cfg = {"recording": {"min_seconds": 0.35, "min_speech_run": 12}}
+        app._recording_started = time.monotonic() - 1.0
+        app._cancel_max_timer = lambda: None
+        app.mic = types.SimpleNamespace(stop=lambda: None)
+        app.engine = types.SimpleNamespace(end=lambda: None)
+        app._reset_to_idle = lambda: None
+        app.overlay = types.SimpleNamespace(flash=None, hide=None)
+        app.post = lambda *args: None
+        app._vad = object()
+        app._speech_run_max = 3
+        app._peak_level = 0.2
+        app._sample_rate = 16000
+        app._audio_lock = threading.Lock()
+        tone = (np.sin(np.arange(16000) * 0.1) * 0.1 * 32767).astype("<i2")
+        app._audio_chunks = [tone.tobytes()]
+        with self.assertLogs("heyspeaky", level="INFO") as logs:
+            app._finish_recording()
+        line = [said for said in logs.output
+                if "Discarding recording" in said][0]
+        self.assertIn("loudest -20 dB", line)
+
+
 @unittest.skipIf(app_module is None or correct is None,
                  "the app's own packages are not installed")
 class CorrectionBoxIsNotDuplicated(unittest.TestCase):
@@ -2832,6 +2865,23 @@ class TheLogSaysWhyCtrlAltDidNothing(unittest.TestCase):
         self.assertNotIn("'q'", said)
         self.assertNotIn(" q ", said)
 
+    def test_a_refresh_names_the_program_in_front(self):
+        """Sixty-three refreshes in two days, and what caused them was still
+        a guess - a wheel, a click? The program in front sorts them: the
+        lock screen, an elevated window, an ordinary one."""
+        from heyspeaky import output
+        listener = self.listener()
+        listener._uninstall = lambda: None
+        listener._install = lambda: None
+        real = output._foreground_program
+        self.addCleanup(setattr, output, "_foreground_program", real)
+        output._foreground_program = lambda: "LockApp.exe"
+        with self.assertLogs("heyspeaky.hotkey", level="INFO") as logs:
+            listener._refresh("saw nothing for 70s while Windows saw input "
+                              "0s ago")
+        self.assertIn("LockApp.exe in front; refreshing the hook",
+                      "\n".join(logs.output))
+
 
 def _tool(name):
     import importlib.util
@@ -2871,6 +2921,20 @@ class TheSessionBrief(unittest.TestCase):
         self.assertEqual(dict(facts["read"]), {"claude.exe": 1})
         self.assertEqual(dict(facts["empty"]), {"Chrome_WidgetWin_1": 1})
         self.assertEqual(len(facts["warnings"]), 1)
+
+    def test_it_sorts_hook_refreshes_by_the_program_in_front(self):
+        import datetime
+        brief = _tool("session_brief")
+        said = ("2026-09-25 10:0{}:00,000 INFO    heyspeaky.hotkey   Keyboard "
+                "hook saw nothing for 70s while Windows saw input 0s ago; {} "
+                "in front; refreshing the hook (#{})")
+        lines = [said.format(0, "LockApp.exe", 1),
+                 said.format(4, "LockApp.exe", 2),
+                 said.format(8, "chrome.exe", 3)]
+        facts = brief.summarise(lines, datetime.datetime(2026, 9, 24))
+        self.assertEqual(facts["counts"]["hook refreshes"], 3)
+        self.assertEqual(dict(facts["refreshed"]),
+                         {"LockApp.exe": 2, "chrome.exe": 1})
 
     def test_line_endings_alone_are_not_a_difference(self):
         brief = _tool("session_brief")

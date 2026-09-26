@@ -48,6 +48,7 @@ EVENTS = (
 
 _STAMP = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)")
 _SELECTION = re.compile(r"Selection: (\d+) chars from (\S+)")
+_REFRESH_FRONT = re.compile(r"; (\S+) in front; refreshing the hook")
 
 
 def _git(*args):
@@ -81,6 +82,7 @@ def summarise(lines, since):
     for every log line stamped at or after `since`."""
     counts = collections.Counter()
     read, empty = collections.Counter(), collections.Counter()
+    refreshed = collections.Counter()
     warnings = []
     first = None
     for line in lines:
@@ -98,10 +100,13 @@ def summarise(lines, since):
         if selection:
             program = selection.group(2).rstrip(",")
             (read if int(selection.group(1)) else empty)[program] += 1
+        front = _REFRESH_FRONT.search(line)
+        if front:
+            refreshed[front.group(1)] += 1
         if " WARNING " in line or " ERROR " in line:
             warnings.append(line.strip()[:170])
     return {"counts": counts, "read": read, "empty": empty,
-            "warnings": warnings, "first": first}
+            "refreshed": refreshed, "warnings": warnings, "first": first}
 
 
 def _listed(counter):
@@ -156,6 +161,9 @@ def main():
     if facts["read"] or facts["empty"]:
         print("  selections read: {}; empty: {}".format(
             _listed(facts["read"]) or "none", _listed(facts["empty"]) or "none"))
+    if facts["refreshed"]:
+        print("  hook refreshes, by the program in front: {}".format(
+            _listed(facts["refreshed"])))
     if facts["warnings"]:
         print("  warnings and errors ({}), the last few:".format(
             len(facts["warnings"])))
