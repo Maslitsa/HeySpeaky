@@ -135,6 +135,8 @@ def main():
     parser.add_argument("--scale", type=float,
                         help="draw at this scale; the owner's screen is at "
                              "1.25 and geometry has broken there before")
+    parser.add_argument("--style", choices=("glass", "mono"), default="glass",
+                        help="which look to draw it in")
     args = parser.parse_args()
 
     enable_dpi_awareness()
@@ -150,7 +152,8 @@ def main():
     ctypes.windll.user32.GetForegroundWindow.restype = ctypes.c_void_p
     was_in_front = ctypes.windll.user32.GetForegroundWindow()
 
-    box = CorrectionBox(root, HEARD, answers.append, scale=scale)
+    box = CorrectionBox(root, HEARD, answers.append, scale=scale,
+                        look=args.style)
     pump(root, 0.12)
     shots.append(("opening", photograph(box)))
     pump(root, 0.55)
@@ -270,7 +273,8 @@ def main():
     # Nothing selected: a placeholder, and Enter on it shakes instead of
     # saving the placeholder as a word.
     answers[:] = []
-    empty = CorrectionBox(root, "", answers.append, scale=scale)
+    empty = CorrectionBox(root, "", answers.append, scale=scale,
+                          look=args.style)
     pump(root, 0.6)
     shots.append(("nothing selected", photograph(empty)))
     empty._accept()
@@ -288,7 +292,8 @@ def main():
     # Focus going to another program for good does close it: handed back to
     # the window that was in front before this check began.
     answers[:] = []
-    third = CorrectionBox(root, HEARD, answers.append, scale=scale)
+    third = CorrectionBox(root, HEARD, answers.append, scale=scale,
+                          look=args.style)
     pump(root, 0.6)
     user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
     user32.SetForegroundWindow(was_in_front)

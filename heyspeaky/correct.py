@@ -184,14 +184,16 @@ class CorrectionBox(object):
     them use comes from `glass.composer_layout`, once.
     """
 
-    def __init__(self, root, heard, on_done, scale=1.0):
+    def __init__(self, root, heard, on_done, scale=1.0, look="glass"):
         self._root = root
         self._on_done = on_done
         self._answered = False
         self._destroyed = False
         self.heard = heard or ""
         self.scale = max(0.5, float(scale))
-        self._composer = glass.composer(self.scale)
+        # The mono look draws it black, with a blue focus ring.
+        self._mono = look == "mono"
+        self._composer = glass.composer(self.scale, mono=self._mono)
         self.layout = self._composer.layout
         self._surface = overlay.Surface()
         self._hwnd = 0
@@ -227,11 +229,11 @@ class CorrectionBox(object):
                 [("heard  ", True), (_shortened(self.heard), False)]
                 if self.heard else
                 [("nothing selected  ", True), ("type a word to keep", False)],
-                self.scale),
+                self.scale, self._mono),
             "cancel": glass.chip([("Close", False), ("  Esc", True)],
-                                 self.scale),
+                                 self.scale, self._mono),
             "accept": glass.chip([("Save", False), ("  Enter", True)],
-                                 self.scale),
+                                 self.scale, self._mono),
         }
 
         # The glass: layered, never focused, clicked through wherever it is
@@ -259,16 +261,18 @@ class CorrectionBox(object):
         self.top.title("HeySpeaky")
         self.top.overrideredirect(True)
         self.top.attributes("-topmost", True)
-        self.top.configure(bg=_rgb(theme.FIELD_FILL))
+        self.top.configure(bg=_rgb(glass.field_fill(self._mono)))
         # Invisible while the glass opens, but already holding the keyboard:
         # a word typed in that first third of a second must not land in the
         # window behind. An ordinary window may have -alpha; the glass never.
         self.top.attributes("-alpha", 0.0)
         size = max(9, int(round(theme.FIELD_TEXT * self.scale)))
         self.entry = tk.Entry(
-            self.top, bg=_rgb(theme.FIELD_FILL), fg=_rgb(theme.TEXT_LIGHT),
+            self.top, bg=_rgb(glass.field_fill(self._mono)),
+            fg=_rgb(theme.TEXT_LIGHT),
             insertbackground=_rgb(theme.TEXT_LIGHT),
-            selectbackground=_rgb(theme.SELECT_FILL),
+            selectbackground=_rgb(theme.MONO_ACCENT if self._mono
+                                  else theme.SELECT_FILL),
             selectforeground=_rgb(theme.TEXT_LIGHT),
             relief="flat", bd=0, highlightthickness=0,
             insertwidth=max(1, int(round(2 * self.scale))),

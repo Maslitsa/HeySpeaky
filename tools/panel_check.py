@@ -63,6 +63,7 @@ class StandIn(object):
             "usage": "This month: $0.42 · 118 dictations",
             "update": "",
             "key": self.state["key"],
+            "look": self.state.get("look", "glass"),
             "local": {"current": "base", "busy": "", "progress": 0.0,
                       "failed": "", "have": {"base": True, "small": True,
                                              "large-v3-turbo": True}},
@@ -110,6 +111,8 @@ def main():
     parser.add_argument("--out", help="save the strip of moments here")
     parser.add_argument("--frames", help="also save each moment in this folder")
     parser.add_argument("--scale", type=float)
+    parser.add_argument("--style", choices=("glass", "mono"), default="glass",
+                        help="which look to draw it in")
     args = parser.parse_args()
 
     enable_dpi_awareness()
@@ -129,6 +132,7 @@ def main():
     anchor = (right - 120, bottom + 20)          # where the tray icons are
 
     stand_in = StandIn()
+    stand_in.state["look"] = args.style
     closed = []
     panel = TrayPanel(root, stand_in.model, stand_in.act, scale=scale,
                       anchor=anchor, on_closed=closed.append,

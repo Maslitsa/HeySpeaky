@@ -400,6 +400,7 @@ class TrayPanel(object):
         self._turn_goal = 0.0
         self._flare_at = None
         self._card = None
+        self._card_look = None
         self._surface = overlay.Surface()
         self._placed_above = True
         self._position = (0, 0)
@@ -449,11 +450,15 @@ class TrayPanel(object):
         self._size, self._items = layout(
             self._model, self.scale, self._page, self._scroll, self._query,
             self._armed(), self._key_text)
-        # The glass only changes with the size, and typing into the search
-        # lays the panel out again on every key.
-        if self._card is None or self._size != size:
+        # The card only changes with the size and the look - switching to
+        # mono turns the open panel black there and then - and typing into
+        # the search lays the panel out again on every key.
+        look = self._model.get("look", "glass")
+        if (self._card is None or self._size != size
+                or look != self._card_look):
             self._card = glass.panel_card(self._size[0], self._size[1],
-                                          self.scale)
+                                          self.scale, mono=look == "mono")
+            self._card_look = look
         for item in self._items:
             if item.kind == "segmented":
                 self._motion.setdefault(item.key, float(item.extra[1]))
@@ -575,7 +580,8 @@ class TrayPanel(object):
         motion["search-glow"] = self._glow(now)
         motion["caret"] = 1.0 if self._caret_on else 0.0
         frame = glass.panel_frame(self._card, self._items, self.scale,
-                                  self._hover, motion)
+                                  self._hover, motion,
+                                  mono=self._card_look == "mono")
         overlay.present(self._hwnd, self._surface, frame, opacity)
 
     def _tick(self):

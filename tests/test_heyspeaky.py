@@ -1873,10 +1873,12 @@ class CorrectionBoxIsNotDuplicated(unittest.TestCase):
         test = self
 
         class FakeBox(object):
-            def __init__(self, root, heard, on_done, scale=1.0):
+            def __init__(self, root, heard, on_done, scale=1.0,
+                         look="glass"):
                 if test.refuse_to_open:
                     raise RuntimeError("no display")
                 self.heard = heard
+                self.look = look
                 self.on_done = on_done
                 self.raised = 0
                 test.boxes.append(self)
@@ -1905,6 +1907,13 @@ class CorrectionBoxIsNotDuplicated(unittest.TestCase):
 
     def settle(self):
         time.sleep(0.8)
+
+    def test_the_box_opens_in_the_pill_s_look(self):
+        """Mono turns the correction box black too, not the pill alone."""
+        self.app.cfg["overlay"] = {"style": "mono"}
+        self.app._on_correct()
+        self.settle()
+        self.assertEqual([box.look for box in self.boxes], ["mono"])
 
     def test_two_presses_while_the_selection_is_read_open_one_box(self):
         self.app._on_correct()
@@ -3055,6 +3064,67 @@ class MonoAppearsAtThePointer(unittest.TestCase):
         pill._place()
         _x, y, _width, _height = pill._geometry
         self.assertGreater(y + theme.MONO_MARGIN, 20)
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class EverythingChangesWithTheLook(_PanelModel, unittest.TestCase):
+    """The owner liked mono and asked for the whole panel to change with it,
+    and the correction box too - not the pill alone."""
+
+    SOLID_BLACK = tuple(theme.MONO_FILL) + (255,)
+
+    def centre(self, card):
+        box = card[1]
+        return card[0].getpixel(((box[0] + box[2]) // 2,
+                                 (box[1] + box[3]) // 2))
+
+    def test_the_mono_card_is_the_capsule_s_solid_black(self):
+        size, _items = panel_module.layout(self.model(look="mono"), 1.25)
+        card = glass.panel_card(size[0], size[1], 1.25, mono=True)
+        self.assertEqual(self.centre(card), self.SOLID_BLACK)
+
+    def test_the_open_panel_turns_black_when_the_look_changes(self):
+        """Choosing Mono in the panel turns the panel itself, there and
+        then: the card is made again when the look changes, not only when
+        the size does."""
+        panel = object.__new__(panel_module.TrayPanel)
+        panel._model = self.model()
+        panel.scale = 1.25
+        panel._page, panel._scroll, panel._query = "main", 0, ""
+        panel._key_text, panel._quit_armed_at = "", None
+        panel._card = panel._card_look = None
+        panel._motion = {}
+        panel._relayout()
+        self.assertNotEqual(self.centre(panel._card), self.SOLID_BLACK)
+        panel._model = self.model(look="mono")
+        panel._relayout()
+        self.assertEqual(self.centre(panel._card), self.SOLID_BLACK)
+
+    def test_a_switch_that_is_on_is_the_thinking_blue(self):
+        size, items = panel_module.layout(
+            self.model(look="mono", paused=True), 1.25)
+        card = glass.panel_card(size[0], size[1], 1.25, mono=True)
+        frame = glass.panel_frame(card, items, 1.25, mono=True)
+        pause = [item for item in items if item.kind == "switch"][0]
+        width = int(round(theme.SWITCH_WIDTH * 1.25))
+        height = int(round(theme.SWITCH_HEIGHT * 1.25))
+        # The middle of the track's left end: the knob is over on the right.
+        x = pause.rect[2] - int(round(10 * 1.25)) - width + height // 2
+        y = (pause.rect[1] + pause.rect[3]) // 2
+        self.assertEqual(frame.getpixel((x, y))[:3], tuple(theme.MONO_ACCENT))
+
+    def test_the_typing_widget_lands_on_the_mono_field_colour(self):
+        """The widget over the field is a flat window of `field_fill`; the
+        focus ring must not reach under it, at any strength."""
+        self.assertEqual(glass.field_fill(True), theme.MONO_FIELD)
+        for scale in (1.0, 1.25, 1.5, 2.0):
+            composer = glass.composer(scale, mono=True)
+            entry = composer.layout["entry"]
+            for strength in (0.0, 0.72, 1.0):
+                frame = glass.composer_frame(composer, strength=strength)
+                self.assertEqual(set(frame.crop(entry).getdata()),
+                                 {tuple(theme.MONO_FIELD) + (255,)},
+                                 "at scale %s" % scale)
 
 
 if __name__ == "__main__":

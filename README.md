@@ -149,7 +149,9 @@ Click the tray icon, then **Look**:
   and a tick to finish.
 - **Mono**: a small black pill that appears right above your mouse pointer,
   with red bars while it listens and blue while it works, a soft two-note
-  sound, and gone the moment your words land.
+  sound, and gone the moment your words land. The tray panel and the
+  correction box turn black to match, with blue for whatever is switched
+  on.
 
 Switching shows the new look straight away with a short pretend dictation.
 

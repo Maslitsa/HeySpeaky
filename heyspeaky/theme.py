@@ -146,6 +146,25 @@ MONO_COLLAPSE = 0.26
 # tip and its bottom 12 points above it.
 MONO_POINTER_RIGHT = 25
 MONO_POINTER_ABOVE = 12
+# The tray panel and the correction composer in the mono look: the owner
+# asked for everything to change with the look, not the pill alone. They are
+# the capsule's black, solid - no glass - with a hairline edge so a black
+# card still has an outline on a black desktop, and one colour: the thinking
+# blue, for whatever is on, chosen or ready to press. Red stays the
+# recording's and Quit's.
+MONO_FIELD = (28, 26, 31)
+MONO_CONTROL = (52, 50, 56)
+MONO_CONTROL_INK = (200, 198, 206)
+MONO_ACCENT = MONO_THINK
+# Blue words and ticks. MONO_THINK itself reads at 3:1 on the black; this
+# one at 6:1.
+MONO_ACCENT_INK = (64, 145, 240)
+# The hairline's white, of 255.
+MONO_HAIRLINE = 26
+# The ring round a focused field, in points: a line and a soft halo, the way
+# a Mac draws focus, instead of the glass's colours chasing round.
+MONO_FOCUS = 1.5
+MONO_FOCUS_GLOW = 5
 
 # The pill itself.
 WIDTH = 248

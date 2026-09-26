@@ -838,6 +838,47 @@ def _along_the_edge(size, field):
     return (along / total) % 1.0
 
 
+def _ring_shape(layout, scale, spread, line):
+    """What a ring round the field needs, worked out once per shape.
+
+    Returns where the ring's picture goes, its size, the sharp line (`line`
+    points wide) and the soft glow `spread` points out, as shares 0 to 1.
+    The glow is outside the field only, so the field stays one flat colour
+    and the typing widget laid over it cannot be told from the picture.
+    """
+    field = layout["field"]
+    window = layout["window"]
+    spread = max(2, _px(spread, scale))
+    reach = spread * 2
+    left, top = max(0, field[0] - reach), max(0, field[1] - reach)
+    right = min(window[0], field[2] + reach)
+    bottom = min(window[1], field[3] + reach)
+    size = (right - left, bottom - top)
+
+    k = 4
+    big = (size[0] * k, size[1] * k)
+    rect = ((field[0] - left) * k, (field[1] - top) * k,
+            (field[2] - left) * k - 1, (field[3] - top) * k - 1)
+    radius = (field[3] - field[1]) * k // 2
+
+    def outline(width):
+        image = Image.new("L", big, 0)
+        ImageDraw.Draw(image).rounded_rectangle(
+            rect, radius=radius, outline=255, width=max(1, int(width)))
+        return image.resize(size, Image.LANCZOS)
+
+    inside = Image.new("L", big, 0)
+    ImageDraw.Draw(inside).rounded_rectangle(rect, radius=radius, fill=255)
+    inside = np.asarray(inside.resize(size, Image.LANCZOS),
+                        np.float32) / 255.0
+
+    sharp = np.asarray(outline(line * scale * k), np.float32) / 255.0
+    wide = outline(3 * scale * k).filter(
+        ImageFilter.GaussianBlur(spread / 2.0))
+    glow = np.asarray(wide, np.float32) / 255.0 * (1.0 - inside)
+    return (left, top), size, sharp, glow
+
+
 class GlowRing(object):
     """The coloured ring round the field, cheap enough to turn every frame.
 
@@ -848,43 +889,11 @@ class GlowRing(object):
     """
 
     def __init__(self, layout, scale, spread=theme.GLOW_SPREAD):
-        field = layout["field"]
-        window = layout["window"]
-        spread = max(2, _px(spread, scale))
-        reach = spread * 2
-        left, top = max(0, field[0] - reach), max(0, field[1] - reach)
-        right = min(window[0], field[2] + reach)
-        bottom = min(window[1], field[3] + reach)
-        self.origin = (left, top)
-        self.size = (right - left, bottom - top)
-
-        k = 4
-        big = (self.size[0] * k, self.size[1] * k)
-        rect = ((field[0] - left) * k, (field[1] - top) * k,
-                (field[2] - left) * k - 1, (field[3] - top) * k - 1)
-        radius = (field[3] - field[1]) * k // 2
-
-        def outline(width):
-            image = Image.new("L", big, 0)
-            ImageDraw.Draw(image).rounded_rectangle(
-                rect, radius=radius, outline=255, width=max(1, int(width)))
-            return image.resize(self.size, Image.LANCZOS)
-
-        inside = Image.new("L", big, 0)
-        ImageDraw.Draw(inside).rounded_rectangle(rect, radius=radius,
-                                                 fill=255)
-        inside = np.asarray(inside.resize(self.size, Image.LANCZOS),
-                            np.float32) / 255.0
-
-        self._line = np.asarray(outline(theme.GLOW_RING * scale * k),
-                                np.float32) / 255.0
-        wide = outline(3 * scale * k).filter(
-            ImageFilter.GaussianBlur(spread / 2.0))
-        # Outside the field only, so the field stays one flat colour and the
-        # typing widget laid over it cannot be told from the picture.
-        glow = np.asarray(wide, np.float32) / 255.0 * (1.0 - inside)
+        self.origin, self.size, self._line, glow = _ring_shape(
+            layout, scale, spread, theme.GLOW_RING)
         self._glow = np.clip(glow * 2.2, 0.0, 1.0)
-
+        field = layout["field"]
+        left, top = self.origin
         self._angle = _along_the_edge(
             self.size, ((field[0] - left, field[1] - top,
                          field[2] - left, field[3] - top)))
@@ -902,24 +911,72 @@ class GlowRing(object):
         return Image.fromarray(rgba, "RGBA")
 
 
+class FocusRing(object):
+    """The mono look's ring round a field: one blue line and a soft halo,
+    the way a Mac shows the field that has the keyboard, where the glass has
+    colours chasing round.
+
+    It has GlowRing's `origin` and `render`, so a field does not care which
+    ring it has. `turn` means nothing to it; `strength` still brightens it,
+    so a key still makes it flare.
+    """
+
+    def __init__(self, layout, scale):
+        self.origin, self.size, self._line, glow = _ring_shape(
+            layout, scale, theme.MONO_FOCUS_GLOW, theme.MONO_FOCUS)
+        self._glow = np.clip(glow * 1.6, 0.0, 1.0)
+        self._drawn = {}
+
+    def render(self, turn, strength):
+        level = round(max(0.0, min(1.0, strength)), 2)
+        image = self._drawn.get(level)
+        if image is None:
+            alpha = (self._line * (0.6 + 0.4 * level)
+                     + self._glow * 0.55 * level)
+            rgba = np.empty(self._line.shape + (4,), np.uint8)
+            rgba[..., :3] = theme.MONO_ACCENT
+            rgba[..., 3] = np.clip(alpha * 255.0, 0, 255).astype(np.uint8)
+            image = Image.fromarray(rgba, "RGBA")
+            self._drawn[level] = image
+        return image
+
+
+def _mono_body(base, box, mask, radius, scale):
+    """The mono look where the glass would be: the capsule's black, solid,
+    with a white hairline round its edge so a black card still has an
+    outline on a black desktop. The hairline is translucent, so it goes on
+    its own layer: drawn straight on, it would cut its alpha into the body."""
+    base.paste(theme.MONO_FILL + (255,), (box[0], box[1]), mask)
+    edge = Image.new("L", mask.size, 0)
+    ImageDraw.Draw(edge).rounded_rectangle(
+        (0, 0, mask.size[0] - 1, mask.size[1] - 1), radius=radius,
+        outline=255, width=max(1, int(round(scale * SS))))
+    line = Image.new("RGBA", mask.size, (255, 255, 255, 0))
+    line.putalpha(ImageChops.multiply(edge, mask).point(
+        lambda value: int(value * theme.MONO_HAIRLINE / 255.0)))
+    base.alpha_composite(line, (box[0], box[1]))
+
+
 class Composer(object):
     """The parts of the correction composer that stay still while it is up."""
 
-    __slots__ = ("layout", "shell", "field", "ring", "scale")
+    __slots__ = ("layout", "shell", "field", "ring", "scale", "mono")
 
-    def __init__(self, layout, shell, field, ring, scale):
+    def __init__(self, layout, shell, field, ring, scale, mono=False):
         self.layout = layout
         self.shell = shell
         self.field = field
         self.ring = ring
         self.scale = scale
+        self.mono = mono
 
 
-def composer(scale=1.0):
+def composer(scale=1.0, mono=False):
     """Builds the composer's glass, field and ring. Once per opening.
 
     The glass is the pill's own - the same shadow, tint, edge and specular,
-    through the same helpers - only wider and more solid.
+    through the same helpers - only wider and more solid. In the mono look
+    it is the mono capsule's black instead, with a blue focus ring.
     """
     layout = composer_layout(scale)
     window = layout["window"]
@@ -931,14 +988,22 @@ def composer(scale=1.0):
 
     shell = Image.new("RGBA", big, (0, 0, 0, 0))
     _drop_shadow(shell, box, mask, scale)
-    _glass_body(shell, box, mask, radius, scale, theme.COMPOSER_ALPHA, 0.42, 6)
+    if mono:
+        _mono_body(shell, box, mask, radius, scale)
+    else:
+        _glass_body(shell, box, mask, radius, scale, theme.COMPOSER_ALPHA,
+                    0.42, 6)
     shell = shell.resize(window, Image.LANCZOS)
 
     field_box = layout["field"]
     field_size = (field_box[2] - field_box[0], field_box[3] - field_box[1])
     field = Image.new("RGBA", window, (0, 0, 0, 0))
-    solid = sprite(field_size, field_size[1] // 2, theme.FIELD_FILL)
+    solid = sprite(field_size, field_size[1] // 2, field_fill(mono))
     field.alpha_composite(solid, (field_box[0], field_box[1]))
+    if mono:
+        # The focus ring is its edge.
+        return Composer(layout, shell, field, FocusRing(layout, scale),
+                        scale, mono=True)
     # A faint edge all the way round, for where the coloured arcs are not.
     k = 4
     edge = Image.new("L", (field_size[0] * k, field_size[1] * k), 0)
@@ -955,10 +1020,17 @@ def composer(scale=1.0):
     return Composer(layout, shell, field, GlowRing(layout, scale), scale)
 
 
-def chip(parts, scale=1.0):
+def field_fill(mono=False):
+    """The flat colour of the composer's field, which the typing widget laid
+    over it must match exactly."""
+    return theme.MONO_FIELD if mono else theme.FIELD_FILL
+
+
+def chip(parts, scale=1.0, mono=False):
     """A small dark label above the composer: what was heard, or what a
-    button does. `parts` is a list of (text, muted) pairs, drawn in a row."""
-    key = ("chip", tuple(parts), round(scale, 3))
+    button does. `parts` is a list of (text, muted) pairs, drawn in a row.
+    In the mono look it is the capsule's black, solid."""
+    key = ("chip", tuple(parts), round(scale, 3), mono)
     if key in _sprite_cache:
         return _sprite_cache[key]
     height = max(12, _px(theme.CHIP_HEIGHT, scale))
@@ -967,9 +1039,11 @@ def chip(parts, scale=1.0):
     measure = ImageDraw.Draw(Image.new("L", (1, 1)))
     widths = [measure.textlength(text, font=text_font) for text, _m in parts]
     width = int(math.ceil(sum(widths))) + pad * 2
-    face = sprite((width, height), height // 2, theme.CHIP_FILL).copy()
-    face.putalpha(face.getchannel("A").point(
-        lambda value: int(value * theme.CHIP_ALPHA)))
+    face = sprite((width, height), height // 2,
+                  theme.MONO_FILL if mono else theme.CHIP_FILL).copy()
+    if not mono:
+        face.putalpha(face.getchannel("A").point(
+            lambda value: int(value * theme.CHIP_ALPHA)))
     drawing = ImageDraw.Draw(face)
     x = pad
     for (text, muted), part_width in zip(parts, widths):
@@ -1058,17 +1132,23 @@ def composer_frame(composer, open_share=1.0, turn=0.0,
                      font=text_font, fill=theme.TEXT_LIGHT + (255,),
                      anchor="lm")
 
+    # Mono: the cross a dark grey disc, the tick the thinking blue.
+    if composer.mono:
+        cancel = (theme.MONO_CONTROL, theme.MONO_CONTROL_INK)
+        accept = (theme.MONO_ACCENT, theme.TEXT_LIGHT)
+    else:
+        cancel = (theme.CANCEL_FILL, theme.CANCEL_GLYPH)
+        accept = (theme.ACCEPT_FILL, theme.ACCEPT_GLYPH)
     for name, box in layout["buttons"].items():
         grow, glyph_turn, lift = (buttons or {}).get(name, (1.0, 0, 0))
         size = box[2] - box[0]
         if name == "cancel":
-            face = button(size, "cancel", theme.CANCEL_FILL,
-                          theme.CANCEL_GLYPH, turn=glyph_turn)
+            face = button(size, "cancel", cancel[0], cancel[1],
+                          turn=glyph_turn)
         elif done:
             face = button(size, "accept", theme.DONE_FILL, theme.DONE_GLYPH)
         else:
-            face = button(size, "accept", theme.ACCEPT_FILL,
-                          theme.ACCEPT_GLYPH)
+            face = button(size, "accept", accept[0], accept[1])
         if abs(grow - 1.0) > 0.004:
             face = face.resize(
                 (max(1, int(round(face.size[0] * grow))),
@@ -1140,8 +1220,9 @@ def save_app_icon(path):
 
 # -- the tray panel ----------------------------------------------------------
 
-def panel_card(width, height, scale=1.0):
-    """The tray panel's glass: the pill's own layers, as a card.
+def panel_card(width, height, scale=1.0, mono=False):
+    """The tray panel's glass: the pill's own layers, as a card. In the mono
+    look, the same card and shadow in the mono capsule's solid black.
 
     Returns the picture and where the card sits in it; the rest of the
     picture is room for the shadow, and fully transparent.
@@ -1156,10 +1237,13 @@ def panel_card(width, height, scale=1.0):
     mask = _rounded(size, radius)
     image = Image.new("RGBA", big, (0, 0, 0, 0))
     _drop_shadow(image, box, mask, scale)
-    # A card is tall, and the pill's specular stretched down one reads as a
-    # smudge behind the title. Here it is a thin sheen along the top.
-    _glass_body(image, box, mask, radius, scale, theme.PANEL_ALPHA, 0.035, 3,
-                0.07)
+    if mono:
+        _mono_body(image, box, mask, radius, scale)
+    else:
+        # A card is tall, and the pill's specular stretched down one reads
+        # as a smudge behind the title. Here it is a thin sheen along the top.
+        _glass_body(image, box, mask, radius, scale, theme.PANEL_ALPHA,
+                    0.035, 3, 0.07)
     return (image.resize(window, Image.LANCZOS),
             (margin, margin, margin + int(width), margin + int(height)))
 
@@ -1179,15 +1263,16 @@ def _gradient(size, first, second):
     return ramp.resize(size, Image.BILINEAR)
 
 
-def switch(width, height, on):
+def switch(width, height, on, mono=False):
     """A switch, `on` running 0 to 1 as it slides.
 
     Off, it is the cross's grey. On, its track is the waveform's gradient -
     the one piece of colour in the panel, and the same one the pill and the
-    composer carry.
+    composer carry. In the mono look it is an iPhone's switch in the
+    thinking blue.
     """
     on = round(max(0.0, min(1.0, on)), 2)
-    key = ("switch", width, height, on)
+    key = ("switch", width, height, on, mono)
     if key in _sprite_cache:
         return _sprite_cache[key]
     k = 4
@@ -1196,8 +1281,12 @@ def switch(width, height, on):
     track = Image.new("L", big, 0)
     ImageDraw.Draw(track).rounded_rectangle(
         (0, 0, big[0] - 1, big[1] - 1), radius=big[1] // 2, fill=255)
-    off = Image.new("RGB", big, theme.CANCEL_FILL)
-    lit = _gradient(big, theme.SIRI[0], theme.SIRI[1])
+    if mono:
+        off = Image.new("RGB", big, theme.MONO_CONTROL)
+        lit = Image.new("RGB", big, theme.MONO_ACCENT)
+    else:
+        off = Image.new("RGB", big, theme.CANCEL_FILL)
+        lit = _gradient(big, theme.SIRI[0], theme.SIRI[1])
     face.paste(Image.blend(off, lit, on), (0, 0), track)
     inset = max(2, big[1] // 10)
     knob = big[1] - inset * 2
@@ -1221,10 +1310,10 @@ def _pill_label(width, height, fill, text, ink, text_font):
     return face
 
 
-def panel_chip(text, selected, scale=1.0):
+def panel_chip(text, selected, scale=1.0, mono=False):
     """A language to pin. The chosen one is white with dark ink, like the
-    tick; the rest are the cross's grey."""
-    key = ("panel-chip", text, bool(selected), round(scale, 3))
+    tick; the rest are the cross's grey. Mono: blue, and a dark grey."""
+    key = ("panel-chip", text, bool(selected), round(scale, 3), mono)
     if key in _sprite_cache:
         return _sprite_cache[key]
     height = _px(theme.PANEL_CHIP_HEIGHT, scale)
@@ -1233,9 +1322,15 @@ def panel_chip(text, selected, scale=1.0):
     width = int(math.ceil(measure.textlength(text, font=text_font))) \
         + _px(24, scale)
     width = max(width, height)
-    if selected:
+    if selected and mono:
+        face = _pill_label(width, height, theme.MONO_ACCENT, text,
+                           theme.TEXT_LIGHT, text_font)
+    elif selected:
         face = _pill_label(width, height, theme.ACCEPT_FILL, text,
                            theme.ACCEPT_GLYPH, text_font)
+    elif mono:
+        face = _pill_label(width, height, theme.MONO_CONTROL, text,
+                           theme.MONO_CONTROL_INK, text_font)
     else:
         face = _pill_label(width, height, theme.CANCEL_FILL, text,
                            theme.CANCEL_GLYPH, text_font)
@@ -1243,22 +1338,23 @@ def panel_chip(text, selected, scale=1.0):
     return face
 
 
-def segmented(width, height, labels, position, scale=1.0):
+def segmented(width, height, labels, position, scale=1.0, mono=False):
     """Two or more choices in one track, a grey thumb under the chosen one.
 
     `position` is where the thumb is, 0 for the first choice, and may be in
     between while it slides.
     """
     key = ("segmented", width, height, tuple(labels), round(position, 2),
-           round(scale, 3))
+           round(scale, 3), mono)
     if key in _sprite_cache:
         return _sprite_cache[key]
-    face = sprite((width, height), height // 2, theme.FIELD_FILL).copy()
+    face = sprite((width, height), height // 2, field_fill(mono)).copy()
     count = max(1, len(labels))
     cell = width / float(count)
     inset = max(2, _px(3, scale))
     thumb = sprite((int(round(cell)) - inset * 2, height - inset * 2),
-                   (height - inset * 2) // 2, theme.CANCEL_FILL)
+                   (height - inset * 2) // 2,
+                   theme.MONO_CONTROL if mono else theme.CANCEL_FILL)
     x = int(round(inset + cell * position))
     face.alpha_composite(thumb, (x, inset))
     text_font = font(max(8, _px(theme.FONT_SIZE - 1, scale)), medium=True)
@@ -1319,33 +1415,42 @@ def _magnifier(drawing, x, y, size, ink):
 _search_rings = {}
 
 
-def search_ring(field, window, scale):
+def search_ring(field, window, scale, mono=False):
     """The composer's ring, for a field of this size in a window this big.
     Built once per shape: a frame only turns it."""
-    key = (tuple(field), tuple(window), round(scale, 3))
+    key = (tuple(field), tuple(window), round(scale, 3), mono)
     ring = _search_rings.get(key)
     if ring is None:
         _search_rings.clear()
-        ring = GlowRing({"field": field, "window": window}, scale,
-                        spread=theme.SEARCH_SPREAD)
+        shape = {"field": field, "window": window}
+        if mono:
+            ring = FocusRing(shape, scale)
+        else:
+            ring = GlowRing(shape, scale, spread=theme.SEARCH_SPREAD)
         _search_rings[key] = ring
     return ring
 
 
 def _search_field(frame, drawing, item, scale, motion, muted, faint,
-                  lens=True):
+                  lens=True, mono=False):
     """The language search, and the key field: the composer's field and
     ring, a lens for the search, the words typed so far or what to type,
     and a caret."""
     left, top, right, bottom = item.rect
     height = bottom - top
-    ring = search_ring(item.rect, frame.size, scale)
-    _place_over(frame, ring.render(motion.get("search-turn", 0.0),
-                                   motion.get("search-glow",
-                                              theme.GLOW_SETTLED)),
-                ring.origin[0], ring.origin[1])
-    face = sprite((right - left, height), height // 2, theme.FIELD_FILL)
-    _place_over(frame, face, left, top)
+    glow = motion.get("search-glow", theme.GLOW_SETTLED)
+    if mono:
+        # The focus ring's line is the field's edge, so it goes on top.
+        face = sprite((right - left, height), height // 2, theme.MONO_FIELD)
+        _place_over(frame, face, left, top)
+        ring = search_ring(item.rect, frame.size, scale, mono=True)
+        _place_over(frame, ring.render(0.0, glow), *ring.origin)
+    else:
+        ring = search_ring(item.rect, frame.size, scale)
+        _place_over(frame, ring.render(motion.get("search-turn", 0.0), glow),
+                    ring.origin[0], ring.origin[1])
+        face = sprite((right - left, height), height // 2, theme.FIELD_FILL)
+        _place_over(frame, face, left, top)
     middle = (top + bottom) / 2.0
     if lens:
         _magnifier(drawing, left + _px(16, scale), middle, _px(14, scale),
@@ -1374,13 +1479,15 @@ def _search_field(frame, drawing, item, scale, motion, muted, faint,
                      width=max(1, _px(1.5, scale)))
 
 
-def panel_frame(card, items, scale=1.0, hover=None, motion=None):
+def panel_frame(card, items, scale=1.0, hover=None, motion=None,
+                mono=False):
     """One frame of the tray panel.
 
     `card` is (picture, box) from `panel_card`; `items` the laid-out parts
     from `panel.layout`, in window pixels. `hover` maps an item's key to how
     far the pointer's highlight has come on, 0 to 1; `motion` carries what
-    slides - the switch and the segmented thumb - by key.
+    slides - the switch and the segmented thumb - by key. `mono` draws the
+    controls in the mono look, on a card made with `panel_card(mono=True)`.
     """
     image, _box = card
     frame = image.copy()
@@ -1393,6 +1500,9 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
     small = font(max(8, _px(theme.HINT_SIZE, scale)))
     label_font = font(max(7, _px(theme.HINT_SIZE - 1, scale)), medium=True)
     title_font = font(max(10, _px(theme.TITLE_SIZE, scale)), medium=True)
+    # The one colour: the gradient's end on glass, the thinking blue in mono.
+    accent = theme.MONO_ACCENT_INK if mono else theme.SIRI[1]
+    tick = theme.MONO_ACCENT_INK if mono else theme.TEXT_LIGHT
 
     for item in items:
         left, top, right, bottom = item.rect
@@ -1426,7 +1536,7 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
             drawing.text((left, middle), item.label, font=small,
                          fill=muted + (255,), anchor="lm")
         elif kind == "chip":
-            face = panel_chip(item.label, bool(item.extra), scale)
+            face = panel_chip(item.label, bool(item.extra), scale, mono)
             grow = 1.0 + 0.06 * lit
             if grow > 1.004:
                 face = face.resize((int(round(face.size[0] * grow)),
@@ -1437,7 +1547,7 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
         elif kind == "segmented":
             labels, chosen = item.extra[0], item.extra[1]
             face = segmented(right - left, bottom - top, labels,
-                             motion.get(item.key, chosen), scale)
+                             motion.get(item.key, chosen), scale, mono)
             _place_over(frame, face, left, top)
         elif kind in ("row", "switch", "back", "language"):
             inset = _px(10, scale)
@@ -1453,7 +1563,7 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
                 text_left += _px(16, scale)
             ink = theme.TEXT_LIGHT
             if item.extra == "accent":
-                ink = theme.SIRI[1]
+                ink = accent
             elif item.extra == "danger":
                 ink = theme.DANGER
             drawing.text((text_left, middle), item.label, font=body,
@@ -1462,14 +1572,15 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
                 width = _px(theme.SWITCH_WIDTH, scale)
                 height = _px(theme.SWITCH_HEIGHT, scale)
                 face = switch(width, height,
-                              motion.get(item.key, 1.0 if item.extra else 0.0))
+                              motion.get(item.key, 1.0 if item.extra else 0.0),
+                              mono)
                 _place_over(frame, face, right - inset - width,
                             middle - height / 2.0)
             elif kind == "language":
                 drawn = motion.get("tick:" + item.key,
                                    1.0 if item.extra else 0.0)
                 _check(drawing, right - inset - _px(6, scale), middle,
-                       _px(11, scale), theme.TEXT_LIGHT, drawn)
+                       _px(11, scale), tick, drawn)
                 if item.hint:
                     drawing.text((right - inset - _px(20, scale), middle),
                                  item.hint, font=small, fill=faint + (255,),
@@ -1489,19 +1600,24 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
                              (255, 255, 255, 22))
             frame.alpha_composite(line, (int(left), int(middle)))
         elif kind == "search":
-            _search_field(frame, drawing, item, scale, motion, muted, faint)
+            _search_field(frame, drawing, item, scale, motion, muted, faint,
+                          mono=mono)
         elif kind == "keyfield":
             _search_field(frame, drawing, item, scale, motion, muted, faint,
-                          lens=False)
+                          lens=False, mono=mono)
         elif kind == "button":
             # The one thing to press on its page: white with dark ink, like
             # the tick, once there is something to save; the cross's grey
             # until then.
             ready = bool(item.extra)
+            if mono:
+                fill = theme.MONO_ACCENT if ready else theme.MONO_CONTROL
+                ink = theme.TEXT_LIGHT if ready else faint
+            else:
+                fill = theme.ACCEPT_FILL if ready else theme.CANCEL_FILL
+                ink = theme.ACCEPT_GLYPH if ready else faint
             face = _pill_label(
-                right - left, bottom - top,
-                theme.ACCEPT_FILL if ready else theme.CANCEL_FILL,
-                item.label, theme.ACCEPT_GLYPH if ready else faint,
+                right - left, bottom - top, fill, item.label, ink,
                 font(max(9, _px(theme.FONT_SIZE, scale)), medium=True))
             grow = 1.0 + 0.03 * lit if ready else 1.0
             if grow > 1.002:
@@ -1521,7 +1637,7 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None):
                          fill=faint + (255,), anchor="lm")
             if chosen:
                 _check(drawing, right - inset - _px(6, scale), middle,
-                       _px(11, scale), theme.TEXT_LIGHT)
+                       _px(11, scale), tick)
             elif aside:
                 drawing.text((right - inset, middle), aside, font=small,
                              fill=muted + (255,), anchor="rm")

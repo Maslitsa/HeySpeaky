@@ -257,6 +257,17 @@ without jargon, and say what you actually did and what you could not do.
   numbers are in `theme.py` under `MONO_`. Every click passes through it,
   since it has no buttons. `tools/live_check.py --style mono` puts it on
   the real screen and checks focus, click-through and the pointer.
+  The owner then asked for everything to change with the look, so the tray
+  panel and the correction composer do too (`panel_card`, `panel_frame`
+  and `composer` take `mono`): the capsule's black, solid, a white
+  hairline for an edge, and the thinking blue for whatever is on, chosen
+  or ready - an iPhone's switch, a Mac's focus ring round a field. The
+  popular switches on uiverse were a rocker, a day and night and a
+  download button, which is why none of them is here. Switching the look
+  turns an open panel there and then. Every glass render stayed byte for
+  byte what it was - a sha1 of 34 renders before and after - and
+  `tools/panel_check.py` and `tools/correction_check.py` take `--style
+  mono`.
 - **The mono sound is rebuilt from the reel, not copied from it.** It
   played twice in the reel, identically, the moment the words landed: two
   notes a fourth apart, about 500 and 670 Hz, six plucks over a fifth of a
