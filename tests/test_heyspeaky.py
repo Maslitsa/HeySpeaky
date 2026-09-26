@@ -1335,6 +1335,12 @@ class LanguagePriority(unittest.TestCase):
         self.assertNotEqual(shipped[0], "en")
         self.assertIn("en", shipped)
 
+    def test_the_shipped_default_puts_english_last(self):
+        """Measured three times over the same 24 clips: English third got
+        12.7% of words wrong, English last 10.0%."""
+        shipped = config_module.DEFAULTS["transcription"]["cloud"]["languages"]
+        self.assertEqual(shipped[-1], "en")
+
     def test_removing_a_language_leaves_the_rest_in_order(self):
         before = list(self.cfg["transcription"]["cloud"]["languages"])
         languages.toggle(self.cfg, before[1])
@@ -1548,6 +1554,13 @@ class OldConfigsMoveForward(unittest.TestCase):
         self.assertEqual(
             self.languages(cfg),
             config_module.DEFAULTS["transcription"]["cloud"]["languages"])
+
+    def test_the_previous_default_moves_english_last(self):
+        """The owner's list was that default, so it moves with it."""
+        cfg, changed = config_module._migrate(self.config(["kk", "ru", "en",
+                                                           "de"]))
+        self.assertTrue(changed)
+        self.assertEqual(self.languages(cfg), ["kk", "ru", "de", "en"])
 
     def test_a_list_somebody_chose_is_left_alone(self):
         """One entry different and it is a person's own list, not a default."""
@@ -3018,10 +3031,10 @@ class ANewInstallStartsWithThisComputersLanguages(unittest.TestCase):
         import json
         path = self.use(["uk", "en"])
         path.write_text(json.dumps({"transcription": {"cloud": {
-            "languages": ["kk", "ru", "en", "de"]}}}), encoding="utf-8")
+            "languages": ["ru", "kk", "en"]}}}), encoding="utf-8")
         cfg = config_module.load()
         self.assertEqual(cfg["transcription"]["cloud"]["languages"],
-                         ["kk", "ru", "en", "de"])
+                         ["ru", "kk", "en"])
 
     def test_a_language_switched_off_stays_off_after_a_restart(self):
         """Measured before the fix: switch German and Kazakh off, restart,

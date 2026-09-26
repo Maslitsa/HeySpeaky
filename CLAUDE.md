@@ -132,7 +132,10 @@ without jargon, and say what you actually did and what you could not do.
   first, or `language="kk"` pinned by hand, brought it back whole - which is
   how we know the audio was never at fault. **English never goes first**: the
   model leans that way unasked, so the front of the list is worth more to
-  whichever language it is most likely to mishear. A language switched on from
+  whichever language it is most likely to mishear. **And it goes last**:
+  on 26 September, three runs of the same 24 clips, `["kk","ru","de","en"]`
+  got 10.0% of words wrong against 12.7% with English third, every run -
+  with English third "Ертең кездесеміз" came back as "If time is thisms". A language switched on from
   the tray is inserted at the front for the same reason.
   `tools/language_drill.py` is how any of this gets re-measured.
 - **A new install starts with the computer's own languages**

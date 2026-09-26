@@ -219,6 +219,17 @@ def variants(base):
         ("kazakh first", cfg(languages=["kk", "ru", "en", "de"]), set()),
         ("kazakh first, no kw",
          cfg(languages=["kk", "ru", "en", "de"]), {"keywords"}),
+        # English last rather than third: what a new install gets from its
+        # computer's languages, and never measured before.
+        ("english last", cfg(languages=["kk", "ru", "de", "en"]), set()),
+        # The prompt as a line of transcript in all four scripts, rather than
+        # a sentence about them: the model reads a prompt as text that came
+        # before, not as an instruction, which is why a longer instruction
+        # did worse. None of these words is in a drill sentence.
+        ("example prompt", cfg(languages=["kk", "ru", "en", "de"],
+                               prompt="Рақмет, бәрі түсінікті. Спасибо, всё "
+                                      "понятно. Thanks, got it. Danke, alles "
+                                      "klar."), set()),
     ]
 
 

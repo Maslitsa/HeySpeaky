@@ -146,7 +146,18 @@ DEFAULTS = {
             # English does not go first. The model already leans that way
             # without being told, so the place at the front is worth more to
             # the language it is most likely to mishear.
-            "languages": ["kk", "ru", "en", "de"],
+            #
+            # And it goes last. Measured on 26 September, the same 24 clips
+            # three times over:
+            #
+            #   ["kk","ru","en","de"]   12.7% of words wrong (13, 12, 13)
+            #   ["kk","ru","de","en"]   10.0% (10, 10, 10)
+            #
+            # The difference is three sentences, every run: with English
+            # third, "Ертең кездесеміз" came back as "If time is thisms" and
+            # "I'll send the Rechnung" as "Alsene Rechnung"; with English
+            # last both came back whole.
+            "languages": ["kk", "ru", "de", "en"],
             # Literal terms you expect it to hear: names, jargon, product
             # names. e.g. ["Kubernetes", "RealtimeSTT", "Grafana"].
             #
@@ -357,6 +368,7 @@ DEFAULTS = {
 # much as one entry is somebody's own and is left alone.
 SUPERSEDED_LANGUAGES = [
     ["en", "ru", "de", "kk"],
+    ["kk", "ru", "en", "de"],
 ]
 
 # The same, for the correction key: "space" shipped as the default and is
