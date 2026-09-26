@@ -264,6 +264,58 @@ class ConfigMerge(unittest.TestCase):
         self.assertIsNone(config_module.DEFAULTS["model"]["initial_prompt"])
 
 
+class TheLocalModelGetsEveryThread(unittest.TestCase):
+    """faster-whisper uses four threads unless told otherwise, and
+    RealtimeSTT cannot tell it. Measured on the owner's laptop: 8.4 s a clip
+    with four, 6.0 s with all sixteen."""
+
+    def setUp(self):
+        from heyspeaky import hardware
+        self.hardware = hardware
+        saved = os.environ.pop("OMP_NUM_THREADS", None)
+        if saved is not None:
+            self.addCleanup(os.environ.__setitem__, "OMP_NUM_THREADS", saved)
+
+    def test_the_worker_starts_with_every_thread_and_nothing_else_does(self):
+        seen = []
+        with self.hardware.threads_for_the_worker("cpu"):
+            seen.append(os.environ.get("OMP_NUM_THREADS"))
+        self.assertEqual(seen, [str(self.hardware.worker_threads())])
+        self.assertNotIn("OMP_NUM_THREADS", os.environ)
+
+    def test_every_thread_the_computer_has_up_to_sixteen(self):
+        real = os.cpu_count
+        self.addCleanup(setattr, os, "cpu_count", real)
+        for has, gets in ((12, 12), (64, 16), (None, 4)):
+            os.cpu_count = lambda has=has: has
+            self.assertEqual(self.hardware.worker_threads(), gets)
+
+    def test_a_graphics_card_and_somebody_s_own_number_are_left_alone(self):
+        with self.hardware.threads_for_the_worker("cuda"):
+            self.assertNotIn("OMP_NUM_THREADS", os.environ)
+        os.environ["OMP_NUM_THREADS"] = "3"
+        self.addCleanup(os.environ.pop, "OMP_NUM_THREADS", None)
+        with self.hardware.threads_for_the_worker("cpu"):
+            self.assertEqual(os.environ["OMP_NUM_THREADS"], "3")
+        self.assertEqual(os.environ["OMP_NUM_THREADS"], "3")
+
+    def test_the_engine_makes_its_worker_with_them(self):
+        import types
+        try:
+            from heyspeaky import engine
+        except Exception:
+            self.skipTest("RealtimeSTT is not installed")
+        made = []
+        box = object.__new__(engine.TranscriptionEngine)
+        box._model_cfg = {"final": "base"}
+        box._ready = threading.Event()
+        box._on_ready = lambda: None
+        box._new_recorder = lambda *args: made.append(
+            os.environ.get("OMP_NUM_THREADS")) or types.SimpleNamespace()
+        box._try_initialise("cpu", "int8")
+        self.assertEqual(made, [str(self.hardware.worker_threads())])
+
+
 class HardwareResolution(unittest.TestCase):
     def test_explicit_values_are_left_alone(self):
         from heyspeaky.hardware import resolve_hardware

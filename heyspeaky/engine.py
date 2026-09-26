@@ -22,7 +22,7 @@ import time
 
 from RealtimeSTT import AudioToTextRecorder
 
-from .hardware import resolve_hardware
+from .hardware import resolve_hardware, threads_for_the_worker
 
 logger = logging.getLogger("heyspeaky.engine")
 
@@ -136,7 +136,19 @@ class TranscriptionEngine:
             "Loading model %s on %s/%s", model["final"], device, compute_type
         )
         started = time.monotonic()
-        self._recorder = AudioToTextRecorder(
+        with threads_for_the_worker(device):
+            self._recorder = self._new_recorder(model, device, compute_type)
+        # Nothing may auto-start; we are the only source of audio.
+        self._recorder.start_recording_on_voice_activity = False
+        self._recorder.stop_recording_on_voice_deactivity = False
+
+        self._ready.set()
+        logger.info("Models ready in %.1fs", time.monotonic() - started)
+        self._on_ready()
+        return True
+
+    def _new_recorder(self, model, device, compute_type):
+        return AudioToTextRecorder(
             model=model["final"],
             language=model["language"] or "",
             device=device,
@@ -173,14 +185,6 @@ class TranscriptionEngine:
             ensure_sentence_ends_with_period=False,
             ensure_sentence_starting_uppercase=True,
         )
-        # Nothing may auto-start; we are the only source of audio.
-        self._recorder.start_recording_on_voice_activity = False
-        self._recorder.stop_recording_on_voice_deactivity = False
-
-        self._ready.set()
-        logger.info("Models ready in %.1fs", time.monotonic() - started)
-        self._on_ready()
-        return True
 
     @staticmethod
     def _reap_workers():
