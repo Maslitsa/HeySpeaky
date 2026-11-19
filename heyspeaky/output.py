@@ -15,7 +15,7 @@ import keyboard
 
 from .hotkey import wait_for_modifiers_released
 
-logger = logging.getLogger("speakit.output")
+logger = logging.getLogger("heyspeaky.output")
 
 CF_UNICODETEXT = 13
 GMEM_MOVEABLE = 0x0002

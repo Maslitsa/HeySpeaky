@@ -17,9 +17,9 @@ sys.path.insert(0, str(ROOT))
 import numpy as np                                      # noqa: E402
 import webrtcvad                                        # noqa: E402
 
-from speakit import config as config_module           # noqa: E402
-from speakit.mic import Microphone, list_input_devices  # noqa: E402
-from speakit.transcribe import CloudBackend           # noqa: E402
+from heyspeaky import config as config_module           # noqa: E402
+from heyspeaky.mic import Microphone, list_input_devices  # noqa: E402
+from heyspeaky.transcribe import CloudBackend           # noqa: E402
 
 SECONDS = 6
 
@@ -57,7 +57,7 @@ def main():
     except Exception as exc:
         print("  could not list devices: {}".format(exc))
     chosen = cfg["audio"]["input_device_index"]
-    print("SpeakIt uses: {}\n".format(
+    print("HeySpeaky uses: {}\n".format(
         "system default" if chosen is None else "device {}".format(chosen)))
 
     print("=" * 62)

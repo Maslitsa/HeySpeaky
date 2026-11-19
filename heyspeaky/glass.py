@@ -1171,7 +1171,7 @@ ICON_BARS = (0.36, 0.68, 1.0, 0.68, 0.36)
 
 
 def app_icon(size=256):
-    """SpeakIt's own icon, for its shortcuts: the waveform in its colours
+    """HeySpeaky's own icon, for its shortcuts: the waveform in its colours
     on a tile of the pill's dark glass.
 
     The shortcuts used to borrow the icon of the Python they start, which

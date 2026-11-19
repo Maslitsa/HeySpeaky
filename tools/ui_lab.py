@@ -23,7 +23,7 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from speakit import glass, theme  # noqa: E402
+from heyspeaky import glass, theme  # noqa: E402
 
 SENTENCE = ("I already sent the invoice, aber ich warte noch auf eine "
             "Antwort.")

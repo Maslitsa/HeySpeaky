@@ -1,4 +1,4 @@
-r"""Checks a SpeakIt installation and says what to fix.
+r"""Checks a HeySpeaky installation and says what to fix.
 
 Run this first whenever something is wrong. It is the front door; the deeper
 tools (check_mic.py, check_cloud.py) are for when it points you at one.
@@ -10,8 +10,8 @@ Or just double-click CHECKUP.bat.
 The installer runs it with --install, which skips the checks that only make
 sense once the app is running. Instead it downloads the speech models and
 starts the real transcription engine, then waits for it to be ready. When the
-installer is about to start SpeakIt anyway, it adds --no-engine and watches
-the app's own engine start instead, so the model is not loaded twice. SpeakIt
+installer is about to start HeySpeaky anyway, it adds --no-engine and watches
+the app's own engine start instead, so the model is not loaded twice. HeySpeaky
 has no console, so an engine that cannot start at first launch fails where
 nobody can see it. The installer's window is the last place an error is still
 readable.
@@ -108,7 +108,7 @@ def check_imports():
 
 def check_config():
     try:
-        from speakit import config as config_module
+        from heyspeaky import config as config_module
         cfg = config_module.load()
     except Exception as exc:
         say(FAIL, "config.json", str(exc)[:60],
@@ -122,7 +122,7 @@ def check_config():
     # and "auto" silently landing on cpu is the difference between a bigger
     # model being usable and being unusable.
     try:
-        from speakit.hardware import resolve_hardware
+        from heyspeaky.hardware import resolve_hardware
         device, compute = resolve_hardware(
             cfg["model"]["device"], cfg["model"]["compute_type"])
         detail = "{} / {} (model {})".format(
@@ -142,7 +142,7 @@ def download_models(cfg):
     """Fetches the models with visible progress, before the engine needs them.
 
     Returns False only when a download failed, which is worth a warning rather
-    than a failure: SpeakIt retries at startup, and a firewall that blocks
+    than a failure: HeySpeaky retries at startup, and a firewall that blocks
     Hugging Face today may not tomorrow.
     """
     try:
@@ -159,7 +159,7 @@ def download_models(cfg):
         except Exception as exc:
             say(WARN, "Speech models", "could not download {}: {}".format(
                 name, str(exc)[:50]),
-                "SpeakIt tries again when it starts. huggingface.co has to "
+                "HeySpeaky tries again when it starts. huggingface.co has to "
                 "be reachable once.")
             return False
     say(OK, "Speech models", ", ".join(names) + " downloaded")
@@ -178,8 +178,8 @@ def check_engine(cfg):
     import threading
 
     try:
-        from speakit import winjob
-        from speakit.engine import TranscriptionEngine
+        from heyspeaky import winjob
+        from heyspeaky.engine import TranscriptionEngine
     except Exception as exc:
         say(FAIL, "Engine", "will not import: {}".format(str(exc)[:50]),
             "Run the installer again.")
@@ -224,7 +224,7 @@ def check_engine(cfg):
 
 def check_microphone(cfg):
     try:
-        from speakit.mic import list_input_devices
+        from heyspeaky.mic import list_input_devices
         devices = list(list_input_devices())
     except Exception as exc:
         say(FAIL, "Microphone", "cannot list devices: {}".format(
@@ -245,7 +245,7 @@ def check_api_key(cfg):
     if cfg is None:
         return
     try:
-        from speakit.transcribe import CloudBackend
+        from heyspeaky.transcribe import CloudBackend
         backend = CloudBackend(cfg)
         has_key = backend.available()
     except Exception as exc:
@@ -267,7 +267,7 @@ def check_running():
         kernel32 = ctypes.windll.kernel32
         kernel32.OpenMutexW.restype = ctypes.c_void_p
         handle = kernel32.OpenMutexW(
-            0x00100000, False, "Global\\SpeakIt.SingleInstance")
+            0x00100000, False, "Global\\HeySpeaky.SingleInstance")
     except Exception:
         say(WARN, "Running", "could not tell")
         return
@@ -276,7 +276,7 @@ def check_running():
         say(OK, "Running", "yes")
     else:
         # The instance mutex is claimed a moment after launch, so running this
-        # immediately after starting SpeakIt can catch the gap.
+        # immediately after starting HeySpeaky can catch the gap.
         say(WARN, "Running", "not running (or still starting)",
             "If you just started it, wait a few seconds and run this again. "
             "Otherwise start it from the Start Menu.")
@@ -284,7 +284,7 @@ def check_running():
 
 def check_autostart():
     startup = Path(os.environ.get("APPDATA", "")) / (
-        r"Microsoft\Windows\Start Menu\Programs\Startup\SpeakIt.lnk")
+        r"Microsoft\Windows\Start Menu\Programs\Startup\HeySpeaky.lnk")
     if startup.exists():
         say(OK, "Starts with Windows", "yes")
     else:
@@ -307,7 +307,7 @@ def main():
     install = "--install" in sys.argv[1:]
     no_engine = "--no-engine" in sys.argv[1:]
     print()
-    print("SpeakIt check-up")
+    print("HeySpeaky check-up")
     print("=" * 62)
     check_python()
     check_venv()

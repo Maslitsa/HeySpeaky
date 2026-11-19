@@ -16,7 +16,7 @@ import os
 import threading
 import time
 
-logger = logging.getLogger("speakit.localmodels")
+logger = logging.getLogger("heyspeaky.localmodels")
 
 # name, label, download in MB, what to expect
 MODELS = (

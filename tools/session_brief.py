@@ -27,14 +27,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PROGRAMS = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs"
 # The installed app under each name it has had since the package was renamed
-# with it, newest first: the folder, and the package and log name inside it.
-COPIES = (("SpeakIt", "speakit"), ("HeySpeaky", "heyspeaky"))
-TRACKED = ("speakit/*.py", "run.py", "install.ps1", "uninstall.ps1",
+# with it, current first: the folder, and the package and log name inside it.
+# SpeakIt was the name from 26 October to 19 November 2026.
+COPIES = (("HeySpeaky", "heyspeaky"), ("SpeakIt", "speakit"))
+TRACKED = ("heyspeaky/*.py", "run.py", "install.ps1", "uninstall.ps1",
            "tools/*.py")
 
 # What gets counted, in the order it is printed.
 EVENTS = (
-    ("starts", r"(?:SpeakIt|HeySpeaky) running"),
+    ("starts", r"(?:HeySpeaky|SpeakIt) running"),
     ("quits", r"Shutting down"),
     ("second copy refused", r"Another instance is already running"),
     ("dictations", r"Final transcript"),
@@ -65,9 +66,10 @@ def _git(*args):
 
 def installed_copy(programs=PROGRAMS):
     """The copy the app runs from, its package name and its log: whichever
-    log was written last. A SpeakIt from before HeySpeaky can sit in the
-    SpeakIt folder with a September log, and must not pass for the one in
-    use; and until the owner updates, the one in use is HeySpeaky."""
+    log was written last. On the owner's PC the SpeakIt folder holds a copy
+    from September with a September log, and it must not pass for the one
+    in use; on a PC installed between 26 October and 19 November the one in
+    use is SpeakIt until it updates."""
     found = []
     for name, package in COPIES:
         log = programs / name / "logs" / (package + ".log")
@@ -80,17 +82,17 @@ def installed_copy(programs=PROGRAMS):
     return folder, package, folder / "logs" / (package + ".log")
 
 
-def drift(root=ROOT, installed=None, names=None, package="speakit"):
+def drift(root=ROOT, installed=None, names=None, package="heyspeaky"):
     """Files that differ between this copy and the installed one, line
     endings aside - the installed copy keeps CRLF and git keeps LF. A copy
-    installed under an older name keeps the package under that name."""
+    installed under another name keeps the package under that name."""
     if installed is None:
         installed, package, _log = installed_copy()
     if names is None:
         names = _git("ls-files", *TRACKED).split()
     differ, missing = [], []
     for name in names:
-        there = installed / re.sub(r"^speakit/", package + "/", name)
+        there = installed / re.sub(r"^heyspeaky/", package + "/", name)
         if not there.exists():
             missing.append(name)
             continue
@@ -148,7 +150,7 @@ def main():
             pass
 
     now = datetime.datetime.now()
-    print("SpeakIt session brief, {:%Y-%m-%d %H:%M}".format(now))
+    print("HeySpeaky session brief, {:%Y-%m-%d %H:%M}".format(now))
     changed = _git("status", "--short").splitlines()
     print("Repo: {} at {}{}".format(
         _git("branch", "--show-current") or "?",
@@ -161,8 +163,8 @@ def main():
         print("Installed copy: none at {}".format(installed))
     else:
         if installed.name != COPIES[0][0]:
-            print("Installed copy is still {}, not updated since the "
-                  "rename".format(installed.name))
+            print("Installed copy is still {}, not updated since the name "
+                  "went back to HeySpeaky".format(installed.name))
         differ, missing = drift(installed=installed, package=package)
         if not differ and not missing:
             print("Installed copy: the same as this one, file for file")

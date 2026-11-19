@@ -40,8 +40,8 @@ for stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-from speakit.correct import CorrectionBox                  # noqa: E402
-from speakit.overlay import (                              # noqa: E402
+from heyspeaky.correct import CorrectionBox                  # noqa: E402
+from heyspeaky.overlay import (                              # noqa: E402
     GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_NOACTIVATE, _monitor_scale,
     enable_dpi_awareness, window_handle,
 )

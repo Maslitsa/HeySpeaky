@@ -9,7 +9,7 @@
 Get your own at [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
 
 ```powershell
-$env:OPENAI_API_KEY = "PASTE-YOUR-KEY-HERE"; irm https://raw.githubusercontent.com/Maslitsa/SpeakIt/main/install.ps1 | iex
+$env:OPENAI_API_KEY = "PASTE-YOUR-KEY-HERE"; irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1 | iex
 ```
 
 [Back to the README](../README.md#install)

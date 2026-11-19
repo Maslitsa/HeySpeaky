@@ -1,6 +1,6 @@
 r"""Runs the bundled demo clip and prints what came back.
 
-The README claims SpeakIt handles a sentence that changes language three
+The README claims HeySpeaky handles a sentence that changes language three
 times without being told. This is how you check that yourself in about five
 seconds, without installing anything extra or recording anything.
 
@@ -35,8 +35,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from speakit import config as config_module          # noqa: E402
-from speakit.transcribe import CloudBackend, LocalBackend  # noqa: E402
+from heyspeaky import config as config_module          # noqa: E402
+from heyspeaky.transcribe import CloudBackend, LocalBackend  # noqa: E402
 
 DEMO = ROOT / "demo" / "four_languages.wav"
 
@@ -90,7 +90,7 @@ def run_cloud(cfg, pcm):
 
 def run_local(cfg, pcm):
     """Starts the real engine headlessly. It reads no microphone."""
-    from speakit.engine import TranscriptionEngine
+    from heyspeaky.engine import TranscriptionEngine
 
     engine = TranscriptionEngine(
         cfg,

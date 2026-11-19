@@ -16,7 +16,7 @@ import logging
 
 import numpy as np
 
-logger = logging.getLogger("speakit.levels")
+logger = logging.getLogger("heyspeaky.levels")
 
 TARGET = 0.9
 MAX_GAIN = 24.0

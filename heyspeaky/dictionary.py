@@ -54,14 +54,14 @@ import unicodedata
 
 from . import config
 
-logger = logging.getLogger("speakit.dictionary")
+logger = logging.getLogger("heyspeaky.dictionary")
 
-PATH = "%APPDATA%\\SpeakIt\\dictionary.json"
+PATH = "%APPDATA%\\HeySpeaky\\dictionary.json"
 
 # Older names of the app, read once if the current file is missing, the same
 # way the key is carried across. See LEGACY_KEY_FILES in transcribe.py.
 LEGACY_PATHS = (
-    "%APPDATA%\\HeySpeaky\\dictionary.json",
+    "%APPDATA%\\SpeakIt\\dictionary.json",
     "%APPDATA%\\VoiceType\\dictionary.json",
 )
 

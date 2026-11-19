@@ -9,7 +9,7 @@ import contextlib
 import logging
 import os
 
-logger = logging.getLogger("speakit.hardware")
+logger = logging.getLogger("heyspeaky.hardware")
 
 # The most threads the local model is given. Measured only up to sixteen,
 # the most this laptop has; past that it is a guess, so it stops there.

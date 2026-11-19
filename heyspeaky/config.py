@@ -1,4 +1,4 @@
-"""Configuration loading for SpeakIt.
+"""Configuration loading for HeySpeaky.
 
 Settings live in config.json next to the project root so they survive
 reinstalls of the environment.
@@ -11,7 +11,7 @@ import os
 import time
 from pathlib import Path
 
-logger = logging.getLogger("speakit.config")
+logger = logging.getLogger("heyspeaky.config")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT_DIR / "config.json"
@@ -102,7 +102,7 @@ DEFAULTS = {
             # fields outright ("not supported for this model").
             "model": "gpt-transcribe",
             # Key lookup order: api_key, then this environment variable, then
-            # api_key_file. Prefer the file: SpeakIt starts from a Startup
+            # api_key_file. Prefer the file: HeySpeaky starts from a Startup
             # shortcut and only inherits environment variables that already
             # existed when it launched, so a newly set variable is invisible
             # until you sign in again. The file is read per request.
@@ -112,7 +112,7 @@ DEFAULTS = {
             # away from leaking.
             "api_key_env": "OPENAI_API_KEY",
             "api_key": "",
-            "api_key_file": "%APPDATA%\\SpeakIt\\openai.key",
+            "api_key_file": "%APPDATA%\\HeySpeaky\\openai.key",
             # The languages you speak. The cloud model is told to expect them,
             # the prompt and keywords are generated from them, and the tray
             # offers them as the languages you can pin. Change them from the
@@ -222,7 +222,7 @@ DEFAULTS = {
         # Any other key pressed during the combo cancels the recording.
         "cancel_on_other_key": True,
         # Held with the chord, this key asks what the selected words should
-        # have been and remembers the answer. See speakit/correct.py. It is
+        # have been and remembers the answer. See heyspeaky/correct.py. It is
         # exempt from cancel_on_other_key, but only while nothing is being
         # recorded, or in the first moment of a recording the chord itself
         # started. It was "space" until Ctrl+Alt+Space turned out to belong
@@ -325,7 +325,7 @@ DEFAULTS = {
     },
     "overlay": {
         # How the pill looks - colours, sizes, the waveform, the glass - lives
-        # in speakit/theme.py, where tools/ui_lab.py can draw it for you.
+        # in heyspeaky/theme.py, where tools/ui_lab.py can draw it for you.
         # These three are here because they are about where it sits and how
         # long it stays, which is a matter of taste rather than design.
         #
@@ -378,17 +378,6 @@ SUPERSEDED_CORRECT_KEYS = ["space"]
 # The end sound: "drip" was the default before the sound followed the look.
 SUPERSEDED_FINISH = ["drip"]
 
-# Where the key file was by default under the older names. config.json keeps
-# the path it was written with, so without this a copy carried across from
-# HeySpeaky would go on reading, and the tray on saving, the key in a folder
-# the app no longer owns. "%APPDATA%\\SpeakIt\\openai.key" is not here: that
-# is the current default again, and a HeySpeaky that was a SpeakIt first
-# still has it.
-SUPERSEDED_KEY_FILES = [
-    "%APPDATA%\\HeySpeaky\\openai.key",
-    "%APPDATA%\\VoiceType\\openai.key",
-]
-
 
 def _migrate(user_config):
     """Brings an old config.json forward. Returns it and whether it changed.
@@ -423,14 +412,6 @@ def _migrate(user_config):
         changed = True
         logger.info("The end sound now follows the look (was %s)",
                     stored_finish)
-    stored_file = cloud.get("api_key_file")
-    if stored_file in SUPERSEDED_KEY_FILES:
-        wanted_file = DEFAULTS["transcription"]["cloud"]["api_key_file"]
-        cloud["api_key_file"] = wanted_file
-        changed = True
-        # The path, never the key.
-        logger.info("The key file is now %s (was %s)", wanted_file,
-                    stored_file)
     return user_config, changed
 
 

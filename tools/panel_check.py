@@ -32,13 +32,13 @@ for stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-from speakit import languages                              # noqa: E402
+from heyspeaky import languages                              # noqa: E402
 from correction_check import kazakh_layout, type_in_layout   # noqa: E402
-from speakit.overlay import (                              # noqa: E402
+from heyspeaky.overlay import (                              # noqa: E402
     GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_NOACTIVATE, _cursor_work_area,
     _monitor_scale, enable_dpi_awareness, window_handle,
 )
-from speakit.panel import TrayPanel                        # noqa: E402
+from heyspeaky.panel import TrayPanel                        # noqa: E402
 
 
 class StandIn(object):

@@ -1,4 +1,4 @@
-"""SpeakIt controller.
+"""HeySpeaky controller.
 
 Threads in play:
 
@@ -46,18 +46,18 @@ from .transcribe import Router
 from .tray import Tray
 from .winjob import join_kill_on_close
 
-logger = logging.getLogger("speakit")
+logger = logging.getLogger("heyspeaky")
 
 IDLE = "idle"
 RECORDING_HOLD = "recording_hold"
 RECORDING_LATCHED = "recording_latched"
 TRANSCRIBING = "transcribing"
 
-MUTEX_NAME = "Global\\SpeakIt.SingleInstance"
+MUTEX_NAME = "Global\\HeySpeaky.SingleInstance"
 
 
 def _claim_single_instance():
-    """Returns False if another SpeakIt is already running."""
+    """Returns False if another HeySpeaky is already running."""
     kernel32 = ctypes.windll.kernel32
     handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
     if not handle:
@@ -73,7 +73,7 @@ def setup_logging(level_name):
     """Sends logs to a rotating file; there is no console to print to."""
     config_module.LOG_DIR.mkdir(parents=True, exist_ok=True)
     handler = logging.handlers.RotatingFileHandler(
-        config_module.LOG_DIR / "speakit.log",
+        config_module.LOG_DIR / "heyspeaky.log",
         maxBytes=1_000_000,
         backupCount=3,
         encoding="utf-8",
@@ -113,7 +113,7 @@ class App:
         self._panel_closed_at = 0.0
 
         self.root = tk.Tk()
-        self.root.title("SpeakIt")
+        self.root.title("HeySpeaky")
         self.overlay = Overlay(
             self.root,
             cfg["overlay"],
@@ -284,8 +284,8 @@ class App:
             logger.info("No OpenAI key yet; asking for one in the tray")
             self.tray.set_status("Ready · no OpenAI key yet")
             self.tray.notify(
-                "SpeakIt needs your OpenAI key",
-                "Copy the key, then click the SpeakIt icon in the tray "
+                "HeySpeaky needs your OpenAI key",
+                "Copy the key, then click the HeySpeaky icon in the tray "
                 "and choose \"Add your OpenAI key\".")
         # Once a day at most, and never in the way: people install by pasting
         # a command and would otherwise never learn that a fix exists.
@@ -907,7 +907,7 @@ class App:
                       "Update failed: {}".format(str(exc)[:60]), 3.0)
             return
         self.post(self.overlay.flash, "done", "",
-                  "Updating. SpeakIt will restart.", 4.0)
+                  "Updating. HeySpeaky will restart.", 4.0)
 
     def _on_tray_report(self):
         """Saves a problem report to the Desktop, off the tray thread."""
@@ -975,7 +975,7 @@ class App:
         self.tray.start()
         self.tray.set_status("Loading speech models…")
         self.root.after(16, self._pump)
-        logger.info("SpeakIt running")
+        logger.info("HeySpeaky running")
         self.root.mainloop()
 
     def shutdown(self):

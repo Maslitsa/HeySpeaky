@@ -55,16 +55,16 @@ def candidates():
     the path, and that one usually has nothing installed. The tests import
     the app, so they need the environment the app itself runs in.
     """
-    chosen = (os.environ.get("SPEAKIT_PYTHON")
-              or os.environ.get("HEYSPEAKY_PYTHON"))
+    chosen = (os.environ.get("HEYSPEAKY_PYTHON")
+              or os.environ.get("SPEAKIT_PYTHON"))
     if chosen:
         yield Path(chosen)
     yield ROOT / ".venv" / "Scripts" / "python.exe"
     yield ROOT / ".venv" / "bin" / "python"
     if LOCAL:
-        # HeySpeaky too: a machine not yet updated since the rename has its
-        # environment there.
-        for name in ("SpeakIt", "HeySpeaky"):
+        # SpeakIt too: the app was called that from 26 October to 19
+        # November, and a machine installed then has its environment there.
+        for name in ("HeySpeaky", "SpeakIt"):
             yield Path(LOCAL) / "Programs" / name / ".venv" / "Scripts" / "python.exe"
     yield Path(sys.executable)
 
@@ -74,14 +74,14 @@ def interpreter():
     for path in candidates():
         if not path.exists():
             continue
-        proof = run([str(path), "-c", "import speakit.transcribe"])
+        proof = run([str(path), "-c", "import heyspeaky.transcribe"])
         if proof.returncode == 0:
             return str(path)
     return None
 
 
 def script_problems(path):
-    """install.ps1 and uninstall.ps1 are how everyone gets SpeakIt, and
+    """install.ps1 and uninstall.ps1 are how everyone gets HeySpeaky, and
     Windows PowerShell 5.1 mangles anything that is not ASCII: one that is
     not ASCII, or does not parse, breaks every install at once."""
     path = Path(path)
@@ -129,7 +129,7 @@ def problems():
     python = interpreter()
     if python is None:
         found.append("the tests could not run: no Python here has the app's "
-                     "packages. Install the app, or point SPEAKIT_PYTHON at "
+                     "packages. Install the app, or point HEYSPEAKY_PYTHON at "
                      "an environment that has them")
         python = sys.executable
     else:
@@ -139,7 +139,7 @@ def problems():
             found.append("the tests fail: " + " / ".join(tail))
 
     compiled = run([python, "-W", "error::SyntaxWarning", "-m", "compileall",
-                    "-q", "speakit", "run.py", "tools"])
+                    "-q", "heyspeaky", "run.py", "tools"])
     if compiled.returncode != 0:
         tail = (compiled.stderr or compiled.stdout).strip().splitlines()[-3:]
         found.append("a file does not compile cleanly: " + " / ".join(tail))

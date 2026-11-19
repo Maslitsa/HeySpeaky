@@ -35,7 +35,7 @@ import tkinter as tk
 
 from . import glass, keymap, languages, localmodels, overlay, theme
 
-logger = logging.getLogger("speakit.panel")
+logger = logging.getLogger("heyspeaky.panel")
 
 TICK_MS = 16
 # How often the panel looks at the app's state while nothing moves, so a
@@ -73,7 +73,7 @@ KEY_HINTS = {
     "checking": "Checking it with OpenAI...",
     "refused": "OpenAI refused that key. Nothing was changed.",
     "offline": "Saved. OpenAI could not be reached to check it.",
-    "done": "Saved. SpeakIt uses it from now on.",
+    "done": "Saved. HeySpeaky uses it from now on.",
 }
 
 
@@ -223,7 +223,7 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
     dot = {"busy": theme.BUSY_DOT, "paused": theme.PAUSED_DOT}.get(
         state, theme.READY_DOT)
     header = px(26)
-    add("title", None, "SpeakIt", header)
+    add("title", None, "HeySpeaky", header)
     add("status", None, model.get("status", ""), header, dot)
     y += header + gap(8)
 
@@ -307,7 +307,7 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
         add("row", "quit", "Click again to quit", row, "danger",
             hint="Esc keeps it")
     else:
-        add("row", "quit", "Quit SpeakIt", row)
+        add("row", "quit", "Quit HeySpeaky", row)
     y += row
     usage = model.get("usage", "")
     if usage:
@@ -407,7 +407,7 @@ class TrayPanel(object):
 
         self.window = tk.Toplevel(root)
         self.window.withdraw()
-        self.window.title("SpeakIt")
+        self.window.title("HeySpeaky")
         self.window.overrideredirect(True)
         self.window.configure(bg="#000000")
         self.window.attributes("-topmost", True)
@@ -802,7 +802,7 @@ class TrayPanel(object):
 
     def _escape(self, _event=None):
         """Esc steps back: out of the search, then out of the list, then
-        closes. And it is what keeps SpeakIt when Quit is waiting."""
+        closes. And it is what keeps HeySpeaky when Quit is waiting."""
         if self._quit_armed_at is not None:
             self._quit_armed_at = None
             self._refit()

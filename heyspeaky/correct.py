@@ -45,7 +45,7 @@ from ctypes import wintypes
 
 from . import dictionary, glass, keymap, overlay, theme
 
-logger = logging.getLogger("speakit.correct")
+logger = logging.getLogger("heyspeaky.correct")
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _user32.GetForegroundWindow.restype = wintypes.HWND
@@ -240,7 +240,7 @@ class CorrectionBox(object):
         # transparent - the pill's kind of window.
         self.back = tk.Toplevel(root)
         self.back.withdraw()
-        self.back.title("SpeakIt")
+        self.back.title("HeySpeaky")
         self.back.overrideredirect(True)
         self.back.configure(bg="#000000")
         self.back.attributes("-topmost", True)
@@ -258,7 +258,7 @@ class CorrectionBox(object):
         # The field: an ordinary window, because it has to take the keyboard.
         self.top = tk.Toplevel(root)
         self.top.withdraw()
-        self.top.title("SpeakIt")
+        self.top.title("HeySpeaky")
         self.top.overrideredirect(True)
         self.top.attributes("-topmost", True)
         self.top.configure(bg=_rgb(glass.field_fill(self._mono)))

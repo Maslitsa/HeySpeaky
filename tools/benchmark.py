@@ -1,4 +1,4 @@
-r"""Which speech model should SpeakIt use? Measure it, do not guess.
+r"""Which speech model should HeySpeaky use? Measure it, do not guess.
 
 Runs the same recordings through OpenAI and through several local models, and
 prints what each one heard and how long it took. Where the right answer is
@@ -24,8 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from speakit import config as config_module               # noqa: E402
-from speakit.transcribe import CloudBackend, LocalBackend  # noqa: E402
+from heyspeaky import config as config_module               # noqa: E402
+from heyspeaky.transcribe import CloudBackend, LocalBackend  # noqa: E402
 
 DEMO = ROOT / "demo" / "four_languages.wav"
 
@@ -105,7 +105,7 @@ def run_cloud(cfg, clips, read_pcm):
 
 def run_local(cfg, model_name, clips, read_pcm):
     """Loads one local model and runs every clip through it."""
-    from speakit.engine import TranscriptionEngine
+    from heyspeaky.engine import TranscriptionEngine
 
     results = {}
     local_cfg = copy.deepcopy(cfg)

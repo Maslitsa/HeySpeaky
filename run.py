@@ -1,4 +1,4 @@
-"""SpeakIt entry point.
+"""HeySpeaky entry point.
 
 Launch with pythonw.exe so no console window ever appears.
 
@@ -21,9 +21,9 @@ LOG_DIR = ROOT / "logs"
 IS_WORKER = __name__ != "__main__"
 
 # Per-process ceiling on the raw stdout/stderr log. Diagnostics live in
-# logs/speakit.log, which rotates; this file only catches output from
+# logs/heyspeaky.log, which rotates; this file only catches output from
 # dependencies that print instead of logging, and it exists because one of
-# them once wrote 8.7 GB of the same traceback. See speakit/winjob.py.
+# them once wrote 8.7 GB of the same traceback. See heyspeaky/winjob.py.
 STDOUT_LOG_LIMIT = 2_000_000
 
 
@@ -51,7 +51,7 @@ class _CappedStream:
             self._stopped = True
             try:
                 self._file.write(
-                    "\n[SpeakIt] stdout log hit its {} byte limit; "
+                    "\n[HeySpeaky] stdout log hit its {} byte limit; "
                     "further output from this process is dropped.\n".format(
                         self._limit)
                 )
@@ -132,8 +132,8 @@ if __name__ == "__main__":
         sys.path.insert(0, str(ROOT))
 
     # The job object that stops us orphaning transcription workers is set up
-    # in speakit.app.main(), which runs before anything is spawned and after
+    # in heyspeaky.app.main(), which runs before anything is spawned and after
     # logging exists, so the outcome is recorded.
-    from speakit.app import main
+    from heyspeaky.app import main
 
     sys.exit(main())

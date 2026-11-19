@@ -1,9 +1,9 @@
 ---
 name: release
-description: Cut a SpeakIt release - bump the version, tag it, watch CI, then update the owner's own machine and check it still dictates.
+description: Cut a HeySpeaky release - bump the version, tag it, watch CI, then update the owner's own machine and check it still dictates.
 ---
 
-# Releasing SpeakIt
+# Releasing HeySpeaky
 
 People update by running the install command again, which pulls `main`. So a
 release is really two things: making `main` good, and giving it a number that
@@ -14,7 +14,7 @@ can be talked about in an issue.
 ```powershell
 git status --short
 .venv\Scripts\python.exe -m unittest discover -s tests
-.venv\Scripts\python.exe -W error::SyntaxWarning -m compileall -q speakit run.py tools
+.venv\Scripts\python.exe -W error::SyntaxWarning -m compileall -q heyspeaky run.py tools
 ```
 
 Both PowerShell scripts must parse and stay ASCII. Never release with a report
@@ -27,7 +27,7 @@ version and today's date. Keep the three groups (Added, Changed, Fixed) and
 write for someone who does not read code: what they will notice, not which
 function moved.
 
-Bump `__version__` in `speakit/__init__.py` to match.
+Bump `__version__` in `heyspeaky/__init__.py` to match.
 
 ## 3. Tag and push
 
@@ -43,7 +43,7 @@ The commit message carries no AI attribution. Ever.
 Then publish the release itself:
 
 ```powershell
-gh release create v1.2 --title "SpeakIt 1.2" --notes-file release-notes.md
+gh release create v1.2 --title "HeySpeaky 1.2" --notes-file release-notes.md
 ```
 
 This step is not optional. The app asks GitHub for
@@ -66,11 +66,11 @@ only automated proof that removal still works.
 Update the owner's own install and check it comes back:
 
 ```powershell
-irm https://raw.githubusercontent.com/Maslitsa/SpeakIt/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Maslitsa/HeySpeaky/main/install.ps1 | iex
 ```
 
 Then confirm from the log that the engine reported ready, and that both
-shortcuts point at `%LOCALAPPDATA%\Programs\SpeakIt`.
+shortcuts point at `%LOCALAPPDATA%\Programs\HeySpeaky`.
 
 ## 6. Tell him in Russian
 

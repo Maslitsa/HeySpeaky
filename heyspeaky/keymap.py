@@ -18,7 +18,7 @@ import logging
 import tkinter as tk
 from ctypes import wintypes
 
-logger = logging.getLogger("speakit.keymap")
+logger = logging.getLogger("heyspeaky.keymap")
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _user32.GetKeyboardLayout.argtypes = [wintypes.DWORD]

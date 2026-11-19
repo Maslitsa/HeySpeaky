@@ -1,4 +1,4 @@
-r"""A dinosaur to jump over cactuses with while SpeakIt installs.
+r"""A dinosaur to jump over cactuses with while HeySpeaky installs.
 
 The installer opens this as soon as its own Python is ready, and writes its
 progress to a small JSON file that this window reads twice a second. Closing
@@ -389,7 +389,7 @@ class Game:
         kind = (self.state or {}).get("state")
         if kind == "done":
             self.shown = 1.0
-            self.canvas.itemconfigure(self.label, text="SpeakIt is installed")
+            self.canvas.itemconfigure(self.label, text="HeySpeaky is installed")
             self.canvas.itemconfigure(self.left, text="")
             self.closing = True
             self.draw_progress()
@@ -417,7 +417,7 @@ class Game:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SpeakIt install game")
+    parser = argparse.ArgumentParser(description="HeySpeaky install game")
     parser.add_argument("--progress", required=True)
     parser.add_argument("--parent", type=int, default=0)
     args = parser.parse_args()
@@ -428,7 +428,7 @@ def main():
         pass
 
     root = tk.Tk()
-    root.title("Installing SpeakIt")
+    root.title("Installing HeySpeaky")
     root.resizable(False, False)
     root.configure(bg=BACKGROUND)
     Game(root, args.progress, args.parent)

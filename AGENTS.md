@@ -1,10 +1,12 @@
-# SpeakIt, for whoever picks this up next
+# HeySpeaky, for whoever picks this up next
 
 Hold Ctrl+Alt, talk, and the text lands in whatever window you were typing in;
 or tap Ctrl+Alt twice to keep recording with nothing held down.
 Windows only. It transcribes through OpenAI by default and can fall back to a
 local Whisper model. It was called VoiceType, then SpeakIt, then HeySpeaky,
-and since 26 October 2026 SpeakIt again - the owner chose it.
+then SpeakIt again for four weeks, and since 19 November 2026 HeySpeaky
+again - the owner chose it, and said the HeySpeaky he has used every day
+since 26 September is the version that counts.
 
 The owner is Miras. He does not read code. **Answer him in Russian**, plainly,
 without jargon, and say what you actually did and what you could not do.
@@ -14,24 +16,24 @@ without jargon, and say what you actually did and what you could not do.
 | File | What it does |
 | --- | --- |
 | `run.py` | entry point, launched with pythonw.exe |
-| `speakit/app.py` | the controller and the state machine |
-| `speakit/config.py` | defaults, and config.json loading |
-| `speakit/theme.py` | every colour, size and timing: pill, composer, tray panel |
-| `speakit/glass.py` | draws the pill, the correction composer and the tray panel |
-| `speakit/overlay.py` | the window: never focused, and its two buttons |
-| `speakit/engine.py` | RealtimeSTT: capture and voice activity detection |
-| `speakit/transcribe.py` | OpenAI and local backends, the key lookup |
-| `speakit/languages.py` | the languages list and its tray grouping |
-| `speakit/dictionary.py` | words this person says that the model gets wrong |
-| `speakit/correct.py` | Ctrl+Alt+Win: the box that asks what it should have said |
-| `speakit/panel.py` | the tray panel: what a click on the tray icon opens |
-| `speakit/apikey.py` | the OpenAI key: pasted into the tray panel, checked, saved |
-| `speakit/localmodels.py` | which model transcribes on this laptop, and its download |
-| `speakit/keymap.py` | typing what the keyboard layout means, not what Tk decoded |
-| `speakit/levels.py` | making a quiet recording loud enough to transcribe |
-| `speakit/sound.py` | the tone at the end, built here, not shipped |
-| `speakit/diagnostics.py` | the problem report people send you |
-| `speakit/tray.py` `hotkey.py` `mic.py` `output.py` `winjob.py` | the rest |
+| `heyspeaky/app.py` | the controller and the state machine |
+| `heyspeaky/config.py` | defaults, and config.json loading |
+| `heyspeaky/theme.py` | every colour, size and timing: pill, composer, tray panel |
+| `heyspeaky/glass.py` | draws the pill, the correction composer and the tray panel |
+| `heyspeaky/overlay.py` | the window: never focused, and its two buttons |
+| `heyspeaky/engine.py` | RealtimeSTT: capture and voice activity detection |
+| `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
+| `heyspeaky/languages.py` | the languages list and its tray grouping |
+| `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
+| `heyspeaky/correct.py` | Ctrl+Alt+Win: the box that asks what it should have said |
+| `heyspeaky/panel.py` | the tray panel: what a click on the tray icon opens |
+| `heyspeaky/apikey.py` | the OpenAI key: pasted into the tray panel, checked, saved |
+| `heyspeaky/localmodels.py` | which model transcribes on this laptop, and its download |
+| `heyspeaky/keymap.py` | typing what the keyboard layout means, not what Tk decoded |
+| `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
+| `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
+| `heyspeaky/diagnostics.py` | the problem report people send you |
+| `heyspeaky/tray.py` `hotkey.py` `mic.py` `output.py` `winjob.py` | the rest |
 | `install.ps1` `uninstall.ps1` | how everyone installs and removes it |
 | `tools/doctor.py` | the check-up; the installer runs it with `--install` |
 | `tools/ui_lab.py` | draws every state to a PNG, or `--gif` to animate it |
@@ -116,8 +118,8 @@ without jargon, and say what you actually did and what you could not do.
   timer, so a scheduled probe stops the laptop ever sleeping.
 - **The transcription worker must die with the app** (`winjob.py`). Orphans
   once wrote 8.7 GB of the same traceback.
-- **Keys live outside the project**, in `%APPDATA%\SpeakIt\openai.key`. The
-  HeySpeaky and VoiceType paths are read as a fallback. Never log one, never
+- **Keys live outside the project**, in `%APPDATA%\HeySpeaky\openai.key`. The
+  SpeakIt and VoiceType paths are read as a fallback. Never log one, never
   print one, never put one in config.json.
 - **Quiet audio comes back as an empty string, not an error.** Measured on
   the owner's machine: every recording OpenAI returned nothing for peaked
@@ -175,7 +177,7 @@ without jargon, and say what you actually did and what you could not do.
   what to do instead.** There is no fine-tuning here: the model is OpenAI's.
   What a correction can do is name the word in the request, which primes the
   decoder, and fix the spelling afterwards, which is certain. Both, together,
-  is the whole feature, and it lives in `%APPDATA%\SpeakIt\dictionary.json`
+  is the whole feature, and it lives in `%APPDATA%\HeySpeaky\dictionary.json`
   next to the key - personal, growing, and not something to put in
   config.json. `Router.transcribe` applies it, so local transcription gets it
   too. Two things to keep: the words go out newest-first and capped, because
@@ -349,9 +351,9 @@ without jargon, and say what you actually did and what you could not do.
   Windows (`ToUnicodeEx`) what the key means in the active layout and type
   that when Tk got it wrong. `tools/correction_check.py` and
   `tools/panel_check.py` type Kazakh with real keys when the layout is there.
-- **The shortcuts have SpeakIt's own icon.** They start the virtual
+- **The shortcuts have HeySpeaky's own icon.** They start the virtual
   environment's pythonw.exe, which has no icon, so the Start menu showed a
-  blank window. The installer draws `speakit.ico` with `tools/make_icon.py`
+  blank window. The installer draws `heyspeaky.ico` with `tools/make_icon.py`
   - the waveform in its colours on a dark tile, which reads on a light Start
   menu and a dark one - and falls back to a plain icon if that fails.
 - **Reading somebody's selection means borrowing the clipboard.** There is no
@@ -403,13 +405,13 @@ seconds and it is the reason none of that reaches GitHub by accident.
 
 Running them by hand needs an interpreter that has the app's packages. **This
 working copy has no `.venv`** - the owner runs the installed app - so use the
-one the installer built (under `Programs\HeySpeaky` on a machine not updated
-since the rename), or set `SPEAKIT_PYTHON` to any environment that has them:
+one the installer built, or set `HEYSPEAKY_PYTHON` to any environment that has
+them:
 
 ```powershell
-$py = "$env:LOCALAPPDATA\Programs\SpeakIt\.venv\Scripts\python.exe"
+$py = "$env:LOCALAPPDATA\Programs\HeySpeaky\.venv\Scripts\python.exe"
 & $py -m unittest discover -s tests
-& $py -W error::SyntaxWarning -m compileall -q speakit run.py tools
+& $py -W error::SyntaxWarning -m compileall -q heyspeaky run.py tools
 & $py tools\ui_lab.py --out lab.png   # if the look changed
 ```
 
@@ -427,30 +429,42 @@ real screen and photographs it.
 A real install is the only proof the installer works. CI does one on a clean
 Windows runner for every push, including the uninstall.
 
-## Four generations of the name
+## Five generations of the name
 
-VoiceType, then SpeakIt, then HeySpeaky, now SpeakIt again. Old installs are
-carried across, not abandoned: `Move-FromOldNames` in `install.ps1` copies
-settings and the key and removes the old shortcuts, `uninstall.ps1` knows all
-three names, and `LEGACY_KEY_FILES` in `transcribe.py` and `LEGACY_PATHS` in
-`dictionary.py` still read the old paths.
+VoiceType, then SpeakIt, then HeySpeaky, then SpeakIt again from 26 October,
+and HeySpeaky again since 19 November 2026. Old installs are carried across,
+not abandoned: `Move-FromOldNames` in `install.ps1` copies settings and the
+key and removes the old shortcuts, `uninstall.ps1` knows all three names, and
+`LEGACY_KEY_FILES` in `transcribe.py` and `LEGACY_PATHS` in `dictionary.py`
+still read the old paths.
 
-**Going back to a name already used is the dangerous kind of rename.** The
-HeySpeaky installer left the September SpeakIt where it was, so on the
-owner's PC the folder the new SpeakIt installs into already held a SpeakIt:
-older settings, an older log, and in `%APPDATA%\SpeakIt` a key file that was,
-in fact, the live one - his HeySpeaky config.json, carried over from that
-SpeakIt, still named it, and the tray saved new keys there. So the installer
-carries a working HeySpeaky (`Get-PreviousCopy`) on purpose: the SpeakIt
-folder's own config.json and logs go to `SpeakIt.old-<time>` beside it, but
-only if they are older than HeySpeaky's; the key is whichever file
-HeySpeaky's config.json names, and a different one already in the way is
-renamed `.old-<time>`, never overwritten; the dictionary, tally, update check
-and sounds come from HeySpeaky the same way. `MOVED-TO-SPEAKIT.txt` in the
-HeySpeaky folder is what stops the next update carrying it again over
-everything changed since. `config._migrate` moves a stored
-`%APPDATA%\HeySpeaky\openai.key` to the new default. The CI install job
-builds that exact PC before it installs, and checks every piece.
+**The way back was the October rename undone, not a new rename.** The owner
+never installed the October SpeakIt: on 19 November his PC still ran the
+HeySpeaky of 26 September (`304b960`), and he asked for that to be the
+version that counts. So `0187458` was reverted whole, which put every file
+the app runs back to what he runs, plus the one later fix
+(`3994e58`, one correction is a hint). What that commit had that was not
+about the name was kept: the update check follows redirects, the suite
+blanks the old dictionary paths, and the session brief and the commit check
+find the app under either name.
+
+**Going back to a name already used is the dangerous kind of rename.** On
+the owner's PC the SpeakIt folder holds a September SpeakIt, and
+`%APPDATA%\SpeakIt\openai.key` is his live key - his config.json names it.
+Neither may be touched, and nothing is: his HeySpeaky has its own
+config.json and no note from October, so `Get-SpeakItCopy` finds nothing to
+carry. A PC installed or updated between 26 October and 19 November is the
+other way round: the October installer left `MOVED-TO-SPEAKIT.txt` in the
+HeySpeaky folder, and the SpeakIt is the copy in use. Then, and when there
+is no HeySpeaky at all, the SpeakIt is carried back: the HeySpeaky folder's
+own older config.json and logs go to `HeySpeaky.old-<time>`, only if they
+are older; the key is the file SpeakIt's config.json names, and a different
+one in the way is renamed `.old-<time>`, never overwritten; the dictionary,
+tally, update check and sounds come across the same way;
+`MOVED-TO-HEYSPEAKY.txt` in the SpeakIt folder stops the next update
+carrying it again. The CI install job builds that PC before it installs and
+checks every piece, and another job checks the SpeakIt and VoiceType install
+commands still reach an installer.
 
 ## What the owner decided
 

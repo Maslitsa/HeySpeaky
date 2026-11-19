@@ -17,9 +17,9 @@ import os
 import time
 from pathlib import Path
 
-logger = logging.getLogger("speakit.usage")
+logger = logging.getLogger("heyspeaky.usage")
 
-FOLDER = "%APPDATA%\\SpeakIt"
+FOLDER = "%APPDATA%\\HeySpeaky"
 FILE = "usage.json"
 
 

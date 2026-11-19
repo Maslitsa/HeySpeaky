@@ -5,11 +5,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        [docs/troubleshooting.md](https://github.com/Maslitsa/SpeakIt/blob/main/docs/troubleshooting.md)
+        [docs/troubleshooting.md](https://github.com/Maslitsa/HeySpeaky/blob/main/docs/troubleshooting.md)
         covers the common ones: nothing heard, the hotkey going dead, and a
         failed install.
 
-        If installing failed, attach `%TEMP%\SpeakIt-install.log`.
+        If installing failed, attach `%TEMP%\HeySpeaky-install.log`.
 
         **Never paste an API key**, including inside a log excerpt.
 

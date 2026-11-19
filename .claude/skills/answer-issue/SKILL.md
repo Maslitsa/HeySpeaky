@@ -1,6 +1,6 @@
 ---
 name: answer-issue
-description: Work out what is wrong on someone else's PC from a SpeakIt problem report, and draft an answer for the owner to send.
+description: Work out what is wrong on someone else's PC from a HeySpeaky problem report, and draft an answer for the owner to send.
 ---
 
 # Answering an issue
@@ -34,7 +34,7 @@ microphones, and the last five recordings with what they were transcribed as.
 The ZIP has the wav files. Run one through both backends on your machine:
 
 ```powershell
-cd "$env:LOCALAPPDATA\Programs\SpeakIt"
+cd "$env:LOCALAPPDATA\Programs\HeySpeaky"
 .venv\Scripts\python.exe tools\try_demo.py "path\to\1.wav" --both
 ```
 

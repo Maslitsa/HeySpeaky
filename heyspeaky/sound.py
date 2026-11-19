@@ -1,7 +1,7 @@
 """The small sound at the end of a dictation.
 
 There is no sound file in this repository. Every voice is arithmetic, built
-once into `%APPDATA%\\SpeakIt\\sounds` the first time it is needed, so
+once into `%APPDATA%\\HeySpeaky\\sounds` the first time it is needed, so
 nothing binary has to be shipped, reviewed or kept in sync with the installer.
 
 The first version of this was pure sine tones, which is what a notification
@@ -17,7 +17,7 @@ Playing is `winsound`, which is part of Python on Windows, so this adds no
 dependency. It is asynchronous: the sound never delays the text landing in
 your document.
 
-    python -m speakit.sound --preview <folder>   # write every voice to hear
+    python -m heyspeaky.sound --preview <folder>   # write every voice to hear
 """
 
 import array
@@ -29,7 +29,7 @@ import struct
 import sys
 import wave
 
-logger = logging.getLogger("speakit.sound")
+logger = logging.getLogger("heyspeaky.sound")
 
 RATE = 44100
 
@@ -190,7 +190,7 @@ def write(name, path, volume=VOLUME):
 
 def _store(name, volume):
     base = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")),
-                        "SpeakIt", "sounds")
+                        "HeySpeaky", "sounds")
     # The volume is in the name, so changing it in settings rebuilds the file
     # instead of quietly playing the old one.
     return os.path.join(base, "%s-%02d.wav" % (name, int(round(volume * 99))))

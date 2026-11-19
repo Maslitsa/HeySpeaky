@@ -2,7 +2,7 @@ r"""Draws the pitch video, frame by frame, from the app's own renders.
 
 The pill, the mono pill, the tray panel and the icon all come out of
 glass.py, the code that puts them on screen, so the video cannot show a
-SpeakIt that does not exist. The waveform follows demo/four_languages.wav
+HeySpeaky that does not exist. The waveform follows demo/four_languages.wav
 through the same loudness curve and easing the pill puts a microphone
 through, and the text that lands is what OpenAI returned for that clip on
 26 October 2026 (tools/try_demo.py --cloud), word for word.
@@ -27,10 +27,10 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from speakit import glass, theme  # noqa: E402
-from speakit import panel as panel_module  # noqa: E402
-from speakit import languages  # noqa: E402
-from speakit.mic import _level_from_chunk  # noqa: E402
+from heyspeaky import glass, theme  # noqa: E402
+from heyspeaky import panel as panel_module  # noqa: E402
+from heyspeaky import languages  # noqa: E402
+from heyspeaky.mic import _level_from_chunk  # noqa: E402
 
 CLIP = ROOT / "demo" / "four_languages.wav"
 # The synthesised clip peaks at -1.4 dB; the owner's own dictations peak at
@@ -887,7 +887,7 @@ class Stage(object):
         share = arrive(t, t0 + 0.05, 0.5)
         layer_over(canvas, icon, centre - 100, top + (1 - share) * 20, share)
         name = face(132 if self.tall else 120, "semibold")
-        text(canvas, (centre, top + 250), "SpeakIt", name, INK,
+        text(canvas, (centre, top + 250), "HeySpeaky", name, INK,
              arrive(t, t0 + 0.2), anchor="ma")
         line = face(40 if self.tall else 40)
         tagline = ["Hold Ctrl+Alt and talk,", "in every language you speak."]
@@ -898,7 +898,7 @@ class Stage(object):
                  arrive(t, t0 + 0.5), anchor="ma")
         url = face(40, "semibold")
         place = top + (600 if self.tall else 530)
-        text(canvas, (centre, place), "github.com/Maslitsa/SpeakIt", url, INK,
+        text(canvas, (centre, place), "github.com/Maslitsa/HeySpeaky", url, INK,
              arrive(t, t0 + 0.9), anchor="ma")
         small = face(26)
         notes = ["Free and open source (MIT) · Windows",

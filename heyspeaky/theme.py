@@ -1,6 +1,6 @@
 """Every colour, size and timing the pill uses, in one place.
 
-Changing how SpeakIt looks should mean changing numbers here, not hunting
+Changing how HeySpeaky looks should mean changing numbers here, not hunting
 through drawing code. tools/ui_lab.py renders every state from these values,
 so a change can be looked at before it ships.
 

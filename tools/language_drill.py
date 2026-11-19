@@ -1,6 +1,6 @@
 r"""How well does a sentence survive changing language halfway through?
 
-This is the hard case SpeakIt exists for, and the only honest way to tune
+This is the hard case HeySpeaky exists for, and the only honest way to tune
 it is to measure. **The model itself cannot be fine-tuned** - it is OpenAI's,
 and there is no training here. What can be tuned is everything we send with
 the audio: which model, which languages we declare, the steering prompt, and
@@ -16,7 +16,7 @@ and slurred with an accent, which is where transcription actually breaks.
 Useful because it is repeatable, and limited in exactly one way worth saying
 out loud: **it is not your voice.** A setting that wins here has been shown
 to survive difficult speech, not to survive yours. For that, dictate the
-sentences yourself with SpeakIt, save a problem report from the tray, and
+sentences yourself with HeySpeaky, save a problem report from the tray, and
 point --report at it; the sentences are matched to the recordings in order.
 
 Costs a few cents of the key's money per run, all of it transcription.
@@ -43,8 +43,8 @@ for stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-from speakit import config as config_module               # noqa: E402
-from speakit.transcribe import CloudBackend               # noqa: E402
+from heyspeaky import config as config_module               # noqa: E402
+from heyspeaky.transcribe import CloudBackend               # noqa: E402
 
 TTS_MODEL = "gpt-4o-mini-tts"
 TTS_VOICE = "alloy"
@@ -241,7 +241,7 @@ class silence_helpers(object):
         self.saved = {}
 
     def __enter__(self):
-        from speakit import transcribe
+        from heyspeaky import transcribe
 
         if "prompt" in self.what:
             self.saved["_default_prompt"] = transcribe._default_prompt
@@ -252,7 +252,7 @@ class silence_helpers(object):
         return self
 
     def __exit__(self, *exc):
-        from speakit import transcribe
+        from heyspeaky import transcribe
 
         for name, original in self.saved.items():
             setattr(transcribe, name, original)

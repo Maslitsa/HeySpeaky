@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Logs are in `logs\speakit.log` (rotating). Anything a dependency printed
+Logs are in `logs\heyspeaky.log` (rotating). Anything a dependency printed
 rather than logged lands in `logs\stdout.log`.
 
 ---
@@ -22,13 +22,13 @@ is helping.
   recording was lost, usually to a busy CPU. `average` below about -45 dB is a
   very quiet microphone. `clipped` above 1% is distorted. Another app holding
   the microphone, like a call in WhatsApp or Teams, can also change what
-  SpeakIt hears.
+  HeySpeaky hears.
 
 To tell a microphone problem from a setup problem, run their recording through
-SpeakIt on your own PC:
+HeySpeaky on your own PC:
 
 ```powershell
-cd "$env:LOCALAPPDATA\Programs\SpeakIt"
+cd "$env:LOCALAPPDATA\Programs\HeySpeaky"
 .venv\Scripts\python.exe tools\try_demo.py "$HOME\Downloads\recordings\1.wav" --both
 ```
 
@@ -42,7 +42,7 @@ out fine, the difference is in their setup.
 The recording was captured and then thrown away by the silence guard. Run:
 
 ```powershell
-cd "$env:LOCALAPPDATA\Programs\SpeakIt"
+cd "$env:LOCALAPPDATA\Programs\HeySpeaky"
 .venv\Scripts\python.exe tools\check_mic.py
 ```
 
@@ -87,13 +87,13 @@ The status line after a dictation tells you which backend produced the text:
 weaker on Russian and German. A sentence that was perfect yesterday can come
 back mangled purely because the wifi dropped.
 
-A failed connection also costs time. SpeakIt bounds the connect phase at 4
+A failed connection also costs time. HeySpeaky bounds the connect phase at 4
 seconds and then, having seen the network fail, skips the cloud for the next 20
 seconds rather than stalling on every recording. Before that bound, a DNS
 failure took **11.6 s** before the fallback even started.
 
 If dictation is slow but still says `· cloud`, that is request latency, not
-SpeakIt. Measured here, the same setup ranged from 1.6 s to 7.7 s across one
+HeySpeaky. Measured here, the same setup ranged from 1.6 s to 7.7 s across one
 evening.
 
 ---
@@ -123,13 +123,13 @@ Keyboard hook saw nothing for 31s while Windows saw input 29s ago;
 refreshing the hook (#210)
 ```
 
-If it is stuck anyway, quit from the tray and start SpeakIt again.
+If it is stuck anyway, quit from the tray and start HeySpeaky again.
 
 ### It does nothing in one particular window
 
 Windows does not deliver key events from an elevated (administrator) window to
 a normal-privilege app. The hotkey will not work while such a window has focus.
-Running SpeakIt as administrator fixes it, but is not set up by default.
+Running HeySpeaky as administrator fixes it, but is not set up by default.
 that is a real privilege increase for a background app that reads your
 keyboard, and it should be your decision.
 
@@ -147,7 +147,7 @@ starting recordings, make sure `hotkey.accept_altgr` is `false` (the default).
 
 ## It pastes into the wrong place, or not at all
 
-SpeakIt waits for you to release Ctrl/Alt/Shift/Win before inserting
+HeySpeaky waits for you to release Ctrl/Alt/Shift/Win before inserting
 (`output.modifier_release_timeout`, 5 s), because a paste sent while Ctrl is
 still down becomes a different shortcut.
 
@@ -168,7 +168,7 @@ Or take the text from the clipboard yourself with
 
 The Startup shortcut fires before Wi-Fi is up. faster-whisper contacts Hugging
 Face to check the model revision even when the weights are already cached,
-which used to fail the whole load with "Server disconnected". SpeakIt now
+which used to fail the whole load with "Server disconnected". HeySpeaky now
 retries with `HF_HUB_OFFLINE=1` and uses what is on disk.
 
 Check the log for `Models ready in …`. If the shortcut is missing entirely,
@@ -177,7 +177,7 @@ run the install command again.
 ### Leftover pythonw.exe processes
 
 Should be impossible now. RealtimeSTT transcribes in a spawned child process,
-and if SpeakIt is killed without running its shutdown path (Task Manager, a
+and if HeySpeaky is killed without running its shutdown path (Task Manager, a
 forced sign-out, a crash) that child used to be orphaned. An orphan spins on a
 broken pipe, logging a traceback per iteration, and writes without limit: twelve
 of them were once found on the development machine, the oldest three days old,
@@ -186,7 +186,7 @@ which had between them produced an **8.7 GB** `stdout.log`.
 Two things now prevent it:
 
 - The process joins a Windows **job object** marked kill-on-close
-  ([`speakit/winjob.py`](../speakit/winjob.py)). Children inherit it, and
+  ([`heyspeaky/winjob.py`](../heyspeaky/winjob.py)). Children inherit it, and
   when we die, however we die, Windows terminates everything left in it. No
   Python runs, so nothing can be skipped.
 - `logs\stdout.log` is capped at 2 MB per process, so even a runaway loop
@@ -213,18 +213,18 @@ packaged ONNX model.
 ### "Could not initialize any automatic Silero VAD backend"
 
 The `silero-vad` package is missing. RealtimeSTT 1.1.2 only installs it as part
-of its `[default]` extra, and installs made before SpeakIt asked for that extra
+of its `[default]` extra, and installs made before HeySpeaky asked for that extra
 do not have it. Run the install command again.
 
 ### The installer failed
 
 The window stays open with the reason in red, and the whole run is in
-`%TEMP%\SpeakIt-install.log`. The causes seen so far:
+`%TEMP%\HeySpeaky-install.log`. The causes seen so far:
 
 - **"The install folder path is too long".** Windows limits paths to 260
   characters unless long paths are turned on, and PyTorch installs files
   nearly 150 characters deep. Install somewhere short with
-  `-InstallDir 'C:\SpeakIt'`.
+  `-InstallDir 'C:\HeySpeaky'`.
 - **"DLL load failed" in the check at the end.** The Visual C++ runtime is
   missing and could not be added, usually because the Windows permission
   prompt was declined. Install
@@ -254,14 +254,14 @@ missing key falls back silently rather than losing your recording. Check the
 log for the reason, then confirm the key is found:
 
 ```powershell
-cd "$env:LOCALAPPDATA\Programs\SpeakIt"
+cd "$env:LOCALAPPDATA\Programs\HeySpeaky"
 .venv\Scripts\python.exe tools\check_cloud.py
 ```
 
 Key lookup order is `api_key` in the config, then `OPENAI_API_KEY`, then
-`%APPDATA%\SpeakIt\openai.key`.
+`%APPDATA%\HeySpeaky\openai.key`.
 
-**An environment variable set after SpeakIt started is invisible to it.** The
+**An environment variable set after HeySpeaky started is invisible to it.** The
 app launches from a Startup shortcut and only inherits variables that existed at
 sign-in. The key file is read per request and has no such problem. Put the key
 in the install command instead, as the README shows, and it is saved there.

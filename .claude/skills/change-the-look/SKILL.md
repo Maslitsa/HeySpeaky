@@ -1,11 +1,11 @@
 ---
 name: change-the-look
-description: Change how the SpeakIt pill looks without breaking the three things that make it invisible - no focus, no blocked clicks, no Alt+Tab.
+description: Change how the HeySpeaky pill looks without breaking the three things that make it invisible - no focus, no blocked clicks, no Alt+Tab.
 ---
 
 # Changing the look
 
-Every colour, size and timing lives in `speakit/theme.py`. Change numbers
+Every colour, size and timing lives in `heyspeaky/theme.py`. Change numbers
 there first, and only go into `glass.py` when the shape itself must change.
 
 ## Look at it before you ship it
@@ -50,6 +50,6 @@ was.
 
 ## Tests
 
-`tests/test_speakit.py` has a `GlassPill` class: frame size, the light and
+`tests/test_heyspeaky.py` has a `GlassPill` class: frame size, the light and
 dark decision, that the glass is built once and painted many times, and that
 long text is shortened rather than spilling.

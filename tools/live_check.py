@@ -33,9 +33,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from speakit import glass                                  # noqa: E402
-from speakit.config import DEFAULTS                        # noqa: E402
-from speakit.overlay import Overlay, enable_dpi_awareness  # noqa: E402
+from heyspeaky import glass                                  # noqa: E402
+from heyspeaky.config import DEFAULTS                        # noqa: E402
+from heyspeaky.overlay import Overlay, enable_dpi_awareness  # noqa: E402
 
 GWL_EXSTYLE = -20
 WS_EX_TRANSPARENT = 0x00000020

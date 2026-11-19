@@ -1,18 +1,20 @@
 # Changelog
 
-Notable changes to SpeakIt, called VoiceType until September 2026, then
-SpeakIt, then HeySpeaky until October 2026. Format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Notable changes to HeySpeaky, called VoiceType until September 2026, then
+SpeakIt, and SpeakIt again from 26 October to 19 November 2026. Format
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
-HeySpeaky is SpeakIt again: the program, its folders, its shortcuts and the
-GitHub repository. The HeySpeaky install command still works. The first
-update carries HeySpeaky's settings, OpenAI key, dictionary and spending
-tally across, removes its shortcuts, and leaves its folder for you to delete.
-A SpeakIt from before HeySpeaky, still on disk, does not get to overwrite any
-of that: its settings are moved to `SpeakIt.old-<date>` beside it, and an
-older key or dictionary in the way is renamed rather than deleted.
+HeySpeaky is HeySpeaky again: the program, its folders, its shortcuts and
+the GitHub repository. The SpeakIt and VoiceType install commands still
+work. If you installed or updated between 26 October and 19 November, the
+next update carries SpeakIt's settings, OpenAI key, dictionary and spending
+tally back, removes its shortcuts, and leaves its folder for you to delete.
+Older HeySpeaky settings still on disk do not get to overwrite any of that:
+they are moved to `HeySpeaky.old-<date>` beside it, and an older key or
+dictionary in the way is renamed rather than deleted. A HeySpeaky that never
+became SpeakIt is left exactly as it is.
 
 Before that, VoiceType became SpeakIt, and SpeakIt became HeySpeaky. Old
 GitHub links still work, a key saved under any old name is still found,
@@ -24,6 +26,7 @@ shortcuts are removed so only one copy starts with Windows.
 - A copy installed before a rename stopped hearing about updates: GitHub
   answers a renamed repository's old address with a redirect, and the update
   check did not follow it.
+
 - A fresh install could not transcribe anything. RealtimeSTT 1.1.2 moved
   faster-whisper and silero-vad into an optional extra that
   `requirements.txt` never asked for. Depending on which was missing, the app

@@ -43,7 +43,7 @@ from PIL import Image, ImageChops
 
 from . import glass, theme
 
-logger = logging.getLogger("speakit.overlay")
+logger = logging.getLogger("heyspeaky.overlay")
 
 GWL_EXSTYLE = -20
 WS_EX_TOOLWINDOW = 0x00000080

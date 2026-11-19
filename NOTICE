@@ -1,4 +1,4 @@
-SpeakIt
+HeySpeaky
 Copyright (c) 2026 Miras Ussenov
 
 This product includes software developed by third parties:
@@ -6,7 +6,7 @@ This product includes software developed by third parties:
 RealtimeSTT
   Copyright (c) 2023 Kolja Beigel
   MIT License -- https://github.com/KoljaB/RealtimeSTT
-  SpeakIt uses RealtimeSTT for the microphone pipeline and voice activity
+  HeySpeaky uses RealtimeSTT for the microphone pipeline and voice activity
   detection.
 
 faster-whisper

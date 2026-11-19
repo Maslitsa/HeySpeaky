@@ -3,13 +3,13 @@
 ## Reporting a vulnerability
 
 Please report security issues privately using GitHub's
-[report a vulnerability](https://github.com/Maslitsa/SpeakIt/security/advisories/new)
+[report a vulnerability](https://github.com/Maslitsa/HeySpeaky/security/advisories/new)
 form, rather than opening a public issue.
 
 This is maintained in spare time, so no response time is promised, but
 anything sent that way will be read.
 
-## What SpeakIt touches
+## What HeySpeaky touches
 
 Worth being explicit about, because the permissions look alarming and deserve
 to be understood rather than trusted:
@@ -28,7 +28,7 @@ to be understood rather than trusted:
 
 All of it over HTTPS:
 
-- The SpeakIt source, as a ZIP of this repository.
+- The HeySpeaky source, as a ZIP of this repository.
 - uv 0.12.13 from its GitHub release, checked against the SHA-256 published
   with it before it runs.
 - Python 3.12, fetched by uv from python-build-standalone.
@@ -41,7 +41,7 @@ All of it over HTTPS:
 
 ## Your API key
 
-The key lives in `%APPDATA%\SpeakIt\openai.key`, outside the project folder,
+The key lives in `%APPDATA%\HeySpeaky\openai.key`, outside the project folder,
 with ACL inheritance broken so only your account can read it.
 
 Keeping it out of the project is deliberate: a key inside a repository is one

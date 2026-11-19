@@ -2,7 +2,7 @@
 
 The owner asked for this to be low effort for anyone, and before it the only
 way to add or change a key was to run the installer again with the key in a
-PowerShell command. Now: click the SpeakIt icon, click "Add your OpenAI
+PowerShell command. Now: click the HeySpeaky icon, click "Add your OpenAI
 key", paste it into the field that opens, and press Save - the steps the
 owner described himself. The key is checked with OpenAI before it replaces
 anything, saved where the installer saves it, and taken off the clipboard
@@ -20,7 +20,7 @@ import threading
 import time
 import webbrowser
 
-logger = logging.getLogger("speakit.apikey")
+logger = logging.getLogger("heyspeaky.apikey")
 
 KEYS_PAGE = "https://platform.openai.com/api-keys"
 MODELS_URL = "https://api.openai.com/v1/models"
@@ -42,7 +42,7 @@ def looks_like_key(text):
 
 def key_path(config):
     path = config["transcription"]["cloud"].get("api_key_file") \
-        or "%APPDATA%\\SpeakIt\\openai.key"
+        or "%APPDATA%\\HeySpeaky\\openai.key"
     return os.path.expandvars(os.path.expanduser(path))
 
 

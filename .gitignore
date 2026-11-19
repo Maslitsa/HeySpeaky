@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Secrets. Nothing here should ever reach a commit.
 #
-# SpeakIt keeps the OpenAI key in %APPDATA%\SpeakIt\openai.key, outside
+# HeySpeaky keeps the OpenAI key in %APPDATA%\HeySpeaky\openai.key, outside
 # the project, precisely so it cannot be committed by accident. These rules
 # are the second line of defence for anyone who puts one here anyway.
 # ---------------------------------------------------------------------------
@@ -13,7 +13,7 @@ secrets.json
 openai.key
 
 # Local settings. Written on first run from the defaults in
-# speakit/config.py, and it has an api_key field, so it stays untracked.
+# heyspeaky/config.py, and it has an api_key field, so it stays untracked.
 config.json
 
 # ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ logs/
 *.log
 
 # Upstream RealtimeSTT clone, if you keep one here for reference.
-# SpeakIt installs it from PyPI; this is not part of the project.
+# HeySpeaky installs it from PyPI; this is not part of the project.
 RealtimeSTT-repo/
 
 # Your own working notes. Drafts, worklogs, anything you do not want published.
@@ -63,4 +63,4 @@ desktop.ini
 *-report-*.zip
 
 # Drawn by the installer from tools/make_icon.py, not kept here.
-speakit.ico
+heyspeaky.ico

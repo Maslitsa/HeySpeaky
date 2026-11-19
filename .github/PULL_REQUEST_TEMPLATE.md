@@ -8,11 +8,11 @@
 
 ## How it was tested
 
-<!-- SpeakIt is mostly Win32 behaviour and live audio, so "I ran it and
+<!-- HeySpeaky is mostly Win32 behaviour and live audio, so "I ran it and
      dictated with it for a day" is a perfectly good answer. Just say what you
      actually did. -->
 
-- [ ] `python -m compileall -q speakit run.py tools` passes
+- [ ] `python -m compileall -q heyspeaky run.py tools` passes
 - [ ] I ran it and dictated with it
 
 ## If this changes a default

@@ -4,7 +4,7 @@ updates:
   #
   # Dependabot was pointed at pip first and immediately proposed rewriting
   # numpy>=1.26 to numpy>=2.4.6. Those are lower bounds, not pins: they record
-  # the oldest version SpeakIt is known to work with, so raising them to
+  # the oldest version HeySpeaky is known to work with, so raising them to
   # whatever is newest drops support for working setups and tests nothing.
   # requirements.txt is reviewed by hand instead.
   #

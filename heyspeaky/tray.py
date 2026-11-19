@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw
 from . import dictionary, theme
 from . import languages as language_names
 
-logger = logging.getLogger("speakit.tray")
+logger = logging.getLogger("heyspeaky.tray")
 
 _IDLE = (233, 236, 241)
 _PAUSED = (120, 124, 132)
@@ -127,9 +127,9 @@ class Tray:
             "paused": _make_icon("paused"),
         }
         self._icon = pystray.Icon(
-            "SpeakIt",
+            "HeySpeaky",
             self._icons["idle"],
-            "SpeakIt",
+            "HeySpeaky",
             menu=self._build_menu(),
         )
         self._thread = None
@@ -164,7 +164,7 @@ class Tray:
             pystray.MenuItem("Open logs", self._open_logs),
             pystray.MenuItem("Save a problem report", self._report),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit SpeakIt", self._quit),
+            pystray.MenuItem("Quit HeySpeaky", self._quit),
         )
 
     def _language_menu(self):
@@ -354,7 +354,7 @@ class Tray:
         self._status = status
         self._busy = bool(busy)
         try:
-            self._icon.title = "SpeakIt · {}".format(status)
+            self._icon.title = "HeySpeaky · {}".format(status)
             if self._paused:
                 self._icon.icon = self._icons["paused"]
             else:
