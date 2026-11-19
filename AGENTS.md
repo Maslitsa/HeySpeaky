@@ -37,7 +37,7 @@ without jargon, and say what you actually did and what you could not do.
 | `install.ps1` `uninstall.ps1` | how everyone installs and removes it |
 | `tools/doctor.py` | the check-up; the installer runs it with `--install` |
 | `tools/ui_lab.py` | draws every state to a PNG, or `--gif` to animate it |
-| `tools/pitch_video.py` | the pitch video's frames, drawn from the same renders |
+| `tools/pitch_video.py` | the pitch video, drawn from the same renders; `--video` makes the mp4 with its sound |
 | `tools/benchmark.py` | measures models against real recordings |
 | `tools/language_drill.py` | measures sentences that change language halfway |
 | `tools/live_check.py` | shows the pill on the real screen and photographs it |

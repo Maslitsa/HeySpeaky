@@ -7,17 +7,30 @@ through the same loudness curve and easing the pill puts a microphone
 through, and the text that lands is what OpenAI returned for that clip on
 26 October 2026 (tools/try_demo.py --cloud), word for word.
 
+The pill in the demo is Mono, the look the owner uses: it appears over the
+mouse pointer, red while listening, a blue wave while thinking, and shrinks
+away as the words land, with the blip it plays then - all as overlay.py and
+sound.py do it.
+
     python tools\pitch_video.py --keyframes OUT_DIR
     python tools\pitch_video.py --keyframes OUT_DIR --tall
     python tools\pitch_video.py --frame 24.5 --out shot.png
+    python tools\pitch_video.py --video OUT.mp4 [--tall]
 
 --keyframes writes the storyboard's stills and a contact sheet of them.
+--video draws every frame and hands it to ffmpeg, with the sound: the clip's
+voice, a tap as the keys go down and up, and the blip as the words land.
 The script itself lives in the owner's notes, not in the repository.
 """
 
 import argparse
 import math
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
+import time
 import wave
 from pathlib import Path
 
@@ -30,6 +43,7 @@ sys.path.insert(0, str(ROOT))
 from heyspeaky import glass, theme  # noqa: E402
 from heyspeaky import panel as panel_module  # noqa: E402
 from heyspeaky import languages  # noqa: E402
+from heyspeaky import sound  # noqa: E402
 from heyspeaky.mic import _level_from_chunk  # noqa: E402
 
 CLIP = ROOT / "demo" / "four_languages.wav"
@@ -393,7 +407,8 @@ def keycap(label, pressed, scale=1.0):
                               fill=(216, 214, 209, 255))
     drawing.rounded_rectangle((20 * k, top * k, (20 + width) * k,
                                (20 + height - lip) * k), 22 * k,
-                              fill=(255, 255, 255, 255),
+                              fill=(237, 236, 232, 255) if pressed
+                              else (255, 255, 255, 255),
                               outline=(214, 212, 207, 255), width=2 * k)
     label_font = face(int(36 * scale * k), "semibold")
     drawing.text(((20 + width / 2.0) * k,
@@ -401,6 +416,39 @@ def keycap(label, pressed, scale=1.0):
                  font=label_font, fill=INK + (255,), anchor="mm")
     _KEYS[key] = big.resize((width + 40, height + 40), Image.LANCZOS)
     return _KEYS[key]
+
+
+_POINTERS = {}
+# The Windows arrow, in its own 1-pixel units: tip at the top left.
+ARROW = [(0, 0), (0, 16.5), (4.1, 12.6), (7.0, 19.2), (9.4, 18.2),
+         (6.6, 11.7), (12.1, 11.7)]
+
+
+def pointer_picture(scale):
+    """The mouse pointer: white with a black edge and a soft shadow, the
+    tip at (pad, pad) of the returned picture."""
+    if scale in _POINTERS:
+        return _POINTERS[scale]
+    k = 4
+    pad = int(round(6 * scale))
+    unit = scale * k
+    width = int(round(13 * scale)) + pad * 2
+    height = int(round(20 * scale)) + pad * 2
+    points = [(pad * k + x * unit, pad * k + y * unit) for x, y in ARROW]
+    shadow = Image.new("L", (width * k, height * k), 0)
+    ImageDraw.Draw(shadow).polygon(
+        [(x + 1.2 * unit, y + 1.8 * unit) for x, y in points], fill=70)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(1.6 * unit))
+    big = Image.new("RGBA", (width * k, height * k), (0, 0, 0, 0))
+    big.putalpha(shadow)
+    arrow = Image.new("RGBA", big.size, (0, 0, 0, 0))
+    drawing = ImageDraw.Draw(arrow)
+    drawing.polygon(points, fill=(255, 255, 255, 255))
+    drawing.line(points + [points[0]], fill=(0, 0, 0, 255),
+                 width=max(2, int(round(1.1 * unit))), joint="curve")
+    big.alpha_composite(arrow)
+    _POINTERS[scale] = (big.resize((width, height), Image.LANCZOS), pad)
+    return _POINTERS[scale]
 
 
 # -- the app's own pictures ---------------------------------------------------
@@ -424,10 +472,17 @@ class Pictures(object):
                 theme.SHADOW_MARGIN = margin
         return glass.paint(self._glass[key], state=state, levels=levels)
 
-    def mono(self, scale, state, level, now):
+    def mono(self, scale, state, level, now, collapse=0.0):
         if scale not in self._mono:
             self._mono[scale] = glass.mono_prepare(scale)
-        return glass.mono_paint(self._mono[scale], state, level, now)
+        return glass.mono_paint(self._mono[scale], state, level, now,
+                                collapse)
+
+    def capsule(self, scale):
+        """Where the capsule sits inside the mono window."""
+        if scale not in self._mono:
+            self._mono[scale] = glass.mono_prepare(scale)
+        return self._mono[scale].box
 
     def panel(self, scale, mono=False):
         key = (scale, mono)
@@ -465,6 +520,8 @@ class Stage(object):
         self.land = self.release + THINK
         self.done = self.land + 0.05
         self.gone = self.done + HIDE_DELAY
+        # Mono has no tick to hold: it shrinks away the moment it is done.
+        self.collapsed = self.done + theme.MONO_COLLAPSE
 
     def frame(self, t):
         canvas = Image.new("RGBA", self.size, PAPER + (255,))
@@ -616,7 +673,9 @@ class Stage(object):
                      share, (1 - arrive(t, when, 0.35)) * 16)
 
         # The window being typed into.
-        box = (60, 380, 1020, 880) if self.tall else (260, 220, 1660, 690)
+        # Tall, the window takes the room the docked glass pill used to:
+        # Mono sits inside it, over the pointer.
+        box = (60, 400, 1020, 1100) if self.tall else (260, 220, 1660, 690)
         card(canvas, box, 22, enter, (1 - enter) * 24)
         rise = (1 - enter) * 24
         bar = face(24)
@@ -651,7 +710,62 @@ class Stage(object):
         self._keys(canvas, t, enter)
         self._speech(canvas, t, box)
         self._legend(canvas, t, box)
-        self._pill(canvas, t)
+        self._mono_pill(canvas, t, box)
+        self._pointer(canvas, t, box, enter)
+
+    # The pointer comes to rest in the window just before the keys go down;
+    # Mono appears over it, where it was when the recording began.
+    POINTER_ARRIVES = PRESS - 0.3
+    POINTER_GLIDE = 0.35
+
+    def _ui_scale(self):
+        """How much bigger than on screen the app is drawn: the pill's own."""
+        return self._pill_scale()
+
+    def _pointer_rest(self, box):
+        if self.tall:
+            return (box[2] - 250, box[3] - 46)
+        return (box[2] - 330, box[3] - 44)
+
+    def _pointer_at(self, t, box):
+        rest = self._pointer_rest(box)
+        share = arrive(t, self.POINTER_ARRIVES, self.POINTER_GLIDE)
+        start = (rest[0] + 180, rest[1] + 150)
+        return (start[0] + (rest[0] - start[0]) * share,
+                start[1] + (rest[1] - start[1]) * share)
+
+    def _pointer(self, canvas, t, box, enter):
+        shown = clamp((t - (self.POINTER_ARRIVES - 0.1)) / 0.15) * enter
+        if shown <= 0.01:
+            return
+        picture, pad = pointer_picture(self._ui_scale())
+        x, y = self._pointer_at(t, box)
+        layer_over(canvas, picture, x - pad, y - pad, shown)
+
+    def _mono_pill(self, canvas, t, box):
+        if t < PILL_IN or t >= self.collapsed:
+            return
+        scale = self._ui_scale()
+        if t < self.release:
+            state = "listening"
+            level = self.clip.level(t - CLIP_AT) if t >= CLIP_AT else 0.0
+        else:
+            state = "transcribing"
+            level = 0.0
+        collapse = clamp((t - self.done) / theme.MONO_COLLAPSE) \
+            if t >= self.done else 0.0
+        picture = self.pictures.mono(scale, state, level, t - PILL_IN,
+                                     collapse)
+        # Placed as overlay._place_at_pointer does it: the capsule's centre
+        # MONO_POINTER_RIGHT points right of the tip, its bottom
+        # MONO_POINTER_ABOVE points above it. In as the overlay brings it.
+        tip = self._pointer_rest(box)
+        left, top, right, bottom = self.pictures.capsule(scale)
+        x = tip[0] + theme.MONO_POINTER_RIGHT * scale - (left + right) / 2.0
+        y = tip[1] - theme.MONO_POINTER_ABOVE * scale - bottom
+        share = clamp((t - PILL_IN) / FADE)
+        lift = int(round(10 * scale * (1 - share)))
+        layer_over(canvas, picture, x, y + lift, share)
 
     def _window_controls(self, canvas, box, rise, alpha):
         layer = Image.new("RGBA", (150, 40), (0, 0, 0, 0))
@@ -823,7 +937,7 @@ class Stage(object):
         share = arrive(t, t0 + 0.05)
         text(canvas, (width / 2.0, top), "Two looks.", title, INK, share,
              (1 - share) * 18, anchor="ma")
-        text(canvas, (width / 2.0, top + 120), "Glass, or Mono. Pick one in "
+        text(canvas, (width / 2.0, top + 120), "Mono, or Glass. Pick one in "
              "the tray.", sub, GREY, arrive(t, t0 + 0.4), anchor="ma")
 
         at = (t - t0) + 1.2      # the clip again, from its first words
@@ -838,8 +952,8 @@ class Stage(object):
             spots = [(width / 2.0, 820), (width / 2.0, 1300)]
         else:
             spots = [(width * 0.30, 600), (width * 0.72, 600)]
-        for index, (picture, name) in enumerate(((pill, "Glass"),
-                                                 (mono, "Mono"))):
+        for index, (picture, name) in enumerate(((mono, "Mono"),
+                                                 (pill, "Glass"))):
             share = arrive(t, t0 + 0.6 + index * 0.25, 0.45)
             cx, cy = spots[index]
             layer_over(canvas, picture, cx - picture.width / 2.0,
@@ -867,7 +981,8 @@ class Stage(object):
             text(canvas, (left, top + 130 + row * 58), line, sub, GREY,
                  arrive(t, t0 + 0.4))
 
-        picture = self.pictures.panel(1.9 if self.tall else 1.5)
+        # The panel in the mono look, as it is on the owner's PC.
+        picture = self.pictures.panel(1.9 if self.tall else 1.5, mono=True)
         lift = arrive(t, t0 + 0.3, 0.55)
         if self.tall:
             x = (width - picture.width) / 2.0
@@ -933,6 +1048,86 @@ def contact_sheet(stills, out, tall):
     return out
 
 
+# -- the sound and the film ---------------------------------------------------
+
+AUDIO_RATE = sound.RATE
+
+
+def voice_samples(name):
+    """One of the app's own sounds, built by sound.py, at full scale."""
+    return np.array(sound._samples(sound.VOICES[name], 1.0),
+                    dtype=np.float64) / 32767.0
+
+
+def soundtrack(stage):
+    """The film's sound: the clip's voice where it is spoken, a tap as the
+    keys go down and up, and Mono's blip the moment the words land."""
+    total = int(DURATION * AUDIO_RATE) + 1
+    out = np.zeros(total)
+
+    def put(samples, at, gain):
+        start = int(round(at * AUDIO_RATE))
+        end = min(total, start + len(samples))
+        if end > start:
+            out[start:end] += samples[:end - start] * gain
+
+    with wave.open(str(CLIP), "rb") as source:
+        rate = source.getframerate()
+        raw = np.frombuffer(source.readframes(source.getnframes()),
+                            dtype=np.int16).astype(np.float64) / 32768.0
+    times = np.arange(int(len(raw) * AUDIO_RATE / rate)) / float(AUDIO_RATE)
+    voice = np.interp(times, np.arange(len(raw)) / float(rate), raw)
+    put(voice / (np.abs(voice).max() or 1.0), CLIP_AT, 0.70)
+    tap = voice_samples("tap")
+    put(tap, PRESS, 0.35)
+    put(tap, stage.release, 0.22)
+    put(voice_samples("blip"), stage.done, 0.55)
+    return np.clip(out, -1.0, 1.0)
+
+
+def write_wav(path, samples):
+    data = np.round(samples * 32767).astype("<i2").tobytes()
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(AUDIO_RATE)
+        handle.writeframes(data)
+    return path
+
+
+def render_video(stage, out, fps=FPS):
+    """Every frame, straight into ffmpeg, with the sound beside it."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise SystemExit("ffmpeg is not on PATH")
+    folder = tempfile.mkdtemp(prefix="pitch-")
+    track = write_wav(os.path.join(folder, "sound.wav"), soundtrack(stage))
+    width, height = stage.size
+    command = [ffmpeg, "-y", "-loglevel", "error",
+               "-f", "rawvideo", "-pix_fmt", "rgb24",
+               "-s", "{}x{}".format(width, height), "-r", str(fps),
+               "-i", "-", "-i", track,
+               "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+               "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+               "-shortest", "-movflags", "+faststart", str(out)]
+    process = subprocess.Popen(command, stdin=subprocess.PIPE)
+    frames = int(round(DURATION * fps))
+    began = time.time()
+    try:
+        for index in range(frames):
+            process.stdin.write(stage.frame(index / float(fps)).tobytes())
+            if index and index % (fps * 5) == 0:
+                print("  {:>4.0f} s of {:.0f}, {:.0f} s so far".format(
+                    index / float(fps), DURATION, time.time() - began))
+    finally:
+        process.stdin.close()
+        process.wait()
+        shutil.rmtree(folder, ignore_errors=True)
+    if process.returncode:
+        raise SystemExit("ffmpeg failed with {}".format(process.returncode))
+    return out
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -944,6 +1139,8 @@ def main():
     parser.add_argument("--frame", type=float, metavar="SECONDS",
                         help="draw one moment")
     parser.add_argument("--out", default="frame.png")
+    parser.add_argument("--video", metavar="MP4",
+                        help="draw the whole film, with its sound")
     args = parser.parse_args()
 
     stage = Stage(tall=args.tall)
@@ -953,6 +1150,9 @@ def main():
     if args.frame is not None:
         stage.frame(args.frame).save(args.out)
         print(args.out)
+        return 0
+    if args.video:
+        print(render_video(stage, args.video))
         return 0
     if args.keyframes:
         folder = Path(args.keyframes)
