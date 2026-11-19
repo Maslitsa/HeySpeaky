@@ -1,0 +1,362 @@
+{
+ "hook": {
+  "text": "You think in three languages.",
+  "seconds": 2.45,
+  "words": [
+   {
+    "w": "You",
+    "start": 0.0,
+    "end": 0.2
+   },
+   {
+    "w": "think",
+    "start": 0.2,
+    "end": 0.56
+   },
+   {
+    "w": "in",
+    "start": 0.56,
+    "end": 0.92
+   },
+   {
+    "w": "three",
+    "start": 0.92,
+    "end": 1.24
+   },
+   {
+    "w": "languages.",
+    "start": 1.24,
+    "end": 1.82
+   }
+  ]
+ },
+ "one": {
+  "text": "Your dictation hears one.",
+  "seconds": 2.45,
+  "words": [
+   {
+    "w": "Your",
+    "start": 0.0,
+    "end": 0.34
+   },
+   {
+    "w": "dictation",
+    "start": 0.34,
+    "end": 1.0
+   },
+   {
+    "w": "hears",
+    "start": 1.0,
+    "end": 1.44
+   },
+   {
+    "w": "one.",
+    "start": 1.44,
+    "end": 1.86
+   }
+  ]
+ },
+ "mess": {
+  "text": "Everything else comes out like this.",
+  "seconds": 3.05,
+  "words": [
+   {
+    "w": "Everything",
+    "start": 0.0,
+    "end": 0.48
+   },
+   {
+    "w": "else",
+    "start": 0.48,
+    "end": 0.76
+   },
+   {
+    "w": "comes",
+    "start": 0.76,
+    "end": 1.38
+   },
+   {
+    "w": "out",
+    "start": 1.38,
+    "end": 1.7
+   },
+   {
+    "w": "like",
+    "start": 1.7,
+    "end": 2.32
+   },
+   {
+    "w": "this.",
+    "start": 2.32,
+    "end": 2.64
+   }
+  ]
+ },
+ "meet": {
+  "text": "Meet HeySpeaky.",
+  "seconds": 2.25,
+  "words": [
+   {
+    "w": "Meet",
+    "start": 0.0,
+    "end": 0.8
+   },
+   {
+    "w": "HeySpeaky.",
+    "start": 0.8,
+    "end": 1.76
+   }
+  ]
+ },
+ "hold": {
+  "text": "Hold Control and Alt, and just talk.",
+  "seconds": 3.25,
+  "words": [
+   {
+    "w": "Hold",
+    "start": 0.0,
+    "end": 0.34
+   },
+   {
+    "w": "Control",
+    "start": 0.34,
+    "end": 0.64
+   },
+   {
+    "w": "and",
+    "start": 0.64,
+    "end": 1.04
+   },
+   {
+    "w": "Alt",
+    "start": 1.04,
+    "end": 1.34
+   },
+   {
+    "w": "and",
+    "start": 1.34,
+    "end": 2.04
+   },
+   {
+    "w": "just",
+    "start": 2.04,
+    "end": 2.38
+   },
+   {
+    "w": "talk.",
+    "start": 2.38,
+    "end": 2.7
+   }
+  ]
+ },
+ "letgo": {
+  "text": "Let go, and it types right where you were.",
+  "seconds": 2.9,
+  "words": [
+   {
+    "w": "Let",
+    "start": 0.0,
+    "end": 0.18
+   },
+   {
+    "w": "go,",
+    "start": 0.18,
+    "end": 0.48
+   },
+   {
+    "w": "and",
+    "start": 0.62,
+    "end": 0.88
+   },
+   {
+    "w": "it",
+    "start": 0.88,
+    "end": 1.02
+   },
+   {
+    "w": "types",
+    "start": 1.02,
+    "end": 1.24
+   },
+   {
+    "w": "right",
+    "start": 1.24,
+    "end": 1.58
+   },
+   {
+    "w": "where",
+    "start": 1.58,
+    "end": 1.74
+   },
+   {
+    "w": "you",
+    "start": 1.74,
+    "end": 1.86
+   },
+   {
+    "w": "were.",
+    "start": 1.86,
+    "end": 2.08
+   }
+  ]
+ },
+ "names": {
+  "text": "Teach it the names you use.",
+  "seconds": 1.9,
+  "words": [
+   {
+    "w": "Teach",
+    "start": 0.0,
+    "end": 0.28
+   },
+   {
+    "w": "it",
+    "start": 0.28,
+    "end": 0.42
+   },
+   {
+    "w": "the",
+    "start": 0.42,
+    "end": 0.64
+   },
+   {
+    "w": "names",
+    "start": 0.64,
+    "end": 0.92
+   },
+   {
+    "w": "you",
+    "start": 0.92,
+    "end": 1.12
+   },
+   {
+    "w": "use.",
+    "start": 1.12,
+    "end": 1.54
+   }
+  ]
+ },
+ "langs": {
+  "text": "Ninety-seven languages. Yours go first.",
+  "seconds": 4.2,
+  "words": [
+   {
+    "w": "97",
+    "start": 0.0,
+    "end": 1.08
+   },
+   {
+    "w": "languages.",
+    "start": 1.08,
+    "end": 1.76
+   },
+   {
+    "w": "Yours",
+    "start": 2.22,
+    "end": 2.8
+   },
+   {
+    "w": "go",
+    "start": 2.8,
+    "end": 3.14
+   },
+   {
+    "w": "first.",
+    "start": 3.14,
+    "end": 3.56
+   }
+  ]
+ },
+ "logo": {
+  "text": "HeySpeaky. Talk the way you think.",
+  "seconds": 2.65,
+  "words": [
+   {
+    "w": "Hey,",
+    "start": 0.0,
+    "end": 0.2
+   },
+   {
+    "w": "Speaky,",
+    "start": 0.38,
+    "end": 0.64
+   },
+   {
+    "w": "talk",
+    "start": 1.06,
+    "end": 1.58
+   },
+   {
+    "w": "the",
+    "start": 1.58,
+    "end": 1.76
+   },
+   {
+    "w": "way",
+    "start": 1.76,
+    "end": 1.94
+   },
+   {
+    "w": "you",
+    "start": 1.94,
+    "end": 2.14
+   },
+   {
+    "w": "think.",
+    "start": 2.14,
+    "end": 2.42
+   }
+  ]
+ },
+ "meta": {
+  "text": "Oh, and this video? Every single frame is code.",
+  "seconds": 4.3,
+  "words": [
+   {
+    "w": "Oh,",
+    "start": 0.0,
+    "end": 0.28
+   },
+   {
+    "w": "in",
+    "start": 0.5,
+    "end": 0.86
+   },
+   {
+    "w": "this",
+    "start": 0.86,
+    "end": 1.12
+   },
+   {
+    "w": "video,",
+    "start": 1.12,
+    "end": 1.42
+   },
+   {
+    "w": "every",
+    "start": 1.76,
+    "end": 2.38
+   },
+   {
+    "w": "single",
+    "start": 2.38,
+    "end": 2.68
+   },
+   {
+    "w": "frame",
+    "start": 2.68,
+    "end": 3.06
+   },
+   {
+    "w": "is",
+    "start": 3.06,
+    "end": 3.36
+   },
+   {
+    "w": "code.",
+    "start": 3.36,
+    "end": 3.64
+   }
+  ]
+ }
+}

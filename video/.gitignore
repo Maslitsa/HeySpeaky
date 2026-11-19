@@ -1,0 +1,7 @@
+node_modules/
+out/
+public/*.wav
+public/*.mp3
+public/icon.png
+public/sfx/
+public/vo/*.wav
