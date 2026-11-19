@@ -1059,17 +1059,102 @@ def voice_samples(name):
                     dtype=np.float64) / 32767.0
 
 
+# The music under the film, written here as numbers like sound.py's voices,
+# so there is nothing to license. Four chords in G at 100 beats a minute, a
+# soft pad and a mallet picking out the chord. Mono's blip is two notes near
+# B4 and E5, which belong to this key, so it lands inside the music.
+BEAT = 60.0 / 100.0
+CHORD_BEATS = 8
+# (pad notes, mallet notes), in Hz.
+CHORDS = [
+    ([98.00, 246.94, 293.66, 369.99], [392.00, 493.88, 587.33, 739.99]),
+    ([82.41, 196.00, 246.94, 293.66], [329.63, 392.00, 493.88, 587.33]),
+    ([130.81, 164.81, 196.00, 246.94], [329.63, 392.00, 493.88, 523.25]),
+    ([146.83, 220.00, 293.66, 329.63], [293.66, 329.63, 440.00, 587.33]),
+]
+# Which mallet note on which eighth of a chord's two bars; None is a rest.
+PATTERN = [0, None, 2, 1, None, 3, 2, None,
+           0, None, 2, 3, None, 1, 2, None]
+VOICE_DUCK = 0.18     # the music under the voice, as a share of itself
+
+
+def _tone(freqs, seconds, attack, decay, gain):
+    """Sines that start softly and fade: the pad and the mallet's body."""
+    t = np.arange(int(seconds * AUDIO_RATE)) / float(AUDIO_RATE)
+    envelope = np.exp(-t / decay)
+    if attack > 0:
+        ramp = np.minimum(1.0, t / attack)
+        envelope *= 0.5 - 0.5 * np.cos(np.pi * ramp)
+    out = np.zeros_like(t)
+    for freq in freqs:
+        out += np.sin(2 * np.pi * freq * t)
+    return out * envelope * gain
+
+
+def _mallet(freq, seconds=0.9):
+    """A soft mallet: the note dying away, and a click of the fourth
+    harmonic at the very start that sounds like wood being struck."""
+    body = _tone([freq], seconds, 0.003, 0.32, 1.0)
+    click = _tone([freq * 4.0], seconds, 0.001, 0.025, 0.22)
+    return body + click
+
+
+def music(total, duck_from, duck_to, end_at):
+    """Stereo music for `total` samples, quieter under the voice and
+    settling on the first chord for the end card."""
+    left, right = np.zeros(total), np.zeros(total)
+
+    def add(samples, at, pan=0.0):
+        start = int(round(at * AUDIO_RATE))
+        end = min(total, start + len(samples))
+        if end <= start:
+            return
+        piece = samples[:end - start]
+        left[start:end] += piece * (1.0 - pan) * 0.5 * 2 ** 0.5
+        right[start:end] += piece * (1.0 + pan) * 0.5 * 2 ** 0.5
+
+    chord_seconds = CHORD_BEATS * BEAT
+    at, index = 0.0, 0
+    while at < end_at:
+        pad, mallet = CHORDS[index % len(CHORDS)]
+        add(_tone(pad, chord_seconds + 1.6, 0.9, 2.6, 0.11), at)
+        for step, note in enumerate(PATTERN):
+            when = at + step * BEAT / 2.0
+            if note is None or when >= end_at:
+                continue
+            add(_mallet(mallet[note]) * 0.22, when,
+                pan=0.35 if step % 4 < 2 else -0.35)
+        at += chord_seconds
+        index += 1
+    # The end card: the first chord, held and let go.
+    pad, mallet = CHORDS[0]
+    add(_tone(pad, DURATION - end_at + 1.0, 0.05, 2.2, 0.14), end_at)
+    for offset, note in enumerate((0, 1, 2, 3)):
+        add(_mallet(mallet[note], 2.5) * 0.20, end_at + offset * 0.09,
+            pan=(-0.3, -0.1, 0.1, 0.3)[offset])
+
+    t = np.arange(total) / float(AUDIO_RATE)
+    # Down under the voice and back, each over half a second.
+    into = np.clip((t - (duck_from - 0.5)) / 0.5, 0.0, 1.0)
+    out_of = np.clip((t - duck_to) / 0.5, 0.0, 1.0)
+    duck = 1.0 - (1.0 - VOICE_DUCK) * into * (1.0 - out_of)
+    # In from nothing at the start, out to nothing at the very end.
+    fade = np.clip(t / 0.6, 0.0, 1.0) * np.clip((DURATION - t) / 0.8, 0.0, 1.0)
+    return np.stack([left, right], axis=1) * (duck * fade)[:, None]
+
+
 def soundtrack(stage):
-    """The film's sound: the clip's voice where it is spoken, a tap as the
-    keys go down and up, and Mono's blip the moment the words land."""
+    """The film's sound, in stereo: music from the first frame, the clip's
+    voice where it is spoken, a tap as the keys go down and up, Mono's blip
+    the moment the words land, and a soft pop as each language is named."""
     total = int(DURATION * AUDIO_RATE) + 1
-    out = np.zeros(total)
+    out = music(total, CLIP_AT, stage.release, END)
 
     def put(samples, at, gain):
         start = int(round(at * AUDIO_RATE))
         end = min(total, start + len(samples))
         if end > start:
-            out[start:end] += samples[:end - start] * gain
+            out[start:end] += (samples[:end - start] * gain)[:, None]
 
     with wave.open(str(CLIP), "rb") as source:
         rate = source.getframerate()
@@ -1077,21 +1162,29 @@ def soundtrack(stage):
                             dtype=np.int16).astype(np.float64) / 32768.0
     times = np.arange(int(len(raw) * AUDIO_RATE / rate)) / float(AUDIO_RATE)
     voice = np.interp(times, np.arange(len(raw)) / float(rate), raw)
-    put(voice / (np.abs(voice).max() or 1.0), CLIP_AT, 0.70)
+    put(voice / (np.abs(voice).max() or 1.0), CLIP_AT, 1.3)
     tap = voice_samples("tap")
-    put(tap, PRESS, 0.35)
-    put(tap, stage.release, 0.22)
-    put(voice_samples("blip"), stage.done, 0.55)
-    return np.clip(out, -1.0, 1.0)
+    put(tap, PRESS, 0.45)
+    put(tap, stage.release, 0.30)
+    put(voice_samples("blip"), stage.done, 0.70)
+    pop = _tone([1046.5], 0.25, 0.002, 0.045, 0.16)
+    for index in range(len(SPOKEN)):
+        put(pop, stage.land + 0.9 + index * 0.3, 1.0)
+    # A soft limiter rather than turning everything down for the voice's
+    # few loud peaks: as loud as a video on the web, and never past -1 dB,
+    # which clips on some phones.
+    return 0.89 * np.tanh(out / 0.89)
 
 
 def write_wav(path, samples):
-    data = np.round(samples * 32767).astype("<i2").tobytes()
+    """16-bit stereo, or mono if handed one channel."""
+    channels = 1 if samples.ndim == 1 else samples.shape[1]
+    data = np.round(np.clip(samples, -1.0, 1.0) * 32767).astype("<i2")
     with wave.open(str(path), "wb") as handle:
-        handle.setnchannels(1)
+        handle.setnchannels(channels)
         handle.setsampwidth(2)
         handle.setframerate(AUDIO_RATE)
-        handle.writeframes(data)
+        handle.writeframes(data.tobytes())
     return path
 
 
