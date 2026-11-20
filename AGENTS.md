@@ -38,6 +38,7 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/doctor.py` | the check-up; the installer runs it with `--install` |
 | `tools/ui_lab.py` | draws every state to a PNG, or `--gif` to animate it |
 | `tools/pitch_video.py` | the pitch video, drawn from the same renders; `--video` makes the mp4 with its sound |
+| `tools/readme_media.py` | the README's pictures, from the same drawing code; `--film` takes the poster and social preview from the film |
 | `video/` | the film: Speaky, the Mono pill with eyes, in a 3D world drawn in code (Remotion + three.js); build it outside OneDrive (`video/README.md`) |
 | `tools/benchmark.py` | measures models against real recordings |
 | `tools/language_drill.py` | measures sentences that change language halfway |
