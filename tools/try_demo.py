@@ -164,6 +164,14 @@ def report(label, result, error):
 
 
 def main():
+    # A Windows console prints in cp1251 or cp1252, which has no Kazakh
+    # letters: the first "қ" in a transcript stopped the tool with a
+    # UnicodeEncodeError after the request had already been paid for.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(
         description="Transcribe the demo clip and print the result.")
     parser.add_argument("wav", nargs="?", default=None,
