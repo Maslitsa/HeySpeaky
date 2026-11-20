@@ -26,7 +26,7 @@ $env:HEYSPEAKY_REPO = "<path to this repository>"
 python scripts\voice.py           # speaks the lines (OpenAI), times every word
 python scripts\assets.py          # mouth levels, icon, languages, the demo clip
 python scripts\soft_sfx.py        # the sound effects
-python scripts\music_dark.py      # stand-in music, written as numbers
+python scripts\music_dark.py      # the music, written as numbers
 python scripts\code.py            # the source the last shot scrolls through
 npx remotion studio src/index.ts  # look at it
 npx remotion render src/index.ts HeySpeaky out/HeySpeaky.mp4 --gl=angle --preferred-effect-backend=webgl2 --concurrency=2
@@ -41,12 +41,17 @@ The film's own narration is one ElevenLabs take (voice Laura, `eleven_v4`),
 read in one go so it sounds like one person telling a story, then cut into
 lines by `scripts\split_voice.py TAKE.mp3`; the four-language sentence is a
 second Laura take, `takes/laura-demo.mp3`, which `assets.py` uses when it is
-there. Its music is an ElevenLabs Music track; put any track in `public/` and
-name it in `src/music.json`. Without them, `voice.py`, `music_dark.py` and
-the repository's `demo/four_languages.wav` stand in, and the whole film
-re-times itself to whatever voice it gets: every scene starts where its
-line starts (`src/data.ts`), and every word on screen is found by what it
-says.
+there. Without them, `voice.py` and the repository's
+`demo/four_languages.wav` stand in, and the whole film re-times itself to
+whatever voice it gets: every scene starts where its line starts
+(`src/data.ts`), and every word on screen is found by what it says.
+
+The music is code too (`scripts/music_dark.py`): D minor at 120 beats a
+minute, laid on the same timeline, so the drop lands on regular
+dictation's answer and the last chord under the last line. It goes down to
+a bare pad under the four-language sentence, because anything with an edge
+there took the end off the last Kazakh word when HeySpeaky listened to the
+mix. Any other track can go in `public/`, named in `src/music.json`.
 
 Run the scripts with the app's Python, which has its packages. Keys are read
 where HeySpeaky keeps them and are never printed.

@@ -13,10 +13,10 @@ Windows 10 and 11. Free and open source.
 [![Built on RealtimeSTT](https://img.shields.io/badge/built%20on-RealtimeSTT-8A2BE2)](https://github.com/KoljaB/RealtimeSTT)
 [![Stars](https://img.shields.io/github/stars/Maslitsa/HeySpeaky?style=social)](https://github.com/Maslitsa/HeySpeaky/stargazers)
 
-https://github.com/user-attachments/assets/80c74b4d-f177-4e71-8f04-a10e309d21e1
+https://github.com/user-attachments/assets/eb88b19d-8334-41e5-9acf-e3073939af33
 
 <sub>43 seconds, sound on. Every frame of it is drawn in code - see [video/](video).<br>
-Voice: Laura, elevenlabs.io. Music: created with Eleven Music.</sub>
+Voice: Laura, elevenlabs.io. The music is code as well.</sub>
 
 </div>
 
@@ -239,9 +239,9 @@ The video at the top is code, not editing: [Remotion](https://www.remotion.dev/)
 and [three.js](https://threejs.org/). Speaky is the mono pill with eyes, and
 its eight bars move by the same formula the app uses. The narration and the
 four-language sentence are a synthesised voice from
-[elevenlabs.io](https://elevenlabs.io), the music was created with Eleven
-Music, and what lands in the window is what HeySpeaky really typed for that
-sentence, word for word. How to build it, and what is
+[elevenlabs.io](https://elevenlabs.io), the music and the sounds are
+written in Python, and what lands in the window is what HeySpeaky really
+typed for that sentence, word for word. How to build it, and what is
 real and what is not: [video/README.md](video/README.md).
 
 ## Something wrong?
