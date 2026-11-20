@@ -17,8 +17,9 @@ const spoken = (line: Line) => {
   return w.length ? w[w.length - 1].end + 0.1 : TIMED[line].seconds;
 };
 
-// The demo recording: four languages in one breath, as the app heard it.
-export const CLIP_SECONDS = 11.1;
+// The demo recording: Laura saying one sentence in four languages, in one
+// take (ElevenLabs, eleven_v4). HeySpeaky transcribed it word for word.
+export const CLIP_SECONDS = 8.72;
 
 // After each line, how long before the next thing starts: room for what the
 // picture still has to do.
@@ -95,19 +96,20 @@ export const levelAt = (name: string, at: number) => {
   return i < series.length ? series[i] : 0;
 };
 
-// What was said, and when each word starts in the clip (whisper-1's word
-// timestamps, 26 October 2026) - and what OpenAI typed for it, word for word.
+// What was said, when each word starts in the clip (large-v3-turbo, one
+// language at a time, 20 November 2026), and what HeySpeaky typed for it:
+// tools/try_demo.py --cloud, word for word.
 export const SPOKEN: { lang: Lang; said: string; typed: string; starts: number[] }[] = [
-  { lang: "en", said: "I already sent the invoice,", typed: "I already sent the invoice,", starts: [0.0, 0.56, 1.14, 1.6, 2.06] },
-  { lang: "de", said: "aber ich warte noch auf eine Antwort,", typed: "aber ich warte noch auf eine Antwort.", starts: [2.6, 2.88, 3.1, 3.4, 3.76, 3.94, 4.2] },
-  { lang: "ru", said: "но клиент до сих пор не ответил,", typed: "Но клиент до сих пор не ответил.", starts: [5.06, 5.28, 5.92, 6.58, 6.92, 7.2, 7.78] },
-  { lang: "kk", said: "сондықтан ертең қоңырау шаламын.", typed: "Сондықтан ертең қоңырау шаламын.", starts: [8.74, 9.64, 10.04, 10.6] },
+  { lang: "en", said: "I already sent the invoice,", typed: "I already sent the invoice,", starts: [0.0, 0.22, 0.54, 0.8, 0.96] },
+  { lang: "de", said: "aber ich warte noch auf eine Antwort…", typed: "aber ich warte noch auf eine Antwort.", starts: [1.8, 2.08, 2.42, 2.7, 2.86, 3.04, 3.24] },
+  { lang: "ru", said: "но клиент до сих пор не ответил,", typed: "Но клиент до сих пор не ответил,", starts: [4.36, 4.5, 4.9, 5.04, 5.24, 5.46, 5.6] },
+  { lang: "kk", said: "сондықтан ертең қоңырау шаламын.", typed: "сондықтан ертең қоңырау шаламын.", starts: [6.55, 7.01, 7.51, 7.93] },
 ];
 export const SPANS = [
-  [0.0, 2.53],
-  [2.53, 4.87],
-  [4.87, 8.53],
-  [8.53, 11.1],
+  [0.0, 1.6],
+  [1.6, 4.25],
+  [4.25, 6.4],
+  [6.4, 8.72],
 ];
 
 /** Every word of the clip, in order, with its language and timing. */
@@ -117,8 +119,9 @@ export const CLIP_WORDS = SPOKEN.flatMap((part) => {
   return said.map((w, i) => ({ said: w, typed: typed[i], lang: part.lang, start: part.starts[i] }));
 });
 
-// What whisper-1 itself wrote for the clip, in that same request.
-export const WHISPER_HEARD = ["No client do sikh por ni atvetil.", "Sondag dann. Yirtin kongrao shalaman."];
+// What OpenAI's older whisper-1 wrote for the same clip, the same day: the
+// English and German right, the Russian and Kazakh spelled out in Latin.
+export const WHISPER_HEARD = ["No klient de sikhpor ne atvetil.", "Sondokhtan Yerchenkhon Raushalam."];
 
 export const SCENES = [
   ["hook", 0, VO_AT.this - 0.12],

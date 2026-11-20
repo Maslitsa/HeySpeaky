@@ -14,6 +14,7 @@ would for that audio.
 import json
 import os
 import shutil
+import subprocess
 import sys
 import wave
 from pathlib import Path
@@ -184,7 +185,12 @@ def levels_for(path):
 
 def main():
     SFX.mkdir(parents=True, exist_ok=True)
-    shutil.copy(REPO / "demo" / "four_languages.wav", PUBLIC / "clip.wav")
+    # The demo sentence: Laura's take when it is here, the repository's clip
+    # otherwise. Written as a plain 16-bit wav, which levels_for can read.
+    take = HERE / "takes" / "laura-demo.mp3"
+    source = take if take.exists() else REPO / "demo" / "four_languages.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(source), "-ac", "1", "-ar", "44100",
+                    "-c:a", "pcm_s16le", str(PUBLIC / "clip.wav")], check=True)
     write("whoosh", whoosh())
     write("swish", whoosh(0.28, 900.0, 7000.0))
     write("pop", pop())
