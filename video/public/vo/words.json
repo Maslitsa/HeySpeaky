@@ -1,361 +1,417 @@
 {
  "hook": {
-  "text": "You think in three languages.",
-  "seconds": 2.45,
+  "text": "What if I told you... your dictation only speaks one language?",
+  "seconds": 4.12,
   "words": [
    {
-    "w": "You",
+    "w": "What",
     "start": 0.0,
-    "end": 0.2
+    "end": 0.28
    },
    {
-    "w": "think",
-    "start": 0.2,
-    "end": 0.56
+    "w": "if",
+    "start": 0.28,
+    "end": 0.46
    },
    {
-    "w": "in",
-    "start": 0.56,
-    "end": 0.92
+    "w": "I",
+    "start": 0.46,
+    "end": 0.6
    },
    {
-    "w": "three",
-    "start": 0.92,
-    "end": 1.24
+    "w": "told",
+    "start": 0.6,
+    "end": 0.94
    },
    {
-    "w": "languages.",
-    "start": 1.24,
-    "end": 1.82
-   }
-  ]
- },
- "one": {
-  "text": "Your dictation hears one.",
-  "seconds": 2.45,
-  "words": [
+    "w": "you",
+    "start": 0.94,
+    "end": 1.32
+   },
    {
-    "w": "Your",
-    "start": 0.0,
-    "end": 0.34
+    "w": "your",
+    "start": 1.32,
+    "end": 1.98
    },
    {
     "w": "dictation",
-    "start": 0.34,
-    "end": 1.0
+    "start": 1.98,
+    "end": 2.62
    },
    {
-    "w": "hears",
-    "start": 1.0,
-    "end": 1.44
+    "w": "only",
+    "start": 2.62,
+    "end": 2.92
    },
    {
-    "w": "one.",
-    "start": 1.44,
-    "end": 1.86
+    "w": "speaks",
+    "start": 2.92,
+    "end": 3.28
+   },
+   {
+    "w": "one",
+    "start": 3.28,
+    "end": 3.66
+   },
+   {
+    "w": "language",
+    "start": 3.66,
+    "end": 4.12
    }
   ]
  },
- "mess": {
-  "text": "Everything else comes out like this.",
-  "seconds": 3.05,
+ "three": {
+  "text": "And you speak three.",
+  "seconds": 1.95,
   "words": [
    {
-    "w": "Everything",
+    "w": "and",
     "start": 0.0,
-    "end": 0.48
+    "end": 0.72
    },
    {
-    "w": "else",
-    "start": 0.48,
-    "end": 0.76
+    "w": "you",
+    "start": 0.72,
+    "end": 0.98
    },
    {
-    "w": "comes",
-    "start": 0.76,
-    "end": 1.38
+    "w": "speak",
+    "start": 0.98,
+    "end": 1.36
    },
    {
-    "w": "out",
-    "start": 1.38,
+    "w": "three?",
+    "start": 1.36,
     "end": 1.7
-   },
-   {
-    "w": "like",
-    "start": 1.7,
-    "end": 2.32
-   },
-   {
-    "w": "this.",
-    "start": 2.32,
-    "end": 2.64
    }
   ]
  },
- "meet": {
-  "text": "Meet HeySpeaky.",
-  "seconds": 2.25,
+ "this": {
+  "text": "This is HeySpeaky.",
+  "seconds": 1.51,
   "words": [
    {
-    "w": "Meet",
-    "start": 0.0,
-    "end": 0.8
+    "w": "This",
+    "start": 0.12,
+    "end": 0.32
+   },
+   {
+    "w": "is",
+    "start": 0.32,
+    "end": 0.56
    },
    {
     "w": "HeySpeaky.",
-    "start": 0.8,
-    "end": 1.76
+    "start": 0.56,
+    "end": 1.26
    }
   ]
  },
  "hold": {
-  "text": "Hold Control and Alt, and just talk.",
-  "seconds": 3.25,
+  "text": "Hold Control-Alt and just talk. Switch languages mid-sentence.",
+  "seconds": 4.39,
   "words": [
    {
     "w": "Hold",
-    "start": 0.0,
-    "end": 0.34
+    "start": 0.12,
+    "end": 0.44
    },
    {
-    "w": "Control",
-    "start": 0.34,
-    "end": 0.64
+    "w": "Ctrl",
+    "start": 0.44,
+    "end": 0.76
    },
    {
-    "w": "and",
-    "start": 0.64,
-    "end": 1.04
-   },
-   {
-    "w": "Alt",
-    "start": 1.04,
-    "end": 1.34
+    "w": "-Alt",
+    "start": 0.76,
+    "end": 1.18
    },
    {
     "w": "and",
-    "start": 1.34,
-    "end": 2.04
+    "start": 1.18,
+    "end": 1.42
    },
    {
     "w": "just",
-    "start": 2.04,
-    "end": 2.38
+    "start": 1.42,
+    "end": 1.62
    },
    {
     "w": "talk.",
-    "start": 2.38,
-    "end": 2.7
+    "start": 1.62,
+    "end": 2.02
+   },
+   {
+    "w": "Switch",
+    "start": 2.4,
+    "end": 2.64
+   },
+   {
+    "w": "languages",
+    "start": 2.64,
+    "end": 3.16
+   },
+   {
+    "w": "mid",
+    "start": 3.16,
+    "end": 3.52
+   },
+   {
+    "w": "-sentence.",
+    "start": 3.52,
+    "end": 4.14
    }
   ]
  },
  "letgo": {
   "text": "Let go, and it types right where you were.",
-  "seconds": 2.9,
+  "seconds": 2.43,
   "words": [
    {
     "w": "Let",
-    "start": 0.0,
-    "end": 0.18
+    "start": 0.12,
+    "end": 0.28
    },
    {
-    "w": "go,",
-    "start": 0.18,
-    "end": 0.48
+    "w": "go",
+    "start": 0.28,
+    "end": 0.58
    },
    {
     "w": "and",
-    "start": 0.62,
-    "end": 0.88
+    "start": 0.58,
+    "end": 0.92
    },
    {
     "w": "it",
-    "start": 0.88,
-    "end": 1.02
+    "start": 0.92,
+    "end": 1.04
    },
    {
     "w": "types",
-    "start": 1.02,
-    "end": 1.24
+    "start": 1.04,
+    "end": 1.3
    },
    {
     "w": "right",
-    "start": 1.24,
+    "start": 1.3,
     "end": 1.58
    },
    {
     "w": "where",
     "start": 1.58,
-    "end": 1.74
+    "end": 1.76
    },
    {
     "w": "you",
-    "start": 1.74,
-    "end": 1.86
+    "start": 1.76,
+    "end": 1.9
    },
    {
     "w": "were.",
-    "start": 1.86,
-    "end": 2.08
+    "start": 1.9,
+    "end": 2.18
+   }
+  ]
+ },
+ "regular": {
+  "text": "Regular dictation? This.",
+  "seconds": 2.03,
+  "words": [
+   {
+    "w": "Regular",
+    "start": 0.12,
+    "end": 0.42
+   },
+   {
+    "w": "dictation?",
+    "start": 0.42,
+    "end": 1.1
+   },
+   {
+    "w": "This.",
+    "start": 1.34,
+    "end": 1.78
    }
   ]
  },
  "names": {
-  "text": "Teach it the names you use.",
-  "seconds": 1.9,
+  "text": "Gets a name wrong? Teach it your names.",
+  "seconds": 2.37,
   "words": [
    {
-    "w": "Teach",
-    "start": 0.0,
-    "end": 0.28
+    "w": "Gets",
+    "start": 0.12,
+    "end": 0.4
    },
    {
-    "w": "it",
-    "start": 0.28,
-    "end": 0.42
+    "w": "a",
+    "start": 0.4,
+    "end": 0.5
    },
    {
-    "w": "the",
-    "start": 0.42,
-    "end": 0.64
+    "w": "name",
+    "start": 0.5,
+    "end": 0.68
    },
    {
-    "w": "names",
-    "start": 0.64,
+    "w": "wrong?",
+    "start": 0.68,
     "end": 0.92
    },
    {
-    "w": "you",
-    "start": 0.92,
-    "end": 1.12
+    "w": "Teach",
+    "start": 1.2,
+    "end": 1.5
    },
    {
-    "w": "use.",
-    "start": 1.12,
-    "end": 1.54
+    "w": "it",
+    "start": 1.5,
+    "end": 1.62
+   },
+   {
+    "w": "your",
+    "start": 1.62,
+    "end": 1.74
+   },
+   {
+    "w": "names.",
+    "start": 1.74,
+    "end": 2.12
    }
   ]
  },
  "langs": {
   "text": "Ninety-seven languages. Yours go first.",
-  "seconds": 4.2,
+  "seconds": 3.05,
   "words": [
    {
     "w": "97",
-    "start": 0.0,
-    "end": 1.08
+    "start": 0.12,
+    "end": 0.76
    },
    {
     "w": "languages.",
-    "start": 1.08,
-    "end": 1.76
+    "start": 0.76,
+    "end": 1.48
    },
    {
     "w": "Yours",
-    "start": 2.22,
-    "end": 2.8
+    "start": 1.98,
+    "end": 2.2
    },
    {
     "w": "go",
-    "start": 2.8,
-    "end": 3.14
+    "start": 2.2,
+    "end": 2.4
    },
    {
     "w": "first.",
-    "start": 3.14,
-    "end": 3.56
+    "start": 2.4,
+    "end": 2.8
    }
   ]
  },
- "logo": {
-  "text": "HeySpeaky. Talk the way you think.",
-  "seconds": 2.65,
+ "free": {
+  "text": "Free. Open source. Windows.",
+  "seconds": 2.19,
   "words": [
    {
-    "w": "Hey,",
-    "start": 0.0,
-    "end": 0.2
+    "w": "Free,",
+    "start": 0.12,
+    "end": 0.34
    },
    {
-    "w": "Speaky,",
-    "start": 0.38,
-    "end": 0.64
+    "w": "open",
+    "start": 0.56,
+    "end": 0.94
    },
    {
-    "w": "talk",
-    "start": 1.06,
-    "end": 1.58
+    "w": "source,",
+    "start": 0.94,
+    "end": 1.28
    },
    {
-    "w": "the",
-    "start": 1.58,
-    "end": 1.76
-   },
-   {
-    "w": "way",
-    "start": 1.76,
+    "w": "Windows.",
+    "start": 1.6,
     "end": 1.94
-   },
-   {
-    "w": "you",
-    "start": 1.94,
-    "end": 2.14
-   },
-   {
-    "w": "think.",
-    "start": 2.14,
-    "end": 2.42
    }
   ]
  },
  "meta": {
   "text": "Oh, and this video? Every single frame is code.",
-  "seconds": 4.3,
+  "seconds": 3.45,
   "words": [
    {
     "w": "Oh,",
-    "start": 0.0,
+    "start": 0.12,
     "end": 0.28
    },
    {
-    "w": "in",
-    "start": 0.5,
-    "end": 0.86
+    "w": "and",
+    "start": 0.44,
+    "end": 0.6
    },
    {
     "w": "this",
-    "start": 0.86,
-    "end": 1.12
+    "start": 0.6,
+    "end": 0.78
    },
    {
-    "w": "video,",
-    "start": 1.12,
-    "end": 1.42
+    "w": "video?",
+    "start": 0.78,
+    "end": 1.1
    },
    {
-    "w": "every",
-    "start": 1.76,
-    "end": 2.38
+    "w": "Every",
+    "start": 1.42,
+    "end": 1.82
    },
    {
     "w": "single",
-    "start": 2.38,
-    "end": 2.68
+    "start": 1.82,
+    "end": 2.26
    },
    {
     "w": "frame",
-    "start": 2.68,
-    "end": 3.06
+    "start": 2.26,
+    "end": 2.62
    },
    {
     "w": "is",
-    "start": 3.06,
-    "end": 3.36
+    "start": 2.62,
+    "end": 2.86
    },
    {
     "w": "code.",
-    "start": 3.36,
-    "end": 3.64
+    "start": 2.86,
+    "end": 3.2
+   }
+  ]
+ },
+ "cta": {
+  "text": "Link's in the comments.",
+  "seconds": 1.19,
+  "words": [
+   {
+    "w": "Links",
+    "start": 0.12,
+    "end": 0.42
+   },
+   {
+    "w": "in",
+    "start": 0.42,
+    "end": 0.56
+   },
+   {
+    "w": "the",
+    "start": 0.56,
+    "end": 0.64
+   },
+   {
+    "w": "comments.",
+    "start": 0.64,
+    "end": 0.94
    }
   ]
  }

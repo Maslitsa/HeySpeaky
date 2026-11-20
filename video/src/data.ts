@@ -2,30 +2,90 @@ import words from "../public/vo/words.json";
 import levels from "../public/levels.json";
 import { FPS, Lang } from "./theme";
 
-// When each spoken line starts, in seconds into the film.
-export const VO_AT = {
-  hook: 0.3,
-  one: 3.0,
-  mess: 5.6,
-  meet: 9.3,
-  hold: 11.8,
-  letgo: 26.9,
-  names: 30.2,
-  langs: 33.8,
-  logo: 38.7,
-  meta: 42.6,
-} as const;
-export type Line = keyof typeof VO_AT;
+// The spoken lines, in order. Where each one starts is worked out from how
+// long the voice took to say the ones before it, so a new voice - a new
+// take, ElevenLabs instead of OpenAI - re-times the whole film by itself.
+export const LINES = ["hook", "three", "this", "hold", "letgo", "regular", "names", "langs", "free", "meta", "cta"] as const;
+export type Line = (typeof LINES)[number];
 
-type Timed = { seconds: number; words: { w: string; start: number; end: number }[] };
+type Timed = { text: string; seconds: number; words: { w: string; start: number; end: number }[] };
 const TIMED = words as unknown as Record<Line, Timed>;
 
-/** When word `i` of a line is heard, in seconds into the film. */
-export const wordAt = (line: Line, i: number) => VO_AT[line] + TIMED[line].words[i].start;
+/** How long a line takes, to its last word and a breath after. */
+const spoken = (line: Line) => {
+  const w = TIMED[line].words;
+  return w.length ? w[w.length - 1].end + 0.1 : TIMED[line].seconds;
+};
 
 // The demo recording: four languages in one breath, as the app heard it.
-export const CLIP_AT = 15.4;
 export const CLIP_SECONDS = 11.1;
+
+// After each line, how long before the next thing starts: room for what the
+// picture still has to do.
+const AFTER: Record<Line | "clip", number> = {
+  hook: 0.15,
+  three: 0.4,
+  this: 0.5,
+  hold: 0.25,
+  clip: 0.3,
+  letgo: 0.5,
+  regular: 1.0,
+  names: 1.25,
+  langs: 0.45,
+  free: 0.5,
+  meta: 0.3,
+  cta: 1.1,
+};
+
+const ORDER: (Line | "clip")[] = ["hook", "three", "this", "hold", "clip", "letgo", "regular", "names", "langs", "free", "meta", "cta"];
+
+const timeline = () => {
+  const at = {} as Record<Line, number>;
+  let t = 0.35;
+  let clip = 0;
+  for (const item of ORDER) {
+    if (item === "clip") {
+      clip = t;
+      t += CLIP_SECONDS + AFTER.clip;
+    } else {
+      at[item] = t;
+      t += spoken(item) + AFTER[item];
+    }
+  }
+  return { at, clip, end: t };
+};
+const TIMES = timeline();
+
+export const VO_AT = TIMES.at;
+export const CLIP_AT = TIMES.clip;
+export const DURATION = Math.round(TIMES.end * FPS) / FPS;
+export const voEnd = (line: Line) => VO_AT[line] + spoken(line);
+
+/** When word `i` of a line is heard, in seconds into the film. */
+export const wordAt = (line: Line, i: number) => {
+  const w = TIMED[line].words;
+  return VO_AT[line] + (w[Math.min(i, w.length - 1)]?.start ?? 0);
+};
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9а-яёәғқңөұүһі]/g, "");
+
+/**
+ * When a word is heard, found by what it says rather than where it is: a
+ * different voice splits "Control-Alt" or "ninety-seven" differently, and
+ * counting words would then point at the wrong one. Falls back to where the
+ * word sits in the line's text.
+ */
+export const cue = (line: Line, ...words: string[]) => {
+  const said = TIMED[line].words;
+  for (const word of words) {
+    const key = norm(word);
+    const hit = said.find((w) => norm(w.w).startsWith(key));
+    if (hit) return VO_AT[line] + hit.start;
+  }
+  const text = TIMED[line].text.toLowerCase();
+  const index = text.indexOf(words[0].toLowerCase());
+  return VO_AT[line] + (index >= 0 ? index / text.length : 0) * spoken(line);
+};
 
 /** What the Mono pill would show for an audio file `at` seconds in. */
 export const levelAt = (name: string, at: number) => {
@@ -61,14 +121,14 @@ export const CLIP_WORDS = SPOKEN.flatMap((part) => {
 export const WHISPER_HEARD = ["No client do sikh por ni atvetil.", "Sondag dann. Yirtin kongrao shalaman."];
 
 export const SCENES = [
-  ["hook", 0.0, 2.9],
-  ["one", 2.9, 9.0],
-  ["meet", 9.0, 11.6],
-  ["hold", 11.6, 15.3],
-  ["demo", 15.3, 30.0],
-  ["names", 30.0, 33.6],
-  ["langs", 33.6, 38.4],
-  ["logo", 38.4, 42.4],
-  ["meta", 42.4, 47.5],
+  ["hook", 0, VO_AT.this - 0.12],
+  ["reveal", VO_AT.this - 0.12, VO_AT.hold - 0.12],
+  ["hold", VO_AT.hold - 0.12, CLIP_AT - 0.1],
+  ["demo", CLIP_AT - 0.1, VO_AT.regular - 0.12],
+  ["slab", VO_AT.regular - 0.12, VO_AT.names - 0.12],
+  ["names", VO_AT.names - 0.12, VO_AT.langs - 0.12],
+  ["langs", VO_AT.langs - 0.12, VO_AT.free - 0.12],
+  ["logo", VO_AT.free - 0.12, VO_AT.meta - 0.12],
+  ["meta", VO_AT.meta - 0.12, DURATION],
 ] as const;
-export const DURATION = 47.5;
+export type SceneName = (typeof SCENES)[number][0];

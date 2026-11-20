@@ -184,8 +184,9 @@ export const Speaky: React.FC<{
   look?: [number, number];
   squash?: number;
   eyeScale?: number;
+  dark?: boolean;
   style?: React.CSSProperties;
-}> = ({ width, mood, t, level = 0, blink = 0, wink = 0, look = [0, 0], squash = 0, eyeScale = 1, style }) => {
+}> = ({ width, mood, t, level = 0, blink = 0, wink = 0, look = [0, 0], squash = 0, eyeScale = 1, dark = true, style }) => {
   const w = width;
   const h = w / 1.862;
   const room = h * 0.42;
@@ -233,8 +234,14 @@ export const Speaky: React.FC<{
           <stop offset="0.45" stopColor="#FFFFFF" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <ellipse cx={cx} cy={top + h * 1.12} rx={w * 0.4} ry={h * 0.1} fill="rgba(20,10,20,0.22)" filter={`url(#${id}soft)`} />
-      <rect x={0} y={top} width={w} height={h} rx={h / 2} fill={C.mono} />
+      {dark ? (
+        // On the dark stage it stands in its own light: a red pool on the
+        // floor, and a rim so the black capsule never melts into the black.
+        <ellipse cx={cx} cy={top + h * 1.14} rx={w * 0.55} ry={h * 0.16} fill={mood === "thinking" ? "rgba(40,124,226,0.45)" : "rgba(255,74,43,0.42)"} filter={`url(#${id}soft)`} />
+      ) : (
+        <ellipse cx={cx} cy={top + h * 1.12} rx={w * 0.4} ry={h * 0.1} fill="rgba(20,10,20,0.22)" filter={`url(#${id}soft)`} />
+      )}
+      <rect x={0} y={top} width={w} height={h} rx={h / 2} fill={C.mono} stroke={dark ? "#3B3442" : "none"} strokeWidth={dark ? Math.max(1.5, h * 0.018) : 0} />
       <rect x={h * 0.06} y={top + h * 0.04} width={w - h * 0.12} height={h * 0.9} rx={h * 0.45} fill={`url(#${id}sheen)`} />
       <g filter={`url(#${id}glow)`} opacity={0.55}>
         {heights.map((s, i) => {
