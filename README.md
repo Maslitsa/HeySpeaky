@@ -15,7 +15,8 @@ Windows 10 and 11. Free and open source.
 
 https://github.com/user-attachments/assets/80c74b4d-f177-4e71-8f04-a10e309d21e1
 
-<sub>43 seconds, sound on. Every frame of it is drawn in code - see [video/](video).</sub>
+<sub>43 seconds, sound on. Every frame of it is drawn in code - see [video/](video).<br>
+Voice: Laura, elevenlabs.io. Music: created with Eleven Music.</sub>
 
 </div>
 
@@ -236,9 +237,11 @@ Bigger local models hear better and are slower and larger:
 
 The video at the top is code, not editing: [Remotion](https://www.remotion.dev/)
 and [three.js](https://threejs.org/). Speaky is the mono pill with eyes, and
-its eight bars move by the same formula the app uses. The four-language
-sentence is a synthesised voice, and what lands in the window is what
-HeySpeaky really typed for it, word for word. How to build it, and what is
+its eight bars move by the same formula the app uses. The narration and the
+four-language sentence are a synthesised voice from
+[elevenlabs.io](https://elevenlabs.io), the music was created with Eleven
+Music, and what lands in the window is what HeySpeaky really typed for that
+sentence, word for word. How to build it, and what is
 real and what is not: [video/README.md](video/README.md).
 
 ## Something wrong?
