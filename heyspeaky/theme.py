@@ -171,18 +171,11 @@ WIDTH = 248
 HEIGHT = 54
 PADDING = 10
 
-# Glass. The desktop behind the pill is captured once, blurred by BLUR and
-# tinted with TINT, which is what gives the dark pill some depth instead of
-# looking like a flat sticker.
-BLUR = 22
+# Glass: the capsule's colour, and how solid it is. Windows composites the
+# pill over the live desktop through its alpha channel, so this is real
+# translucency, not a picture of the wallpaper taken a moment ago.
 TINT = (14, 14, 17)
-# How solid the capsule is. Windows composites the pill over the live desktop
-# through its alpha channel, so this is real translucency, not a picture of
-# the wallpaper taken a moment ago.
 PILL_ALPHA = 0.90
-# Kept because config and older code still name them.
-TINT_STRENGTH = 0.82
-TINT_STRENGTH_LIGHT = 0.91
 SHADOW_OFFSET = 8
 SHADOW_BLUR = 22
 SHADOW_ALPHA = 0.38
@@ -199,10 +192,7 @@ RIM_ALPHA = 0.45
 
 # Text. Only the error message uses it now.
 TEXT_LIGHT = (245, 245, 247)
-TEXT_DARK = (11, 11, 15)
 MUTED_STRENGTH = 0.68
-# Above this average brightness the backdrop counts as light.
-LIGHT_BACKDROP = 138
 
 FONT_SIZE = 13
 LABEL_SIZE = 11
@@ -222,8 +212,6 @@ GLYPH_STROKE = 2.2
 # How solid a button is while it cannot be used.
 BUTTON_DIM = 0.45
 
-# Kept because diagnostics and older code still name it.
-DOT = 10
 STATE_COLOURS = {
     "listening": (255, 69, 58),
     "transcribing": (255, 159, 10),
@@ -257,11 +245,6 @@ BAR_EDGE_FADE = (0.25, 0.55, 0.80)
 BUTTON_SHADOW = 0.34
 BUTTON_INNER_LIGHT = 0.42
 BUTTON_INNER_SHADE = 0.28
-
-# Motion, in seconds.
-SPRING_IN = 0.28
-FADE_OUT = 0.22
-HIDE_DELAY = 1.6
 
 # Room around the capsule for its shadow. The window is this much bigger than
 # the glass on every side.

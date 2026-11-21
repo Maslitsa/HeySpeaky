@@ -19,10 +19,20 @@ to be understood rather than trusted:
   and never stores or transmits them.
 - **The microphone**, opened *only* while you are recording. Windows' own "app
   is using your microphone" indicator is therefore an honest signal.
-- **The clipboard**, to place the transcript.
-- **Synthetic keystrokes**, to paste into the focused window.
-- **The network**, only when the cloud backend is enabled, and only to
-  `api.openai.com`. The default backend is local and sends nothing anywhere.
+- **The clipboard**, to place the transcript, and to read the word you
+  selected when you press Ctrl+Alt+Win. What was on it is put back.
+- **Synthetic keystrokes**: Ctrl+V to paste into the focused window, and
+  Ctrl+C to read that selection.
+- **The network**, to three places:
+  - `api.openai.com`, with your own key, while OpenAI does the
+    transcribing (the default): the audio of each dictation, and, with
+    *Fix the alphabet* on, the text that came back, so a word in the wrong
+    alphabet can be put right. With *This laptop* chosen instead, no audio
+    and no text leave the computer.
+  - `api.github.com`, once in a while, to see whether there is a newer
+    version.
+  - Hugging Face, only when you pick a model on this laptop that is not
+    downloaded yet.
 
 ## What the installer downloads
 

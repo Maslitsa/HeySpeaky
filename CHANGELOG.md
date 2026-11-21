@@ -59,6 +59,31 @@ shortcuts are removed so only one copy starts with Windows.
 
 ### Added
 
+- **Fix the alphabet.** After OpenAI transcribes, a small text model puts a
+  word written in the wrong alphabet back in its own: "Kubernetes cluster
+  upal" becomes "упал", "Данке дир" becomes "Danke dir". On twelve sentences
+  that change language, read twice, it improved 4 of 24 recordings and made
+  none worse, usually in under a second. A second check refuses any answer
+  that changes the words rather than their alphabet, and any error or slow
+  answer leaves the text as the speech model wrote it. It runs only when your languages use
+  both Latin and Cyrillic letters and the text has Latin in it, and it is a
+  switch in the tray panel.
+- **Your words** in the tray panel is now a page: every word it has learned,
+  what it heard instead, and two clicks to make it forget one. It used to
+  open a JSON file in Notepad.
+- Issue forms for a bug, for wrong words in your languages and for an idea,
+  and a contributing guide that walks through how one dictation goes through
+  the code.
+
+### Fixed
+
+- The glass pill's shadow was cut off by the edge of its window and drew a
+  faint grey rectangle round the pill on a white page. The shadow, and the
+  coloured rim while listening, now fade to nothing before the edge, in the
+  pill, the correction box and the tray panel alike.
+
+### Added, earlier
+
 - A window opens during the install with a progress bar, a rough time left,
   and a dinosaur that jumps cactuses (Space) until SpeakIt is ready. It closes
   itself when the install finishes. `-NoGame` skips it.

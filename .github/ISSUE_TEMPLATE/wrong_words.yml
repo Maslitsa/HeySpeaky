@@ -1,0 +1,57 @@
+name: It wrote the wrong words
+description: A language, a name or an alphabet it gets wrong
+labels: ["recognition"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most useful thing you can send. Everything here was tuned
+        on Kazakh, Russian, German and English spoken by one person, so your
+        languages are new information.
+
+        A recording helps most: click the HeySpeaky icon in the tray, then
+        **Save a problem report**, and attach the ZIP from your Desktop. It
+        holds the last five recordings, so dictate the sentence just before.
+
+  - type: input
+    id: languages
+    attributes:
+      label: The languages you mix
+      placeholder: Ukrainian and English
+    validations:
+      required: true
+
+  - type: textarea
+    id: said
+    attributes:
+      label: What you said
+    validations:
+      required: true
+
+  - type: textarea
+    id: typed
+    attributes:
+      label: What it typed
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Transcribed by
+      options:
+        - OpenAI
+        - This laptop
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: alphabet
+    attributes:
+      label: Fix the alphabet (in the tray panel)
+      options:
+        - "On"
+        - "Off"
+        - Not in my panel
+        - Not sure

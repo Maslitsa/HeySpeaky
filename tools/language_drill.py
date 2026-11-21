@@ -43,7 +43,9 @@ for stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
+from heyspeaky import alphabet                               # noqa: E402
 from heyspeaky import config as config_module               # noqa: E402
+from heyspeaky.languages import NAMES                       # noqa: E402
 from heyspeaky.transcribe import CloudBackend               # noqa: E402
 
 TTS_MODEL = "gpt-4o-mini-tts"
@@ -204,12 +206,16 @@ def variants(base):
     has to silence the helpers themselves.
     """
     def cfg(**cloud):
+        # Every variant but the first measures the request alone, so its
+        # numbers stay comparable with the runs before the alphabet check.
         out = copy.deepcopy(base)
+        out["transcription"]["cloud"]["alphabet_check"] = False
         out["transcription"]["cloud"].update(cloud)
         return out
 
     return [
-        ("as shipped", cfg(), set()),
+        ("as shipped", copy.deepcopy(base), set()),
+        ("no alphabet check", cfg(), set()),
         ("languages only", cfg(), {"prompt", "keywords"}),
         ("no keywords", cfg(), {"keywords"}),
         ("no prompt", cfg(), {"prompt"}),
@@ -284,13 +290,21 @@ def script_loss(reference, heard):
 
 
 def run(cfg, clips, read_pcm, rate, quiet):
+    cloud = cfg["transcription"]["cloud"]
+    codes = [str(code) for code in cloud.get("languages") or []]
     with silence_helpers(quiet):
         backend = CloudBackend(cfg)
         heard = {}
         for name, take, path in clips:
             pcm, _ = read_pcm(path, rate)
             try:
-                heard[(name, take)] = backend.transcribe(pcm, "")
+                text = backend.transcribe(pcm, "")
+                # What the app does after the cloud: see Router.transcribe.
+                if cloud.get("alphabet_check"):
+                    text = alphabet.check(
+                        text, codes, NAMES, backend.api_key,
+                        cloud.get("alphabet_model") or "gpt-5.4-mini")
+                heard[(name, take)] = text
             except Exception as exc:
                 heard[(name, take)] = "FAILED: {}".format(str(exc)[:100])
             time.sleep(0.2)

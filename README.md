@@ -39,6 +39,35 @@ dictation picks one language per sentence, so whatever you said in the
 others comes back translated, spelled out in the wrong alphabet, or not at
 all. HeySpeaky expects you to switch.
 
+## What it adds to the model
+
+The words come from OpenAI's newest speech model, which anyone can call,
+and on its own it already copes with most switches. HeySpeaky is built
+around the mistakes that are left. Measured on twelve sentences that change
+language halfway, each read twice, in two runs
+([tools/language_drill.py](tools/language_drill.py)):
+
+| | Words wrong |
+| --- | --- |
+| The same model, asked plainly | 11.6% and 13.2% |
+| Asked the HeySpeaky way: your languages, in the order that measured best | 11.0% and 11.7% |
+| Then the alphabet check | **9.1% and 10.2%** |
+
+That is about a fifth fewer mistakes, and the ones that go are the ones
+that hurt:
+
+- **A word in the wrong alphabet.** "Kubernetes cluster *upal*" for
+  *упал*, "*Данке дир*" for *Danke dir*. The alphabet check reads what came
+  back and puts that word in its own alphabet, usually in under a second.
+  A second check makes sure it can only change the alphabet, never the
+  words. It runs only when your languages use both Latin and Cyrillic letters and the
+  text has Latin in it, so a plain Russian sentence does not wait for it.
+- **Your names.** Correct a word once with Ctrl+Alt+Win and it is named to
+  the model from then on. See [Teach it your words](#teach-it-your-words).
+- **Kazakh letters.** Ә, Ғ, Қ, Ң, Ө, Ұ, Ү, Һ and І survive into the text, and
+  can be typed into HeySpeaky's own fields on a Kazakh keyboard, which
+  Windows' Tk toolkit cannot do by itself.
+
 ## Install
 
 Paste this into PowerShell:
@@ -184,8 +213,11 @@ One click on the tray icon opens it.
   when OpenAI cannot be reached.
 - **Model on this laptop**, from Tiny to Large v3 Turbo, downloaded when you
   pick it.
+- **Fix the alphabet**, on by default when your languages use both Latin
+  and Cyrillic letters.
 - **Pause Ctrl+Alt** for a game or a call.
-- **Your words**: the corrections it has learned.
+- **Your words**: every word it has learned and what it heard instead.
+  Click one twice to make it forget.
 - **Save a problem report**: a ZIP on your Desktop with your settings and
   the last five recordings, never your key, for when it works worse on one
   PC than another.
@@ -205,6 +237,11 @@ same mistake twice it is also fixed in the text afterwards. One correction
 is a hint, not a rule, so a real word that happens to sound alike is not
 swallowed for good.
 
+To see what it has learned, click the tray icon, then **Your words**. Each
+word shows what it was heard as, and two clicks on one make it forget it.
+To add a name before it has ever been got wrong, press Ctrl+Alt+Win with
+nothing selected and type it.
+
 Your words stay on your computer, in `%APPDATA%\HeySpeaky\dictionary.json`.
 
 ## OpenAI or this laptop
@@ -220,7 +257,7 @@ against the same audio played through speakers into the microphone.
 | Russian, Kazakh | much better | the weak ones |
 | Switching mid-sentence | yes, with no pause | only across a pause |
 | Cost | about $0.006 a minute, your own key | free |
-| Privacy | audio is sent to OpenAI when you dictate | nothing leaves the computer |
+| Privacy | audio is sent to OpenAI when you dictate, and the text too while *Fix the alphabet* is on | nothing leaves the computer |
 | Offline | no | yes |
 
 Bigger local models hear better and are slower and larger:
@@ -243,6 +280,23 @@ four-language sentence are a synthesised voice from
 written in Python, and what lands in the window is what HeySpeaky really
 typed for that sentence, word for word. How to build it, and what is
 real and what is not: [video/README.md](video/README.md).
+
+## Questions
+
+**Windows already has voice typing (Win+H). Why this?** Win+H listens for
+one language at a time, the one your keyboard is set to. HeySpeaky expects
+the switch in the middle of the sentence.
+
+**How is it different from Wispr Flow and the other paid apps?** It is free
+and open source, it runs on your own OpenAI key (about $3.60 a month at
+twenty minutes a day) or entirely on your computer, and it is built for
+people who write in more than one alphabet.
+
+**What does it send, and where?** See the privacy row above, and
+[SECURITY.md](SECURITY.md) for everything it touches. There is no account
+and no server of mine in between.
+
+**Mac or Linux?** Windows only, for now.
 
 ## Something wrong?
 

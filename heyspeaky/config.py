@@ -188,6 +188,14 @@ DEFAULTS = {
             # seconds is a bad trade: it makes a network problem cost half a
             # minute of staring at the pill.
             "timeout": 15,
+            # The alphabet check (heyspeaky/alphabet.py): after the speech
+            # model, a small text model puts a word written in the wrong
+            # alphabet back in its own, "upal" as "упал". Measured on the
+            # drill: 4 of 24 recordings better, none worse, 0.7 s. It runs
+            # only when your languages mix Cyrillic and Latin and the text
+            # has Latin in it. Switched in the tray panel.
+            "alphabet_check": True,
+            "alphabet_model": "gpt-5.4-mini",
             # If the API errors or times out, transcribe locally instead of
             # losing what you just said.
             "fallback_to_local": True,

@@ -51,6 +51,7 @@ import logging
 import os
 import re
 import unicodedata
+import zlib
 
 from . import config
 
@@ -180,6 +181,29 @@ def add(heard, meant, entries=None, path=None):
     if heard:
         entry["heard"] = heard
     return [entry] + kept
+
+
+def entry_key(entry):
+    """A name for one entry that says nothing of what is in it: the tray
+    panel's action names can reach the log, and a word must not."""
+    text = "{}\0{}".format(_clean(entry.get("meant")),
+                           _clean(entry.get("heard")))
+    return "word:{:08x}".format(zlib.crc32(text.encode("utf-8")))
+
+
+def listing(path=None):
+    """(key, meant, heard) for each entry, newest first, for the panel."""
+    return [(entry_key(e), _clean(e.get("meant")), _clean(e.get("heard")))
+            for e in load(path)]
+
+
+def forget(key, path=None):
+    """Removes the entry `entry_key` named. Returns whether one went."""
+    entries = load(path)
+    kept = [e for e in entries if entry_key(e) != key]
+    if len(kept) == len(entries):
+        return False
+    return save(kept, path)
 
 
 def words(entries=None, path=None, limit=KEYWORD_LIMIT):

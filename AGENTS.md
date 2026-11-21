@@ -25,6 +25,7 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
 | `heyspeaky/languages.py` | the languages list and its tray grouping |
 | `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
+| `heyspeaky/alphabet.py` | the alphabet check: a word put back in the alphabet it was spoken in |
 | `heyspeaky/correct.py` | Ctrl+Alt+Win: the box that asks what it should have said |
 | `heyspeaky/panel.py` | the tray panel: what a click on the tray icon opens |
 | `heyspeaky/apikey.py` | the OpenAI key: pasted into the tray panel, checked, saved |
@@ -37,7 +38,6 @@ without jargon, and say what you actually did and what you could not do.
 | `install.ps1` `uninstall.ps1` | how everyone installs and removes it |
 | `tools/doctor.py` | the check-up; the installer runs it with `--install` |
 | `tools/ui_lab.py` | draws every state to a PNG, or `--gif` to animate it |
-| `tools/pitch_video.py` | the pitch video, drawn from the same renders; `--video` makes the mp4 with its sound |
 | `tools/readme_media.py` | the README's pictures, from the same drawing code; `--film` takes the poster and social preview from the film |
 | `video/` | the film: Speaky, the Mono pill with eyes, in a 3D world drawn in code (Remotion + three.js); build it outside OneDrive (`video/README.md`) |
 | `tools/benchmark.py` | measures models against real recordings |
@@ -144,6 +144,12 @@ without jargon, and say what you actually did and what you could not do.
   with English third "Ертең кездесеміз" came back as "If time is thisms". A language switched on from
   the tray is inserted at the front for the same reason.
   `tools/language_drill.py` is how any of this gets re-measured.
+  **It matters less than it did.** Re-measured on 21 November with the
+  model then current, asking with no languages at all got 11.6% and
+  13.2% of words wrong against 11.0% and 11.7% the HeySpeaky way: a
+  point or so, not the six it once was. The owner noticed it himself -
+  plain Whisper apps now cope with his Russian and English - and the
+  answer was the alphabet check, below, not a better order.
 - **A new install starts with the computer's own languages**
   (`languages.from_this_computer`): the language Windows's menus are in,
   then every keyboard layout, English last, five at most. The defaults are
@@ -203,6 +209,26 @@ without jargon, and say what you actually did and what you could not do.
   Kazakh letter written as its Russian look-alike, "Магжан" for "Мағжан" -
   is fixed at once, for every word somebody meant, corrected or declared; a
   word differing only in case is left alone, because "notion" is a word.
+- **The alphabet check is what HeySpeaky adds that the model does not**
+  (`alphabet.py`). What the model still gets wrong in mixed speech is
+  mostly one word in the other alphabet: "Kubernetes cluster upal",
+  "Данке дир", "Ефтенг" for "Ертең". After the cloud, a text model is asked
+  to fix exactly that. Measured on 21 November, the drill's 24 recordings:
+  gpt-5.4-mini improved 4 and made none worse, 0.7 s median, 0.84 s worst,
+  and the drill went from 11.0% to 9.1% and from 11.7% to 10.2% of words
+  wrong. It is told reasoning "none": at "low" it was no better and took up
+  to 2.4 s. gpt-4o-mini fixed as much but turned "ещё не пришла" into "уже
+  пришла", which says the opposite, so `same_words` now reads both texts in
+  Latin letters and refuses any answer that is not the same words, in the
+  same order, in another alphabet. It runs only after the cloud, with no
+  language pinned, when the user's languages mix Cyrillic and Latin and the
+  text has Latin in it, so a purely Russian sentence never waits. Any error
+  or slow answer types the text as it came. Its log lines carry counts and
+  seconds, never the text.
+- **Your words is a page in the panel, not a file.** The owner could not
+  read the JSON Notepad opened. Each word shows what it was heard as, and
+  two clicks forget it, as Quit takes two. The action names carry a CRC of
+  the entry, never the word, because action names reach the log.
 - **The correction key is Ctrl+Alt+Win, not Ctrl+Alt+Space.** Space was the
   first choice, and on the owner's machine another program owns
   Ctrl+Alt+Space as a global shortcut: it gets the keys first, and a hook
@@ -303,6 +329,14 @@ without jargon, and say what you actually did and what you could not do.
   envelope matches the original at 0.94. The end sound is "auto" by
   default: blip with mono, drip with the glass; `_migrate` moves a stored
   "drip", the old default, to "auto".
+- **A shadow fades to nothing before its window's edge**
+  (`glass._fade_at_edges`). The pill's blur reached past the 14 pixels of
+  room its window leaves and was cut off there: alpha 46 along the bottom
+  edge, a grey rectangle round the pill on a white page. The shadow and the
+  listening rim are eased out across that room rather than the window made
+  bigger, because Windows hit-tests a layered window by its alpha and a
+  bigger shadow would catch more clicks. Inside the capsule nothing moved
+  by more than 6 of 255. A test reads all four edges of every window.
 - **Never draw something translucent straight onto an RGBA frame.**
   `ImageDraw` on an RGBA picture replaces the pixel, alpha and all; it does
   not lay one colour over another. The panel's separator was a line of

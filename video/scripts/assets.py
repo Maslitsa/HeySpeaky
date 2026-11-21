@@ -158,7 +158,7 @@ def app_voice(name):
 
 def levels_for(path):
     """The pill's level on every frame of a wav: the meter, then the
-    overlay's easing - quick up, slow down - as pitch_video.py does it."""
+    overlay's easing - quick up, slow down."""
     with wave.open(str(path), "rb") as handle:
         rate = handle.getframerate()
         raw = np.frombuffer(handle.readframes(handle.getnframes()),

@@ -31,45 +31,6 @@ import keyboard
 
 logger = logging.getLogger("heyspeaky.hotkey")
 
-class _MOUSEINPUT(ctypes.Structure):
-    _fields_ = [
-        ("dx", wintypes.LONG), ("dy", wintypes.LONG),
-        ("mouseData", wintypes.DWORD), ("dwFlags", wintypes.DWORD),
-        ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_void_p),
-    ]
-
-
-class _KEYBDINPUT(ctypes.Structure):
-    _fields_ = [
-        ("wVk", wintypes.WORD), ("wScan", wintypes.WORD),
-        ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD),
-        ("dwExtraInfo", ctypes.c_void_p),
-    ]
-
-
-class _HARDWAREINPUT(ctypes.Structure):
-    _fields_ = [
-        ("uMsg", wintypes.DWORD), ("wParamL", wintypes.WORD),
-        ("wParamH", wintypes.WORD),
-    ]
-
-
-class _INPUTUNION(ctypes.Union):
-    # All three members are declared so sizeof(INPUT) matches what SendInput
-    # expects; it rejects the call outright if cbSize is wrong.
-    _fields_ = [("mi", _MOUSEINPUT), ("ki", _KEYBDINPUT),
-                ("hi", _HARDWAREINPUT)]
-
-
-class _INPUT(ctypes.Structure):
-    _fields_ = [("type", wintypes.DWORD), ("union", _INPUTUNION)]
-
-
-INPUT_KEYBOARD = 1
-KEYEVENTF_KEYUP = 0x0002
-# VK_NONAME: reserved by Windows and bound to nothing. Kept because the probe
-# guard in _on_key_event still recognises it.
-VK_NONAME = 0xFC
 
 # The longest the watchdog waits between refreshes that are not being
 # answered. See `_refresh_gap`: long enough that a scrolled page is not a
@@ -470,13 +431,6 @@ class HotkeyListener:
                         "starting", self._last_event - self._installed_at)
         name = (event.name or "").lower()
         if not name:
-            return
-        # The watchdog's own probe must not reach the state machine. It counts
-        # as "some other key", which would cancel a latched recording that has
-        # been running quietly while you talk. The watchdog would end the
-        # very dictation it exists to protect.
-        if getattr(event, "scan_code", None) == -VK_NONAME \
-                or name.strip() == "reserved":
             return
         kind = self._classify(name)
 

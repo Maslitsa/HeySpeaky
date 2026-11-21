@@ -33,7 +33,7 @@ import logging
 import time
 import tkinter as tk
 
-from . import glass, keymap, languages, localmodels, overlay, theme
+from . import alphabet, glass, keymap, languages, localmodels, overlay, theme
 
 logger = logging.getLogger("heyspeaky.panel")
 
@@ -46,7 +46,7 @@ FOCUS_GRACE_MS = 150
 # What stays open after a click and what closes: a switch you flip should be
 # seen to flip; a row that opens something else is done with the panel.
 STAYS_OPEN = ("pin:", "backend:", "pause", "lang:", "more-languages", "back",
-              "model:", "look:")
+              "model:", "look:", "alphabet", "word:")
 
 SEARCH_PROMPT = "Type a language"
 
@@ -107,12 +107,17 @@ class Item(object):
         return "Item({!r}, {!r})".format(self.kind, self.key)
 
 
+# The words page shows the newest of these; the rest are in the file.
+WORDS_SHOWN = 8
+WORDS_HINT = "Click a word twice to forget it."
+WORDS_EMPTY = "Select a mistake, press Ctrl+Alt+Win."
+
 CLICKABLE = ("chip", "segmented", "switch", "row", "back", "language",
              "button", "model")
 
 
 def layout(model, scale=1.0, page="main", scroll=0.0, query="",
-           quit_armed=False, key_text=""):
+           quit_armed=False, key_text="", forget=""):
     """Lays the panel out: its card size, and every part in window pixels.
 
     `model` is what the tray knows - see `Tray.panel_model`. Arithmetic and
@@ -178,6 +183,30 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
             add("model", "model:" + name, label, tall,
                 (local.get("current") == name, right_text), note)
             y += tall
+        return (width, y - margin + pad), items
+
+    if page == "words":
+        # What the owner asked for instead of a JSON file in Notepad: the
+        # words it has learned, each with what it heard, and a way to make
+        # it forget one. Two clicks, as Quit takes, so a stray one is safe.
+        add("back", "back", "Your words", row)
+        y += row + gap(4)
+        entries = model.get("words") or []
+        add("hint", None, WORDS_HINT if entries else WORDS_EMPTY, px(16))
+        y += px(16) + gap(8)
+        tall = px(theme.MODEL_ROW_HEIGHT)
+        for key, meant, heard in entries[:WORDS_SHOWN]:
+            armed = key == forget
+            add("model", key, meant, tall,
+                (False, "Click again to forget" if armed else "", armed),
+                "heard as " + heard if heard else "added by you")
+            y += tall
+        if len(entries) > WORDS_SHOWN:
+            add("hint", None, "and {} more in the file".format(
+                len(entries) - WORDS_SHOWN), px(16))
+            y += px(16) + gap(4)
+        add("row", "words-file", "Open the file", row, "more")
+        y += row
         return (width, y - margin + pad), items
 
     if page == "languages":
@@ -273,6 +302,16 @@ def layout(model, scale=1.0, page="main", scroll=0.0, query="",
         model_hint = localmodels.label(local.get("current", ""))
     add("row", "models", "Model on this laptop", row, None, hint=model_hint)
     y += row + gap(6)
+    # Only offered to someone it can help: OpenAI does the transcribing,
+    # and their languages are written in both Cyrillic and Latin letters.
+    yours = model.get("yours", ())
+    if (model.get("alphabet") is not None
+            and model.get("backend", "cloud") == "cloud"
+            and any(code in alphabet.CYRILLIC for code in yours)
+            and any(code not in alphabet.CYRILLIC for code in yours)):
+        add("switch", "alphabet", "Fix the alphabet", row,
+            bool(model.get("alphabet")))
+        y += row + gap(6)
 
     add("label", None, "Look", px(14))
     y += px(14) + px(theme.LABEL_GAP)
@@ -369,6 +408,10 @@ class TrayPanel(object):
     action names end up in the log.
     """
 
+    # The word on the words page waiting for its second click, and since when.
+    _forget = ""
+    _forget_at = None
+
     def __init__(self, root, model, act, scale=1.0, anchor=None,
                  on_closed=None, submit_key=None):
         self._root = root
@@ -445,11 +488,19 @@ class TrayPanel(object):
         return (self._quit_armed_at is not None
                 and now - self._quit_armed_at < theme.QUIT_ARMED)
 
+    def _forget_armed(self, now=None):
+        """The word waiting for its second click, if one is."""
+        now = time.monotonic() if now is None else now
+        if (self._forget_at is not None
+                and now - self._forget_at < theme.QUIT_ARMED):
+            return self._forget
+        return ""
+
     def _relayout(self):
         size = getattr(self, "_size", None)
         self._size, self._items = layout(
             self._model, self.scale, self._page, self._scroll, self._query,
-            self._armed(), self._key_text)
+            self._armed(), self._key_text, self._forget_armed())
         # The card only changes with the size and the look - switching to
         # mono turns the open panel black there and then - and typing into
         # the search lays the panel out again on every key.
@@ -558,6 +609,10 @@ class TrayPanel(object):
         if self._quit_armed_at is not None and not self._armed(now):
             # The second click did not come: back to plain Quit.
             self._quit_armed_at = None
+            self._relayout()
+            busy = True
+        if self._forget_at is not None and not self._forget_armed(now):
+            self._forget_at = None
             self._relayout()
             busy = True
         return busy
@@ -806,6 +861,9 @@ class TrayPanel(object):
         if self._quit_armed_at is not None:
             self._quit_armed_at = None
             self._refit()
+        elif self._forget_armed():
+            self._forget_at = None
+            self._refit()
         elif self._page == "key" and self._key_text:
             self._key_text = ""
             self._refit()
@@ -827,6 +885,7 @@ class TrayPanel(object):
             return
         if action == "back":
             self._page, self._query, self._key_text = "main", "", ""
+            self._forget_at = None
             self._hover_key = None
             self._refit()
             return
@@ -842,6 +901,17 @@ class TrayPanel(object):
             self._hover_key = None
             self._refit()
             return
+        if action == "words":
+            self._page, self._forget_at = "words", None
+            self._hover_key = None
+            self._refit()
+            return
+        if action.startswith("word:"):
+            if self._forget_armed() != action:
+                self._forget, self._forget_at = action, time.monotonic()
+                self._refit()
+                return
+            self._forget_at = None
         if action == "key-save":
             self._save_key()
             return

@@ -271,3 +271,19 @@ in the install command instead, as the README shows, and it is saved there.
 `gpt-4o-transcribe` rejects `languages` and `keywords`. Use `gpt-transcribe`,
 which is the default and the only model measured here that handles a sentence
 that switches language.
+
+### A word comes out in the wrong alphabet
+
+"upal" for "упал", or a German word spelled in Cyrillic. Click the tray
+icon and check that **Fix the alphabet** is on. It is only offered when
+your languages use both Latin and Cyrillic letters, and it only runs while
+OpenAI does the transcribing and no single language is pinned.
+
+The log says what it did for each dictation, without the words:
+`Alphabet check: 1 word(s) moved to their own alphabet (0.71s)`, `nothing
+to fix`, or `refused an answer that changed the words`. If it is skipped
+every time, the line says why, usually a timeout or a model your key cannot
+use. `transcription.cloud.alphabet_model` in `config.json` names the model.
+
+If the same word keeps coming back wrong, it is a word to teach rather than
+an alphabet to fix: select it and press Ctrl+Alt+Win.

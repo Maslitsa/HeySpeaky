@@ -338,6 +338,7 @@ def prepare(width=theme.WIDTH, height=theme.HEIGHT, rim=False,
             lambda value: int(value * theme.RIM_ALPHA)))
         glow = glow.filter(
             ImageFilter.GaussianBlur(theme.RIM_BLUR * scale * SS / 2.0))
+        glow.putalpha(_fade_at_edges(glow.getchannel("A"), box))
         base.alpha_composite(glow)
 
     _glass_body(base, box, mask, radius, scale, theme.PILL_ALPHA, 0.42, 6)
@@ -348,13 +349,44 @@ def prepare(width=theme.WIDTH, height=theme.HEIGHT, rim=False,
 
 
 def _drop_shadow(base, box, mask, scale):
-    """The shadow, so a capsule sits above the desktop rather than on it."""
+    """The shadow, so a capsule sits above the desktop rather than on it.
+
+    A blur this soft reaches further than the room the window leaves round
+    the capsule, so the shadow fades to nothing before the window's edge.
+    Cut off there instead, it drew a grey rectangle round the pill on a
+    white page: 46 of 255 along the bottom edge, 11 at the sides.
+    """
     shadow = Image.new("L", base.size, 0)
     shadow.paste(mask, (box[0], box[1] + int(theme.SHADOW_OFFSET * scale) * SS))
     shadow = shadow.filter(
         ImageFilter.GaussianBlur(theme.SHADOW_BLUR * scale * SS / 2.0))
     shadow = shadow.point(lambda value: int(value * theme.SHADOW_ALPHA))
-    base.paste((0, 0, 0, 255), (0, 0), shadow)
+    base.paste((0, 0, 0, 255), (0, 0), _fade_at_edges(shadow, box))
+
+
+def _fade_at_edges(alpha, box):
+    """`alpha`, eased down to nothing at the canvas edge. See _drop_shadow."""
+    room = min(box[0], box[1], alpha.size[0] - box[2], alpha.size[1] - box[3])
+    if room <= 0:
+        return alpha
+    return ImageChops.multiply(alpha, _edge_fade(alpha.size, room))
+
+
+def _edge_fade(size, room):
+    """255 inside, easing down to 0 at the border across `room` pixels."""
+    def ramp(length):
+        values = []
+        for index in range(length):
+            share = min(1.0, min(index, length - 1 - index) / float(room))
+            values.append(int(round(255 * share * share * (3 - 2 * share))))
+        return values
+
+    across = Image.new("L", (size[0], 1))
+    across.putdata(ramp(size[0]))
+    down = Image.new("L", (1, size[1]))
+    down.putdata(ramp(size[1]))
+    return ImageChops.multiply(across.resize(size, Image.NEAREST),
+                               down.resize(size, Image.NEAREST))
 
 
 def _glass_body(base, box, mask, radius, scale, alpha, specular_depth,
@@ -416,7 +448,7 @@ def _paste_button(frame, face, box, bleed, grow=1.0, lift=0.0):
 
 
 def paint(glass, state="listening", levels=None, text="", status="",
-          label="", hover=None):
+          hover=None):
     """One frame: the prepared glass, plus the parts that move.
 
     `hover` maps "cancel" and "accept" to (grow, turn, lift), as for the
@@ -505,7 +537,7 @@ def paint(glass, state="listening", levels=None, text="", status="",
     return frame
 
 
-def render(state="listening", levels=None, text="", status="", label="",
+def render(state="listening", levels=None, text="", status="",
            width=theme.WIDTH, height=theme.HEIGHT, open_share=1.0, scale=1.0,
            backdrop=None):
     """Prepare and paint together. For tools and tests, not for every frame.
@@ -515,8 +547,7 @@ def render(state="listening", levels=None, text="", status="", label="",
     """
     glass = prepare(width=width, height=height, rim=(state == "listening"),
                     open_share=open_share, scale=scale)
-    frame = paint(glass, state=state, levels=levels, text=text, status=status,
-                  label=label)
+    frame = paint(glass, state=state, levels=levels, text=text, status=status)
     if backdrop is None:
         return frame
     out = backdrop.convert("RGBA").resize(frame.size, Image.LANCZOS)
@@ -703,18 +734,6 @@ def mono_paint(mono, state="listening", level=0.0, now=0.0, collapse=0.0):
         frame.putalpha(frame.getchannel("A").point(
             lambda value: int(value * fade)))
     return frame
-
-
-def mono_render(state="listening", level=0.6, now=0.4, message="",
-                collapse=0.0, scale=1.0, backdrop=None):
-    """Prepare and paint together, for tools and tests."""
-    mono = mono_prepare(scale, message)
-    frame = mono_paint(mono, state, level, now, collapse)
-    if backdrop is None:
-        return frame
-    out = backdrop.convert("RGBA").resize(frame.size, Image.LANCZOS)
-    out.alpha_composite(frame)
-    return out
 
 
 # -- the correction composer -------------------------------------------------
@@ -1627,7 +1646,9 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None,
             _place_over(frame, face, (left + right) / 2.0 - face.size[0] / 2.0,
                         middle - face.size[1] / 2.0)
         elif kind == "model":
-            chosen, aside = item.extra
+            chosen, aside = item.extra[:2]
+            # A third value asks for the aside in red: "Click again to ..."
+            danger = len(item.extra) > 2 and item.extra[2]
             inset = _px(10, scale)
             upper = top + (bottom - top) * 0.36
             lower = top + (bottom - top) * 0.70
@@ -1640,7 +1661,8 @@ def panel_frame(card, items, scale=1.0, hover=None, motion=None,
                        _px(11, scale), tick)
             elif aside:
                 drawing.text((right - inset, middle), aside, font=small,
-                             fill=muted + (255,), anchor="rm")
+                             fill=(theme.DANGER if danger else muted)
+                             + (255,), anchor="rm")
         elif kind == "footer":
             drawing.text((left, middle), item.label, font=small,
                          fill=faint + (255,), anchor="lm")

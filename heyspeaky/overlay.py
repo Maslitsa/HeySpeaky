@@ -364,7 +364,6 @@ class Overlay:
         self._state = "listening"
         self._text = ""
         self._status = ""
-        self._label = ""
         self._level = 0.0
         self._shown_level = 0.0
         self._levels = deque([0.0] * theme.BARS, maxlen=theme.BARS)
@@ -584,7 +583,6 @@ class Overlay:
             else None,
             text=self._text,
             status=self._status,
-            label=self._label,
             hover=self._hover_frame(),
         )
         self._present(frame)
@@ -700,15 +698,8 @@ class Overlay:
     def set_level(self, level):
         self._level = max(0.0, min(1.0, float(level)))
 
-    def set_text(self, text):
-        self._text = text or ""
-
     def set_status(self, status):
         self._status = status or ""
-
-    def set_label(self, label):
-        """The small note on the right, such as which engine is in use."""
-        self._label = label or ""
 
     def flash(self, state, text, status="", hold=None):
         """Shows a terminal state briefly, then fades out.

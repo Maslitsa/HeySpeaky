@@ -23,7 +23,6 @@ import threading
 import time
 import tkinter as tk
 
-import numpy as np
 import webrtcvad
 
 from . import apikey
@@ -196,6 +195,9 @@ class App:
             on_local_model=self._local_models.choose,
             look=lambda: self.cfg["overlay"].get("style", "glass"),
             on_look=self._on_tray_look,
+            alphabet=lambda: bool(self.cfg["transcription"]["cloud"].get(
+                "alphabet_check", True)),
+            on_alphabet=self._on_tray_alphabet,
         )
 
     # -- speech detection --------------------------------------------------
@@ -819,6 +821,14 @@ class App:
         self.post(self.overlay.flash, "done", "",
                   "{} {}".format(verb, languages.name(code)), 1.4)
         self.tray.refresh()
+
+    def _on_tray_alphabet(self):
+        """The alphabet check on or off, from the tray panel."""
+        cloud = self.cfg["transcription"]["cloud"]
+        cloud["alphabet_check"] = not cloud.get("alphabet_check", True)
+        config_module.save(self.cfg)
+        logger.info("Alphabet check is now %s",
+                    "on" if cloud["alphabet_check"] else "off")
 
     def _on_tray_backend(self, backend):
         """Switches between local and cloud transcription."""

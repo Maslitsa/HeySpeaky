@@ -1,15 +1,20 @@
-name: Bug report
-description: Something does not work, or gets your language wrong
+name: Something is broken
+description: It does not start, Ctrl+Alt does nothing, the pill misbehaves, an install fails
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        [docs/troubleshooting.md](https://github.com/Maslitsa/HeySpeaky/blob/main/docs/troubleshooting.md)
-        covers the common ones: nothing heard, the hotkey going dead, and a
-        failed install.
+        Thank you for taking the time. [docs/troubleshooting.md](https://github.com/Maslitsa/HeySpeaky/blob/main/docs/troubleshooting.md)
+        covers the common ones: nothing heard, Ctrl+Alt going dead, a failed install.
 
-        If installing failed, attach `%TEMP%\HeySpeaky-install.log`.
+        **The fastest way to show what happened:** click the HeySpeaky icon in
+        the tray, then **Save a problem report**, and drag the ZIP from your
+        Desktop into the box below. It holds your settings, the log and the
+        last five recordings, never your key. If you would rather not share
+        the recordings, say so and leave the ZIP out.
+
+        If installing failed, attach `%TEMP%\HeySpeaky-install.log` instead.
 
         **Never paste an API key**, including inside a log excerpt.
 
@@ -17,27 +22,44 @@ body:
     id: what
     attributes:
       label: What happened
-      description: |
-        What you did, what you expected, what you got instead. If this is
-        about recognition, write what you said and what came out.
-    validations:
-      required: true
-
-  - type: dropdown
-    id: backend
-    attributes:
-      label: Backend
-      options:
-        - Local (Whisper on CPU)
-        - Local (Whisper on GPU)
-        - OpenAI
-        - Not sure
+      description: What you did, what you expected, and what you got instead.
     validations:
       required: true
 
   - type: textarea
+    id: again
+    attributes:
+      label: How to make it happen again
+      description: If you know. "Every time I press Ctrl+Alt in Chrome" is plenty.
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Transcribed by
+      options:
+        - OpenAI
+        - This laptop
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: look
+    attributes:
+      label: Look
+      options:
+        - Glass
+        - Mono
+        - Not sure
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+
+  - type: textarea
     id: checkup
     attributes:
-      label: CHECKUP.bat output
-      description: Double-click `CHECKUP.bat` and paste what it prints.
-      render: text
+      label: CHECKUP.bat output, or the problem report
+      description: Double-click `CHECKUP.bat` in the HeySpeaky folder and paste what it prints, or attach the problem report ZIP here.

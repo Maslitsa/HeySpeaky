@@ -31,7 +31,7 @@ import wave
 import numpy as np
 import webrtcvad
 
-from . import dictionary
+from . import alphabet, dictionary
 from .languages import NAMES
 
 logger = logging.getLogger("heyspeaky.transcribe")
@@ -509,12 +509,28 @@ class Router:
         weaker of the two on exactly the words people end up correcting.
         """
         text, backend = self._transcribe(pcm_bytes, language)
+        if backend == "cloud" and not language:
+            text = self._check_alphabet(text)
         # Naming the words in the request gets most of the way and not always
         # all of it: the measurement that put them there also showed a Kazakh
         # letter failing to survive into a Russian sentence. What the user has
         # spelled out is applied after the model has had its say. See
         # heyspeaky/dictionary.py.
         return dictionary.apply(text), backend
+
+    def _check_alphabet(self, text):
+        """A word written in the wrong alphabet, put back in its own. Only
+        with the cloud, which is already online with a key, and not when a
+        language is pinned: then the user has said which one it is.
+        See heyspeaky/alphabet.py."""
+        cloud = self._cfg["transcription"]["cloud"]
+        if not cloud.get("alphabet_check", True):
+            return text
+        languages = [str(code) for code in cloud.get("languages") or []]
+        return alphabet.check(
+            text, languages, _LANGUAGE_NAMES, self.cloud.api_key,
+            cloud.get("alphabet_model") or "gpt-5.4-mini",
+            dictionary.words())
 
     def _transcribe(self, pcm_bytes, language):
         self.last_fallback = ""

@@ -91,6 +91,8 @@ class Tray:
         on_local_model=None,
         look=None,
         on_look=None,
+        alphabet=None,
+        on_alphabet=None,
     ):
         self._config_path = config_path
         self._log_dir = log_dir
@@ -116,6 +118,8 @@ class Tray:
         self._on_local_model = on_local_model
         self._look = look
         self._on_look = on_look
+        self._alphabet = alphabet
+        self._on_alphabet = on_alphabet
         self._update_version = ""
         self._busy = False
 
@@ -428,6 +432,8 @@ class Tray:
             "key": self._key_state() if self._key_state else "saved",
             "local": self._local_models() if self._local_models else {},
             "look": self._look() if self._look else "glass",
+            "alphabet": self._alphabet() if self._alphabet else None,
+            "words": dictionary.listing(),
             "catalog": list(offered),
             "names": dict((code, language_names.name(code))
                           for code in offered),
@@ -440,7 +446,7 @@ class Tray:
             "dictate": self._toggle,
             "pause": self._toggle_pause,
             "update": self._update,
-            "words": self._open_dictionary,
+            "words-file": self._open_dictionary,
             "settings": self._open_config,
             "logs": self._open_logs,
             "report": self._report,
@@ -448,6 +454,8 @@ class Tray:
         }
         if self._on_key_page is not None:
             handlers["key-page"] = self._on_key_page
+        if self._on_alphabet is not None:
+            handlers["alphabet"] = self._on_alphabet
         if action in handlers:
             target = handlers[action]
         elif action.startswith("pin:"):
@@ -456,6 +464,10 @@ class Tray:
             target = self._make_language_toggle(action[len("lang:"):])
         elif action.startswith("backend:"):
             target = self._make_backend_setter(action[len("backend:"):])
+        elif action.startswith("word:"):
+
+            def target():
+                dictionary.forget(action)
         elif action.startswith("look:") and self._on_look:
             style = action[len("look:"):]
 

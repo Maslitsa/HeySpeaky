@@ -1,0 +1,22 @@
+name: An idea
+description: Something HeySpeaky should do, or do differently
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What gets in your way
+      description: The moment it happens, in your own words. This matters more than the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+
+  - type: input
+    id: languages
+    attributes:
+      label: The languages you dictate in
+      placeholder: Turkish and German

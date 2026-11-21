@@ -1832,7 +1832,6 @@ class CorrectionOnTheWindowsKey(CorrectionKey):
 
     # The inherited tests press Space; with this key Space is just a key.
     test_space_inside_the_chord_asks_for_a_correction = None
-    test_correcting_twice_does_not_go_hands_free = None
     test_holding_space_asks_once = None
     test_the_other_spelling_of_the_key_counts = None
 
@@ -3425,6 +3424,236 @@ class EverythingChangesWithTheLook(_PanelModel, unittest.TestCase):
                 self.assertEqual(set(frame.crop(entry).getdata()),
                                  {tuple(theme.MONO_FIELD) + (255,)},
                                  "at scale %s" % scale)
+
+
+class TheShadowFitsItsWindow(unittest.TestCase):
+    """A shadow cut off by the window's edge drew a grey rectangle round the
+    glass pill on a white page: alpha 46 of 255 along the bottom edge."""
+
+    def edges(self, image):
+        alpha = image.getchannel("A")
+        width, height = alpha.size
+        return max(max(alpha.getpixel((x, 0)), alpha.getpixel((x, height - 1)))
+                   for x in range(width)) + \
+            max(max(alpha.getpixel((0, y)), alpha.getpixel((width - 1, y)))
+                for y in range(height))
+
+    def test_nothing_reaches_the_edge_of_any_window(self):
+        for scale in (1.0, 1.25, 1.5):
+            for state in ("listening", "transcribing", "done"):
+                pill = glass.render(state=state, scale=scale)
+                self.assertEqual(self.edges(pill), 0, (state, scale))
+            for mono in (False, True):
+                shell = glass.composer(scale, mono).shell
+                self.assertEqual(self.edges(shell), 0, ("composer", mono))
+                card = glass.panel_card(300, 420, scale, mono)
+                card = card[0] if isinstance(card, tuple) else card
+                self.assertEqual(self.edges(card), 0, ("panel", mono))
+
+    def test_the_capsule_keeps_its_shadow(self):
+        """Faded at the window's edge, not taken away: right under the
+        capsule the shadow is still there."""
+        pill = glass.prepare()
+        below = pill.box[3] + 3
+        middle = (pill.box[0] + pill.box[2]) // 2
+        self.assertGreater(pill.image.getpixel((middle, below))[3], 20)
+
+
+from heyspeaky import alphabet  # noqa: E402
+
+
+class TheAlphabetCheck(unittest.TestCase):
+    """A word in the wrong alphabet put back in its own, and nothing else."""
+
+    MIXED = ["kk", "ru", "de", "en"]
+
+    def answer(self, text, status=200):
+        response = mock.Mock(status_code=status)
+        response.json.return_value = {
+            "choices": [{"message": {"content": text}}]}
+        if status != 200:
+            response.raise_for_status.side_effect = RuntimeError(status)
+        return response
+
+    def test_it_runs_only_where_it_can_help(self):
+        self.assertTrue(alphabet.needed("Kubernetes cluster upal", self.MIXED))
+        # Nothing in Latin letters: nothing for it to find.
+        self.assertFalse(alphabet.needed("Встреча в 14:30", self.MIXED))
+        # Every language in one alphabet: no other alphabet to belong to.
+        self.assertFalse(alphabet.needed("cluster upal", ["en", "de"]))
+        self.assertFalse(alphabet.needed("Kubernetes упал", ["ru"]))
+
+    def test_the_same_words_in_another_alphabet_pass(self):
+        for before, after in [
+            ("Kubernetes cluster upal, and the ingress returned 502.",
+             "Kubernetes cluster упал, and the ingress returned 502."),
+            ("Можешь глянуть pull request? Данке дир.",
+             "Можешь глянуть pull request? Danke dir."),
+            ("Ефтенг кездесеміз, but send the agenda.",
+             "Ертең кездесеміз, but send the agenda."),
+        ]:
+            self.assertTrue(alphabet.same_words(before, after), after)
+
+    def test_an_answer_that_changes_the_words_is_refused(self):
+        before = "Die Genehmigung ist schon nie пришла, so I cannot book."
+        for after in [
+            # Measured: gpt-4o-mini wrote this, which says the opposite.
+            "Die Genehmigung ist уже пришла, so I cannot book.",
+            # A word dropped, a word added, a translation.
+            "Die Genehmigung ist пришла, so I cannot book.",
+            "Die Genehmigung ist schon nie пришла, so I cannot book it now.",
+            "Разрешение ещё не пришло, поэтому я не могу забронировать.",
+            "",
+        ]:
+            self.assertFalse(alphabet.same_words(before, after), after)
+
+    def test_a_good_answer_is_used_and_a_bad_one_thrown_away(self):
+        text = "Kubernetes cluster upal."
+        with mock.patch("httpx.post",
+                        return_value=self.answer("Kubernetes cluster упал.")):
+            self.assertEqual(alphabet.check(text, self.MIXED, {}, "k",
+                                            "gpt-5.4-mini"),
+                             "Kubernetes cluster упал.")
+        with mock.patch("httpx.post",
+                        return_value=self.answer("The cluster crashed.")):
+            self.assertEqual(alphabet.check(text, self.MIXED, {}, "k",
+                                            "gpt-5.4-mini"), text)
+
+    def test_it_never_costs_the_dictation(self):
+        text = "Kubernetes cluster upal."
+        with mock.patch("httpx.post", side_effect=TimeoutError("slow")):
+            self.assertEqual(alphabet.check(text, self.MIXED, {}, "k",
+                                            "gpt-5.4-mini"), text)
+        with mock.patch("httpx.post", return_value=self.answer("", 500)):
+            self.assertEqual(alphabet.check(text, self.MIXED, {}, "k",
+                                            "gpt-5.4-mini"), text)
+
+    def test_a_sentence_it_cannot_help_is_not_sent_at_all(self):
+        with mock.patch("httpx.post") as post:
+            alphabet.check("Всё понятно, спасибо.", self.MIXED, {}, "k",
+                           "gpt-5.4-mini")
+        post.assert_not_called()
+
+    def test_a_reasoning_model_is_told_not_to_think(self):
+        """Left to its default effort it thinks for seconds about one line."""
+        with mock.patch("httpx.post",
+                        return_value=self.answer("cluster упал")) as post:
+            alphabet.check("cluster upal", self.MIXED, {}, "k", "gpt-5.4-mini")
+        self.assertEqual(post.call_args.kwargs["json"]["reasoning_effort"],
+                         "none")
+
+    def test_the_log_never_holds_what_was_said(self):
+        with mock.patch("httpx.post",
+                        return_value=self.answer("Magzhan cluster упал")):
+            with self.assertLogs("heyspeaky.alphabet", "INFO") as logs:
+                alphabet.check("Magzhan cluster upal", self.MIXED, {}, "k",
+                               "gpt-5.4-mini")
+        joined = "\n".join(logs.output)
+        self.assertNotIn("upal", joined)
+        self.assertNotIn("упал", joined)
+        self.assertNotIn("Magzhan", joined)
+
+    def test_the_users_own_words_are_named(self):
+        text = alphabet.instructions(self.MIXED, languages.NAMES, ["Мағжан"])
+        self.assertIn("Kazakh, Russian, German and English", text)
+        self.assertIn("Мағжан", text)
+
+
+class TheRouterChecksTheAlphabet(unittest.TestCase):
+    """Only after the cloud, only when no language is pinned, and only when
+    it is switched on."""
+
+    def router(self, check_on=True):
+        from heyspeaky.transcribe import Router
+        cfg = config_module.load()
+        cfg["transcription"]["backend"] = "cloud"
+        cfg["transcription"]["cloud"]["languages"] = ["ru", "en"]
+        cfg["transcription"]["cloud"]["alphabet_check"] = check_on
+        router = Router(engine=None, config=cfg)
+        router.cloud.transcribe = lambda pcm, language: "cluster upal"
+        router.cloud.available = lambda: True
+        return router
+
+    def test_the_cloud_text_is_checked(self):
+        with mock.patch.object(alphabet, "check",
+                               return_value="cluster упал") as check:
+            text, backend = self.router().transcribe(b"\0\0", "")
+        self.assertEqual((text, backend), ("cluster упал", "cloud"))
+        check.assert_called_once()
+
+    def test_not_when_pinned_or_switched_off(self):
+        with mock.patch.object(alphabet, "check") as check:
+            self.router().transcribe(b"\0\0", "ru")
+            self.router(check_on=False).transcribe(b"\0\0", "")
+        check.assert_not_called()
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class TheAlphabetSwitch(_PanelModel, unittest.TestCase):
+
+    def switches(self, **changes):
+        _size, items = panel_module.layout(self.model(**changes), 1.0)
+        return [item.key for item in items if item.kind == "switch"]
+
+    def test_offered_to_someone_who_writes_in_two_alphabets(self):
+        self.assertIn("alphabet", self.switches(alphabet=True))
+
+    def test_not_offered_where_it_would_do_nothing(self):
+        self.assertNotIn("alphabet", self.switches(alphabet=True,
+                                                   yours=["en", "de"]))
+        self.assertNotIn("alphabet", self.switches(alphabet=True,
+                                                   backend="local"))
+
+    def test_a_click_keeps_the_panel_open(self):
+        self.assertTrue(any("alphabet".startswith(prefix)
+                            for prefix in panel_module.STAYS_OPEN))
+
+
+@unittest.skipIf(panel_module is None, "tkinter is missing")
+class TheWordsPage(_PanelModel, unittest.TestCase):
+    """The owner's words in the panel, not a JSON file in Notepad."""
+
+    WORDS = [("word:0001", "Мағжан", "Marzhan"),
+             ("word:0002", "RealtimeSTT", "")]
+
+    def rows(self, forget=""):
+        _size, items = panel_module.layout(self.model(words=self.WORDS), 1.0,
+                                           page="words", forget=forget)
+        return [item for item in items if item.kind == "model"]
+
+    def test_each_word_says_what_it_was_heard_as(self):
+        rows = self.rows()
+        self.assertEqual([r.label for r in rows], ["Мағжан", "RealtimeSTT"])
+        self.assertEqual([r.hint for r in rows],
+                         ["heard as Marzhan", "added by you"])
+
+    def test_one_click_only_asks_for_a_second(self):
+        rows = self.rows(forget="word:0001")
+        self.assertEqual(rows[0].extra, (False, "Click again to forget", True))
+        self.assertEqual(rows[1].extra, (False, "", False))
+
+    def test_forgetting_removes_that_word_and_no_other(self):
+        path = os.path.join(tempfile.mkdtemp(), "dictionary.json")
+        entries = dictionary_module.add("Marzhan", "Мағжан", [], path)
+        entries = dictionary_module.add("", "RealtimeSTT", entries, path)
+        dictionary_module.save(entries, path)
+        listed = dictionary_module.listing(path)
+        gone = [key for key, meant, _ in listed if meant == "Мағжан"][0]
+        self.assertTrue(dictionary_module.forget(gone, path))
+        self.assertEqual([m for _, m, _ in dictionary_module.listing(path)],
+                         ["RealtimeSTT"])
+        self.assertFalse(dictionary_module.forget(gone, path))
+
+    def test_the_key_says_nothing_of_the_word(self):
+        """Action names can reach the log; a name someone said must not."""
+        key = dictionary_module.entry_key({"meant": "Мағжан",
+                                           "heard": "Marzhan"})
+        self.assertNotIn("Мағжан", key)
+        self.assertNotIn("Marzhan", key)
+        self.assertTrue(key.startswith("word:"))
+
+
+from unittest import mock  # noqa: E402
 
 
 if __name__ == "__main__":
