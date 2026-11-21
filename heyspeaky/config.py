@@ -190,12 +190,14 @@ DEFAULTS = {
             "timeout": 15,
             # The alphabet check (heyspeaky/alphabet.py): after the speech
             # model, a small text model puts a word written in the wrong
-            # alphabet back in its own, "upal" as "упал". Measured on the
-            # drill: 4 of 24 recordings better, none worse, 0.7 s. It runs
-            # only when your languages mix Cyrillic and Latin and the text
-            # has Latin in it. Switched in the tray panel.
+            # alphabet back in its own: "upal" as "упал", "on Prav" as "он
+            # прав". Measured on the drill, 48 recordings: 9.3% of words
+            # wrong became 6.2% with gpt-5.5, 11 better and none worse, in
+            # 1.3 s; gpt-5.4-mini got only to 8.1%. It runs only when your
+            # languages mix Cyrillic and Latin and the text has Latin in
+            # it. Switched in the tray panel.
             "alphabet_check": True,
-            "alphabet_model": "gpt-5.4-mini",
+            "alphabet_model": "gpt-5.5",
             # If the API errors or times out, transcribe locally instead of
             # losing what you just said.
             "fallback_to_local": True,
@@ -386,6 +388,10 @@ SUPERSEDED_CORRECT_KEYS = ["space"]
 # The end sound: "drip" was the default before the sound followed the look.
 SUPERSEDED_FINISH = ["drip"]
 
+# The alphabet check's first model. gpt-5.5 fixed 11 of 48 recordings where
+# it fixed 5, with none worse (alphabet.py).
+SUPERSEDED_ALPHABET_MODELS = ["gpt-5.4-mini"]
+
 
 def _migrate(user_config):
     """Brings an old config.json forward. Returns it and whether it changed.
@@ -420,6 +426,13 @@ def _migrate(user_config):
         changed = True
         logger.info("The end sound now follows the look (was %s)",
                     stored_finish)
+    stored_model = cloud.get("alphabet_model")
+    if stored_model in SUPERSEDED_ALPHABET_MODELS:
+        cloud["alphabet_model"] = \
+            DEFAULTS["transcription"]["cloud"]["alphabet_model"]
+        changed = True
+        logger.info("The alphabet check now asks %s (was %s)",
+                    cloud["alphabet_model"], stored_model)
     return user_config, changed
 
 

@@ -3603,7 +3603,9 @@ class TheRouterChecksTheAlphabet(unittest.TestCase):
         cfg["transcription"]["cloud"]["languages"] = ["ru", "en"]
         cfg["transcription"]["cloud"]["alphabet_check"] = check_on
         router = Router(engine=None, config=cfg)
-        router.cloud.transcribe = lambda pcm, language: "cluster upal"
+        from heyspeaky.transcribe import Heard
+        router.cloud.heard = lambda pcm, language, first=None: Heard(
+            "cluster upal", -0.01, -0.1, ["en"])
         router.cloud.available = lambda: True
         return router
 
@@ -3640,6 +3642,98 @@ class TheAlphabetSwitch(_PanelModel, unittest.TestCase):
     def test_a_click_keeps_the_panel_open(self):
         self.assertTrue(any("alphabet".startswith(prefix)
                             for prefix in panel_module.STAYS_OPEN))
+
+
+class AskingAgainWhenUnsure(unittest.TestCase):
+    """The owner said "Они потребуют одинаковое количество энергий" and got
+    "Альбатрос бродит акварель часовой мерки": heard as Kazakh, the first
+    language in his list. When the model's own odds are low it is asked
+    again with the other languages first."""
+
+    def router(self, answers):
+        from heyspeaky.transcribe import Router
+        cfg = config_module.load()
+        cfg["transcription"]["backend"] = "cloud"
+        cfg["transcription"]["cloud"]["languages"] = ["kk", "ru", "de", "en"]
+        cfg["transcription"]["cloud"]["alphabet_check"] = False
+        router = Router(engine=None, config=cfg)
+        router.cloud.available = lambda: True
+        self.asked = []
+
+        def heard(pcm, language, first=None):
+            self.asked.append(first)
+            return answers[first]
+        router.cloud.heard = heard
+        return router
+
+    def test_a_surer_answer_with_another_language_first_wins(self):
+        from heyspeaky.transcribe import Heard
+        router = self.router({
+            None: Heard("Альбатрос бродит акварель часовой мерки.", -0.9,
+                        -3.0, ["kk"]),
+            "ru": Heard("Они потребуют одинаковое количество энергий.",
+                        -0.04, -0.4, ["ru"]),
+            "de": Heard("Albatros brodit akvarel chasovoy merki.", -1.2,
+                        -4.0, ["de"])})
+        text, _backend = router.transcribe(b"\0\0", "")
+        self.assertEqual(text, "Они потребуют одинаковое количество энергий.")
+        self.assertEqual(sorted(self.asked, key=str), [None, "de", "ru"])
+
+    def test_a_shorter_answer_does_not_win_by_saying_less(self):
+        from heyspeaky.transcribe import Heard
+        router = self.router({
+            None: Heard("Біз қалаға ертең барамыз and we'll stay until "
+                        "Sunday.", -0.5, -2.0, ["kk"]),
+            "ru": Heard("Біз қалаға ертең барамыз.", -0.01, -0.1, ["kk"]),
+            "de": Heard("Biz qalaga erten baramyz and we'll stay until "
+                        "Sunday.", -0.8, -3.0, ["de"])})
+        text, _backend = router.transcribe(b"\0\0", "")
+        self.assertIn("Sunday", text)
+
+    def test_a_sure_answer_is_not_asked_twice(self):
+        from heyspeaky.transcribe import Heard
+        router = self.router({None: Heard("Всё понятно.", -0.01, -0.1,
+                                          ["ru"])})
+        router.transcribe(b"\0\0", "")
+        self.assertEqual(self.asked, [None])
+
+    def test_the_log_has_the_odds_and_never_the_words(self):
+        from heyspeaky.transcribe import Heard
+        router = self.router({
+            None: Heard("Альбатрос бродит.", -0.9, -3.0, ["kk"]),
+            "ru": Heard("Они потребуют.", -0.04, -0.4, ["ru"]),
+            "de": Heard("Albatros brodit.", -1.2, -4.0, ["de"])})
+        with self.assertLogs("heyspeaky.transcribe", "INFO") as logs:
+            router.transcribe(b"\0\0", "")
+        said = " | ".join(logs.output)
+        self.assertIn("-0.900", said)
+        self.assertIn("kept the ru one", said)
+        self.assertNotIn("Альбатрос", said)
+        self.assertNotIn("Они", said)
+
+    def test_the_request_asks_for_the_odds_and_can_lead_with_a_language(self):
+        cfg = config_module.load()
+        cfg["transcription"]["cloud"]["languages"] = ["kk", "ru", "de", "en"]
+        cfg["transcription"]["cloud"]["prompt"] = ""
+        backend = CloudBackend(cfg)
+        first = backend._field_variants("", first="ru")[0]
+        self.assertEqual(first["include[]"], ["logprobs"])
+        self.assertEqual(first["languages[]"], ["ru", "kk", "de", "en"])
+        self.assertTrue(first["prompt"].startswith("The speaker mixes "
+                                                   "Russian, Kazakh"))
+        oldest = backend._field_variants("")[2]
+        self.assertNotIn("include[]", oldest)
+
+    def test_the_odds_are_read_from_the_answer(self):
+        from heyspeaky.transcribe import Heard
+        heard = Heard.from_payload({
+            "text": " Привет ", "languages": [{"code": "ru"}],
+            "logprobs": [{"token": "Привет", "logprob": -0.2},
+                         {"token": "!", "logprob": 0.0}]})
+        self.assertEqual((heard.text, heard.languages), ("Привет", ("ru",)))
+        self.assertAlmostEqual(heard.average, -0.1)
+        self.assertAlmostEqual(heard.lowest, -0.2)
+        self.assertIsNone(Heard.from_payload({"text": "x"}).average)
 
 
 @unittest.skipIf(panel_module is None, "tkinter is missing")

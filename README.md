@@ -43,25 +43,30 @@ all. HeySpeaky expects you to switch.
 
 The words come from OpenAI's newest speech model, which anyone can call,
 and on its own it already copes with most switches. HeySpeaky is built
-around the mistakes that are left. Measured on twelve sentences that change
-language halfway, each read twice, in two runs
+around the mistakes that are left. Measured on 24 sentences that change
+language halfway, each read twice
 ([tools/language_drill.py](tools/language_drill.py)):
 
 | | Words wrong |
 | --- | --- |
-| The same model, asked plainly | 11.6% and 13.2% |
-| Asked the HeySpeaky way: your languages, in the order that measured best | 11.0% and 11.7% |
-| Then the alphabet check | **9.1% and 10.2%** |
+| The same model, asked plainly | 10.8% |
+| Asked the HeySpeaky way: your languages, in the order that measured best | 9.3% |
+| Then the alphabet check | **6.2%** |
 
-That is about a fifth fewer mistakes, and the ones that go are the ones
+That is about two in five mistakes gone, and the ones that go are the ones
 that hurt:
 
-- **A word in the wrong alphabet.** "Kubernetes cluster *upal*" for
-  *упал*, "*Данке дир*" for *Danke dir*. The alphabet check reads what came
-  back and puts that word in its own alphabet, usually in under a second.
-  A second check makes sure it can only change the alphabet, never the
-  words. It runs only when your languages use both Latin and Cyrillic letters and the
-  text has Latin in it, so a plain Russian sentence does not wait for it.
+- **A word in the wrong alphabet.** "I think *on Prav*" for *он прав*,
+  "*Данке дир*" for *Danke dir*. The alphabet check goes through what came
+  back word by word and puts each one in its own alphabet, in about a
+  second. A second check makes sure it can only change the alphabet, never
+  the words. It runs only when your languages use both Latin and Cyrillic
+  letters and the text has Latin in it, so a plain Russian sentence does
+  not wait for it.
+- **The wrong language altogether.** A short, quiet phrase can be heard
+  as the wrong language and come back as nonsense. The model says how sure
+  it was of every word, and when it was unsure HeySpeaky asks again with
+  your other languages first and keeps the answer it is surest of.
 - **Your names.** Correct a word once with Ctrl+Alt+Win and it is named to
   the model from then on. See [Teach it your words](#teach-it-your-words).
 - **Kazakh letters.** Ә, Ғ, Қ, Ң, Ө, Ұ, Ү, Һ and І survive into the text, and

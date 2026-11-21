@@ -4,6 +4,27 @@ Notable changes to HeySpeaky, called VoiceType until September 2026, then
 SpeakIt, and SpeakIt again from 26 October to 19 November 2026. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.1] - 2026-11-21
+
+### Changed
+
+- **The alphabet check got sharper.** It now goes through the text word by
+  word and asks whether each Latin word is English or German at all, so
+  "I think on Prav" becomes "он прав" and "Prosta yazabil napisat" becomes
+  Russian. It asks gpt-5.5. On 24 sentences that change language, read
+  twice, words wrong went from 9.3% to 6.2% with nothing made worse; the
+  same model with no help at all gets 10.8%. It takes about a second, two
+  at most. Settings that named the old model are moved to the new one.
+
+### Added
+
+- **Asking again when unsure.** A short, quiet phrase could be heard as the
+  wrong language and typed as nonsense. HeySpeaky now asks OpenAI how sure
+  it was of each word; when it was unsure, the same audio goes out again
+  with your other languages first, and the surest answer is kept, unless it
+  has dropped words. The log notes how sure each dictation was, without the
+  words, so the line can be tuned.
+
 ## [1.2.0] - 2026-11-21
 
 The first numbered release since 1.0.0, and the first with HeySpeaky's

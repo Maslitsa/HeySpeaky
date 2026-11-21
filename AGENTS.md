@@ -100,7 +100,14 @@ rule here in a line or two, with its story there.
 - **One correction is a hint, not a rule**: it replaces only once made
   `REPLACE_AFTER` (2) times; a Kazakh spelling is fixed at once. ([why](docs/why.md#hints))
 - **The alphabet check** (`alphabet.py`) may change only the alphabet
-  (`same_words`), only after the cloud, and never logs the text. ([why](docs/why.md#alphabet-check))
+  (`same_words`), only after the cloud, and never logs the text. Its
+  wording and model (gpt-5.5) were chosen on the drill; change either only
+  with a drill run. ([why](docs/why.md#alphabet-check))
+- **When the model is unsure it is asked again** with the next languages
+  first (`Router._second_opinion`, `UNSURE_BELOW`); the surest answer wins
+  unless it is shorter. The line is a first guess: tune it from the
+  "Cloud heard … sure on average" lines in the owner's log.
+  ([why](docs/why.md#asking-again-when-unsure))
 - **Your words is a page in the panel, not a file**; its action names carry a
   CRC of the entry, never the word. ([why](docs/why.md#your-words))
 - **The correction key is Ctrl+Alt+Win, not Ctrl+Alt+Space**, in any order.

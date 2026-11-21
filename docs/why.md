@@ -255,6 +255,42 @@ text has Latin in it, so a purely Russian sentence never waits. Any error
 or slow answer types the text as it came. Its log lines carry counts and
 seconds, never the text.
 
+**Later that day it got sharper.** The owner asked for "a model that
+understands the sentence and decides which word it was, in any of the
+languages". Twelve harder sentences went into the drill (48 recordings in
+all), and three ideas were measured on the same drafts: a text model told
+to fix words that make no sense (gpt-5.5: 7.9%, but it turned "upal" into
+the English "up all"), gpt-audio-mini listening again (7.9%, 8 better and
+3 worse: "half past seven" became "7:30", "10 percent" "10 процентов"),
+and the alphabet check itself. The check had left "I think on Prav" and
+"Prosta yazabil napisat" alone - its instruction described the job, and
+the model did not go looking. Rewritten to go word by word and ask whether
+a Latin word is English or German at all, with examples from outside the
+drill, gpt-5.5 took the drill from 9.3% to 6.2% (11 better, none worse;
+1.3 s median, 2.6 s worst), where gpt-5.4-mini reached only 8.1%. The
+same model with no hints at all gets 10.8% on those 48. Eight sentences
+nothing had been tuned on came back unchanged, nothing better or worse.
+Runs vary by about half a point. A stored "gpt-5.4-mini" is moved forward
+by `_migrate`.
+
+### Asking again when unsure
+
+The owner said "Они потребуют одинаковое количество энергий" and got
+"Альбатрос бродит акварель часовой мерки". The log showed why: a 3.6 s
+recording, so quiet it was boosted eight times, heard as Kazakh - the
+first language in his list. No text check can fix that; the words are
+gone. What can catch it is the model's own odds: asked for `logprobs`,
+`gpt-transcribe` says how sure it was of every word. Synthesised speech
+would not reproduce the mistake - 48 quiet, noisy short phrases came back
+right, the least sure averaging -0.11 - so the line, `UNSURE_BELOW`, is
+set at -0.3, below anything an ordinary recording reached, and every cloud
+dictation now logs its average and its least sure word. Below the line the
+audio goes out again with the next two languages first, both at once, and
+the surest answer wins unless it has under 80% of the words: on the drill,
+asked with Kazakh first, one sentence came back without its English half
+and surer than the whole one. The next nonsense transcript in his log will
+say where the line really belongs.
+
 ### Your words
 
 **Your words is a page in the panel, not a file.** The owner could not

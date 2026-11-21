@@ -113,6 +113,14 @@ CONNECT_TIMEOUT = 4.0
 # wifi drop should cost one slow dictation, not a minute of degraded ones.
 OFFLINE_MEMO_SECONDS = 20.0
 
+# Below this, the model's own average odds on the words it wrote, it is
+# asked again with another language first (Router._second_opinion). On 96
+# synthesised recordings that came back right or nearly right the least sure
+# averaged -0.11, so this leaves ordinary dictation alone. It is a first
+# guess for real voices: every cloud dictation now logs its number, and the
+# next nonsense transcript will show where the line belongs.
+UNSURE_BELOW = -0.3
+
 # Where the key lived under the older names, newest first. Only ever read,
 # as a fallback, so nobody has to move a file after updating.
 LEGACY_KEY_FILES = (
@@ -299,6 +307,40 @@ def _join_segments(parts):
     return " ".join(cleaned).strip()
 
 
+class Heard(object):
+    """What the cloud wrote, how sure it was, and the languages it heard.
+
+    `average` and `lowest` are log probabilities of the words written, from
+    0 (certain) downwards: the model's own odds on what it heard. None when
+    the request shape could not ask for them.
+    """
+
+    __slots__ = ("text", "average", "lowest", "languages")
+
+    def __init__(self, text, average=None, lowest=None, languages=()):
+        self.text = text
+        self.average = average
+        self.lowest = lowest
+        self.languages = tuple(languages)
+
+    @classmethod
+    def from_payload(cls, payload):
+        scores = [float(token.get("logprob", 0.0))
+                  for token in payload.get("logprobs") or ()
+                  if isinstance(token, dict)]
+        detected = payload.get("languages") or payload.get("language") or ()
+        if isinstance(detected, str):
+            detected = [detected]
+        codes = [str(item.get("code", "")) if isinstance(item, dict)
+                 else str(item) for item in detected]
+        return cls((payload.get("text") or "").strip(),
+                   sum(scores) / len(scores) if scores else None,
+                   min(scores) if scores else None, codes)
+
+    def words(self):
+        return len(self.text.split())
+
+
 class CloudBackend:
     """Transcribes with OpenAI's speech-to-text API."""
 
@@ -352,8 +394,9 @@ class CloudBackend:
 
     def available(self):
         return bool(self.api_key)
-    def _field_variants(self, language):
-        """Request shapes to try, newest first.
+    def _field_variants(self, language, first=None):
+        """Request shapes to try, newest first. `first` moves one of the
+        configured languages to the front, for a second opinion.
 
         The transcription API moved from a single `language` hint to a
         `languages` list and added `keywords`. That list is the whole point
@@ -364,8 +407,10 @@ class CloudBackend:
         form, then the bare name, then the old singular field, and keep the
         first one the server accepts.
         """
-        codes = ([language] if language
-                 else [str(c) for c in self._cloud.get("languages") or []])
+        configured = [str(c) for c in self._cloud.get("languages") or []]
+        if first in configured:
+            configured = [first] + [c for c in configured if c != first]
+        codes = [language] if language else configured
         # Configured keywords come first, then the words this person has had
         # to correct, then the glue words for the languages in use. Merged
         # rather than replaced at every step: someone adding their own name
@@ -382,9 +427,7 @@ class CloudBackend:
         if not prompt:
             # No prompt configured: steer with the languages instead of
             # sending nothing, which is what breaks accented speech.
-            prompt = _default_prompt(
-                [str(c) for c in self._cloud.get("languages") or []]
-            )
+            prompt = _default_prompt(configured)
 
         def base():
             fields = {"model": self._cloud["model"]}
@@ -396,6 +439,9 @@ class CloudBackend:
         for lang_key, kw_key in (("languages[]", "keywords[]"),
                                  ("languages", "keywords")):
             fields = base()
+            # How sure the model was of each word it wrote. Only the newest
+            # shapes ask: whisper-1 refuses it, and that is a fallback.
+            fields[lang_key.replace("languages", "include")] = ["logprobs"]
             if codes:
                 fields[lang_key] = codes
             if keywords:
@@ -413,6 +459,10 @@ class CloudBackend:
         return variants
 
     def transcribe(self, pcm_bytes, language):
+        return self.heard(pcm_bytes, language).text
+
+    def heard(self, pcm_bytes, language, first=None):
+        """The transcript, how sure the model was, and what it heard."""
         key = self.api_key
         if not key:
             raise RuntimeError(
@@ -421,7 +471,7 @@ class CloudBackend:
                 )
             )
         wav = pcm_to_wav(pcm_bytes, self._rate)
-        return self._post(key, wav, self._field_variants(language))
+        return self._post(key, wav, self._field_variants(language, first))
 
     def _post(self, key, wav, variants):
         """Tries each request shape, retrying transient failures."""
@@ -454,11 +504,7 @@ class CloudBackend:
                             "Cloud accepted fallback shape %d: %s",
                             index, sorted(fields),
                         )
-                    detected = (payload.get("language")
-                                or payload.get("languages"))
-                    if detected:
-                        logger.info("Cloud detected language: %s", detected)
-                    return (payload.get("text") or "").strip()
+                    return Heard.from_payload(payload)
 
                 body = response.text[:400]
                 # Rate limits and server hiccups deserve a retry: the
@@ -529,8 +575,67 @@ class Router:
         languages = [str(code) for code in cloud.get("languages") or []]
         return alphabet.check(
             text, languages, _LANGUAGE_NAMES, self.cloud.api_key,
-            cloud.get("alphabet_model") or "gpt-5.4-mini",
+            cloud.get("alphabet_model") or alphabet.MODEL,
             dictionary.words())
+
+    def _ask_cloud(self, pcm_bytes, language):
+        heard = self.cloud.heard(pcm_bytes, language)
+        if heard.average is not None:
+            # Numbers and language codes, never the words.
+            logger.info("Cloud heard %s, sure on average %.3f, least sure "
+                        "word %.2f", ",".join(heard.languages) or "?",
+                        heard.average, heard.lowest)
+        if language or heard.average is None or heard.average >= UNSURE_BELOW:
+            return heard.text
+        return self._second_opinion(pcm_bytes, heard)
+
+    def _second_opinion(self, pcm_bytes, heard):
+        """The model was unsure: ask again with another language first.
+
+        The owner said "Они потребуют одинаковое количество энергий" and got
+        "Альбатрос бродит акварель часовой мерки": a short, quiet Russian
+        phrase that the model, with Kazakh first in the list, heard as
+        Kazakh. The model's own odds are what can catch that, so when they
+        are low the same audio goes out again with the next languages first,
+        both at once, and the answer the model is surest of is kept - unless
+        it is shorter. A shorter answer can look surer for having less in
+        it: asked with Kazakh first, one drill sentence came back without
+        its English half, and surer than the whole one.
+        """
+        from concurrent.futures import ThreadPoolExecutor
+
+        configured = [str(code) for code in
+                      self._cfg["transcription"]["cloud"].get("languages")
+                      or []]
+        others = [code for code in configured
+                  if code not in heard.languages][:2]
+        if not others:
+            return heard.text
+        with ThreadPoolExecutor(len(others)) as pool:
+            answers = list(pool.map(
+                lambda code: self._ask_with_first(pcm_bytes, code), others))
+        best, kept = heard, ""
+        for code, answer in zip(others, answers):
+            if answer is None or answer.average is None:
+                continue
+            if answer.words() < 0.8 * heard.words():
+                continue
+            if answer.average > best.average:
+                best, kept = answer, code
+        logger.info("Unsure (average %.3f, heard %s): asked again with %s "
+                    "first; kept %s", heard.average,
+                    ",".join(heard.languages) or "?", " and ".join(others),
+                    "the {} one ({:.3f})".format(kept, best.average)
+                    if kept else "the first answer")
+        return best.text
+
+    def _ask_with_first(self, pcm_bytes, code):
+        try:
+            return self.cloud.heard(pcm_bytes, "", first=code)
+        except Exception as exc:
+            logger.info("Asking again with %s first failed: %s", code,
+                        type(exc).__name__)
+            return None
 
     def _transcribe(self, pcm_bytes, language):
         self.last_fallback = ""
@@ -546,7 +651,7 @@ class Router:
                 )
             else:
                 try:
-                    text = self.cloud.transcribe(pcm_bytes, language)
+                    text = self._ask_cloud(pcm_bytes, language)
                     self._offline_until = 0.0
                     return text, "cloud"
                 except CloudUnreachable as exc:

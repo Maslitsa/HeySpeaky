@@ -8,15 +8,24 @@ the other script. It is the one mistake left that the text alone is enough
 to fix, so after transcription a small text model is asked to fix exactly
 that and nothing else.
 
-Measured with tools/language_drill.py on 21 November 2026, 12 sentences
+Measured with tools/language_drill.py on 21 November 2026, 24 sentences
 that change language, each read twice:
 
-    model           recordings better   worse   time (median, slowest)
-    gpt-5.4-mini    4 of 24             0       0.72 s, 0.84 s
-    gpt-4o-mini     3 of 24             1       0.82 s, 1.76 s
+    48 recordings                  words wrong  better  worse  time
+    the speech model alone         9.3%
+    gpt-5.4-mini, first wording    8.2%         5       0      0.73 s
+    gpt-5.4-mini, this wording     8.1%         5       0      0.77 s
+    gpt-5.5, this wording          6.2%         11      0      1.32 s
 
-gpt-4o-mini turned "ещё не пришла" into "уже пришла", which says the
-opposite, and the word check below now refuses that kind of answer too.
+(time is the median; the slowest gpt-5.5 answer took 2.6 s.) With the first
+wording, which described the job, the model left "I think on Prav" and
+"Prosta yazabil napisat" alone. This one has it go word by word and ask
+whether a Latin word is English or German at all, with examples from
+outside the drill, so the drill measures the wording and not its examples.
+Eight sentences nothing had been tuned on came back unchanged: nothing
+better, nothing worse. gpt-4o-mini, tried first, turned "ещё не пришла"
+into "уже пришла", which says the opposite; the word check below refuses
+that kind of answer.
 
 Three rules keep it honest:
 
@@ -40,26 +49,30 @@ logger = logging.getLogger("heyspeaky.alphabet")
 
 URL = "https://api.openai.com/v1/chat/completions"
 
-# Slowest answer measured was 0.84 s. Past this the check is stuck, and the
-# text goes out as the speech model wrote it.
-TIMEOUT = 2.5
+# The model the check asks, unless config.json names another.
+MODEL = "gpt-5.5"
+
+# The slowest answer measured was 2.6 s. Past this the check is stuck, and
+# the text goes out as the speech model wrote it.
+TIMEOUT = 4.0
 
 # Languages written in Cyrillic, by the codes languages.py uses.
 CYRILLIC = {"ru", "kk", "uk", "be", "bg", "sr", "mk", "ky", "tg", "mn",
             "tt", "ba"}
 
-INSTRUCTIONS = (
-    "You fix the alphabet of dictated text and nothing else. The speaker "
-    "mixes {languages}, often inside one sentence. The speech recogniser "
-    "sometimes writes a word that was spoken in {cyrillic} in Latin "
-    "letters, for example 'upal' for 'упал', and sometimes writes a word "
-    "spoken in a Latin-script language in Cyrillic, for example 'Данке' for "
-    "'Danke'. Rewrite only those words, in the alphabet of the language they "
-    "were spoken in. Do not translate. Do not rephrase, reorder, correct "
-    "grammar or change punctuation. Leave numbers, product names and "
-    "technical terms as they are. If nothing needs changing, return the "
-    "text unchanged. Reply with the text only."
-)
+# One example of each mistake, per language. None is a drill sentence.
+_IN_LATIN = {
+    "ru": "'ya uzhe otpravil' for 'я уже отправил', 'skazhi emu' for "
+          "'скажи ему'",
+    "kk": "'zhaksy' for 'жақсы'",
+    "uk": "'dyakuyu' for 'дякую'",
+}
+_IN_CYRILLIC = {
+    "en": "'дедлайн тумороу' for 'deadline tomorrow'",
+    "de": "'ауфвидерзейн' for 'auf Wiedersehen'",
+}
+_KAZAKH_LETTERS = ("Kazakh words with their letters lost or misheard: "
+                   "'рахмет' for 'рақмет', 'сәлеметсиз' for 'сәлеметсіз'.")
 
 _LATIN = re.compile(r"[A-Za-z]")
 
@@ -118,18 +131,57 @@ def same_words(before, after):
 
 
 def instructions(languages, names, words=()):
-    """The request's instructions, naming the user's own languages."""
-    listed = [names.get(code, code) for code in languages]
-    spoken = ", ".join(listed[:-1]) + " and " + listed[-1] \
-        if len(listed) > 1 else "".join(listed)
-    cyrillic = " or ".join(names.get(code, code) for code in languages
-                           if code in CYRILLIC)
-    text = INSTRUCTIONS.format(languages=spoken, cyrillic=cyrillic)
+    """The request's instructions, built from the user's own languages."""
+    def joined(codes, last):
+        listed = [names.get(code, code) for code in codes]
+        if len(listed) < 2:
+            return "".join(listed)
+        return "{} {} {}".format(", ".join(listed[:-1]), last, listed[-1])
+
+    def examples(table, codes):
+        found = [table[code] for code in codes if code in table]
+        return ": " + ", ".join(found) if found else ""
+
+    # The languages with examples first, in the tables' order: measured,
+    # "Russian or Kazakh ... English or German" did half a point better
+    # than the same text in the user's own order, two runs out of two.
+    def ordered(codes, table):
+        return sorted(codes, key=lambda code: (
+            list(table).index(code) if code in table else len(table)))
+
+    cyrillic = ordered([c for c in languages if c in CYRILLIC], _IN_LATIN)
+    latin = ordered([c for c in languages if c not in CYRILLIC],
+                    _IN_CYRILLIC)
+    lines = [
+        "You fix the alphabet of dictated text, and nothing else. The "
+        "speaker mixes {}, often inside one sentence, and the speech "
+        "recogniser does not always write a word in the alphabet of the "
+        "language it was spoken in:".format(joined(languages, "and")),
+        "- {} words written in Latin letters, as if transliterated{}."
+        .format(joined(cyrillic, "or"), examples(_IN_LATIN, cyrillic)),
+        "- {} words written in Cyrillic{}.".format(
+            joined(latin, "or"), examples(_IN_CYRILLIC, latin)),
+    ]
+    if "kk" in languages:
+        lines.append("- " + _KAZAKH_LETTERS)
+    lines.append(
+        "Go through the text word by word. A word in Latin letters that is "
+        "not {a_latin} word is almost always {cyrillic}: write it in "
+        "Cyrillic, "
+        "spelled correctly. A word in Cyrillic that is really {latin}: write "
+        "it in Latin letters. Do not translate, rephrase, reorder, add or "
+        "drop words. Keep numbers, punctuation, product names and technical "
+        "terms (such as Kubernetes, staging, pull request) as they are. If "
+        "every word is already in its own alphabet, return the text "
+        "unchanged. Reply with the text only.".format(
+            latin=joined(latin, "or"), cyrillic=joined(cyrillic, "or"),
+            a_latin=("an " if joined(latin, "or")[:1] in "AEIOU" else "a ")
+            + joined(latin, "or")))
     if words:
         # The words the user has taught it are spelled their way already.
-        text += " These words are spelled exactly as the speaker wants: {}." \
-            .format(", ".join(words))
-    return text
+        lines.append("These words are spelled exactly as the speaker "
+                     "wants: {}.".format(", ".join(words)))
+    return "\n".join(lines)
 
 
 def check(text, languages, names, key, model, words=()):

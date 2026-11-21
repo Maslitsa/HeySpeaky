@@ -5,7 +5,7 @@
 
 [project]
 name = "heyspeaky"
-version = "1.2.0"
+version = "1.2.1"
 description = "Background push-to-talk dictation for Windows that survives switching language mid-sentence"
 readme = "README.md"
 license = { file = "LICENSE" }

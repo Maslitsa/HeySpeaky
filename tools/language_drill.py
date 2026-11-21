@@ -125,6 +125,51 @@ SENTENCES = [
      "ть пул-реквес"
      "т, the one with the flaky test, danke dir.",
      "trails off into a quiet German goodbye"),
+    # Added on 21 November: where only the meaning says which language a
+    # word is in. The alphabet check's wording was tuned on everything
+    # above this line and the next twelve...
+    ("server", "Сервер опять упал, so I restarted it twice, aber es hilft "
+     "nicht.", "a short Russian verb, then English, then German"),
+    ("link", "Скинь мне ссылку, I'll check it after the call, ладно?",
+     "Russian round an English clause"),
+    ("verschoben", "Ich habe den Termin verschoben, потому что клиент не "
+     "успевает.", "German into Russian on a conjunction"),
+    ("doctor", "Мен бүгін кеңсеге бармаймын, because I have a doctor's "
+     "appointment.", "Kazakh with its own letters, then English"),
+    ("rat", "Мне нужен твой совет, ich brauche wirklich deinen Rat.",
+     "German Rat sounds like Russian рад"),
+    ("mine", "Это не мой ноутбук, it's not mine, менікі емес.",
+     "the same thing said in three languages"),
+    ("gruen", "Давай задеплоим в пятницу, aber nur wenn die Tests grün "
+     "sind.", "Russian slang verb, then German"),
+    ("qala", "Біз қалаға ертең барамыз, and we'll stay until Sunday.",
+     "Kazakh into English"),
+    ("budget", "Бюджет утвердили, but marketing wants ten percent more, das "
+     "ist zu viel.", "three languages, a number in the middle"),
+    ("prav", "I think он прав, but we need more data.",
+     "two short Russian words inside English"),
+    ("erledigt", "Das ist schon erledigt, просто я забыл написать.",
+     "German into Russian"),
+    ("callback", "Okay, I'll call you back in five minutes, жди.",
+     "one Russian word at the very end"),
+    # ...and not at all on these eight, which are here to catch a wording
+    # that only fits the sentences it was tuned on.
+    ("code", "Я посмотрю твой код вечером, but don't merge it yet.",
+     "Russian into English"),
+    ("morgen", "Wir sehen uns morgen, а потом решим, что делать.",
+     "German into Russian on а"),
+    ("kelesin", "Сен келесің бе, or should I come to you?",
+     "a Kazakh question, then English"),
+    ("uehala", "Она уже уехала, she left an hour ago, glaube ich.",
+     "three languages"),
+    ("file", "Can you send me the file, мне срочно нужно.",
+     "English into Russian"),
+    ("habar", "Ол маған хабарласпады, so I'm still waiting.",
+     "a long Kazakh verb"),
+    ("ob", "Я не знаю, ob das funktioniert, but let's try.",
+     "Russian, German, English"),
+    ("moloko", "Купи молоко по дороге, and don't forget the bread.",
+     "Russian into English"),
 ]
 
 
@@ -303,7 +348,7 @@ def run(cfg, clips, read_pcm, rate, quiet):
                 if cloud.get("alphabet_check"):
                     text = alphabet.check(
                         text, codes, NAMES, backend.api_key,
-                        cloud.get("alphabet_model") or "gpt-5.4-mini")
+                        cloud.get("alphabet_model") or alphabet.MODEL)
                 heard[(name, take)] = text
             except Exception as exc:
                 heard[(name, take)] = "FAILED: {}".format(str(exc)[:100])
