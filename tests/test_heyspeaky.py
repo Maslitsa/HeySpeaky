@@ -3103,6 +3103,35 @@ class TheListeningLab(unittest.TestCase):
             path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
             self.assertEqual(list(lab.read_wav(path)), [0.0, 0.5, -0.5, 0.25])
 
+    def test_the_reading_session_keeps_what_was_read(self):
+        lab = _tool("voice_lab")
+
+        class Mic(object):
+            def __init__(self, cfg, on_chunk, on_level, on_error=None):
+                self.on_chunk = on_chunk
+
+            def start(self):
+                self.on_chunk(b"\x10\x00" * lab.RATE)   # a second of sound
+                return True
+
+            def stop(self):
+                pass
+
+        # Start, stop, next; then quit at the second sentence.
+        answers = iter(["", "", "", "q"])
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(lab, "LAB", Path(folder)), \
+                mock.patch("heyspeaky.mic.Microphone", Mic), \
+                mock.patch("builtins.input",
+                           lambda prompt="": next(answers)), \
+                mock.patch("builtins.print"):
+            lab.record_mine()
+            kept = lab.load_mine()
+            self.assertEqual([entry["text"] for entry in kept],
+                             [lab.MINE[0][1]])
+            self.assertEqual(len(lab.read_wav(Path(kept[0]["file"]))),
+                             lab.RATE)
+
     def test_yo_is_read_as_ye_and_a_hallucination_counts_once(self):
         lab = _tool("voice_lab")
         self.assertEqual(lab.error_rate("Ещё не пришла", "еще не пришла"), 0.0)

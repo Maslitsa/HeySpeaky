@@ -8,6 +8,8 @@ it hear better is to measure. This makes the measurement big and varied:
     python tools\voice_lab.py run --limit 20   a cheap trial
     python tools\voice_lab.py people           real people's recordings
     python tools\voice_lab.py run --people     ...heard the same way
+    python tools\voice_lab.py mine             read 30 sentences yourself
+    python tools\voice_lab.py run --mine       ...and hear your own voice
     python tools\voice_lab.py replay report.zip
 
 `texts` takes random Wikipedia articles in Kazakh, Russian, English and
@@ -580,8 +582,12 @@ def run(args):
         print("No OpenAI key found.")
         return 1
     shipped = transcribe.UNSURE_BELOW
-    versions = (people_versions(args, cfg) if args.people
-                else voiced_versions(args, cfg, key))
+    if args.mine:
+        versions = mine_versions(args, cfg)
+    elif args.people:
+        versions = people_versions(args, cfg)
+    else:
+        versions = voiced_versions(args, cfg, key)
     if not versions:
         return 1
     minutes = sum(v["seconds"] for v in versions) / 60.0
@@ -808,6 +814,152 @@ def people_versions(args, cfg):
     return versions
 
 
+# -- yours -----------------------------------------------------------------
+# The one voice that matters: the person's own, on their own microphone.
+# `mine` shows these one at a time and records each as it is read; `run
+# --mine` hears them the way the app would. They are the owner's languages
+# and the way he talks - a word that would only come in English, a whole
+# sentence in the other language - and the first short one is the sentence
+# that came back as "Альбатрос бродит акварель часовой мерки". For other
+# languages, change the list. The recordings stay in the lab folder.
+
+MINE = [
+    ("ru+en word", "Мне нужно до пятницы сдать этот assignment, иначе не "
+                   "успею."),
+    ("ru+en word", "Я посмотрел, там какой-то weird баг, когда окно "
+                   "сворачивается."),
+    ("ru+en word", "Давай созвонимся вечером и обсудим наш roadmap на месяц."),
+    ("ru+en word", "Он сказал, что это чистый overkill для такой маленькой "
+                   "задачи."),
+    ("ru+en word", "Надо сделать нормальный onboarding, чтобы люди не "
+                   "терялись."),
+    ("ru+en word", "У меня сегодня вообще нет никакого focus, всё отвлекает."),
+    ("ru+en word", "Скинь мне потом feedback по видео, мне важно твоё мнение."),
+    ("ru+en word", "Это была очень awkward ситуация, я не знал, что сказать."),
+    ("ru+en word", "Я пока не понимаю, какой у этой идеи reasonable срок."),
+    ("ru+en word", "Программа должна работать seamless, без лишних кнопок."),
+    ("ru>en", "Я сегодня весь день сидел над кодом. Honestly, I think it "
+              "finally works."),
+    ("ru>en", "Скажи ему, что я перезвоню позже. I'm in a meeting right now."),
+    ("ru>en", "Видео почти готово, осталось музыку поправить. Let me know "
+              "what you think."),
+    ("ru>en", "Мне кажется, мы слишком усложняем. Let's keep it simple for "
+              "now."),
+    ("ru>en", "Я не помню, как это по-русски. It's on the tip of my tongue."),
+    ("en>ru", "I sent you the link yesterday, проверь, пожалуйста, почту."),
+    ("en>ru", "The deadline is next week, так что время ещё есть."),
+    ("en>ru", "Can you call me back later, я сейчас за рулём."),
+    ("ru>kk", "Мама сказала, что ертең қонақтар келеді, надо всё убрать."),
+    ("ru>kk", "Я ему говорю, рақмет, бәрі жақсы, а он всё равно переживает."),
+    ("ru>kk", "Короче, ол маған хабарласпады, и я так и не узнал."),
+    ("kk>ru", "Сен келесің бе, или мне самому к тебе приехать?"),
+    ("kk>ru", "Бүгін уақытым жоқ, давай перенесём на завтра."),
+    ("ru>de", "Я учу немецкий, и пока могу сказать только ich verstehe "
+              "nicht."),
+    ("de>ru", "Das ist eine gute Idee, но давай сначала проверим."),
+    ("three", "Entschuldigung, I didn't catch that, можешь повторить?"),
+    ("short ru", "Они потребуют одинаковое количество энергий."),
+    ("short ru", "Хорошо, я понял."),
+    ("short ru", "Отправь мне это сегодня."),
+    ("short ru", "Посмотрим, что получится."),
+]
+
+
+def mine_path():
+    return LAB / "mine" / "mine.json"
+
+
+def load_mine():
+    try:
+        return json.loads(mine_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def write_wav(path, pcm, rate=RATE):
+    import wave
+
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(pcm)
+
+
+def record_mine(again=False):
+    """Shows each sentence, records it as it is read, and keeps it."""
+    from heyspeaky.mic import Microphone
+
+    cfg = config_module.load()
+    rate = int(cfg["audio"]["sample_rate"])
+    chunks = []
+    mic = Microphone(cfg["audio"], chunks.append, lambda level: None)
+    folder = mine_path().parent
+    folder.mkdir(parents=True, exist_ok=True)
+    kept = {entry["file"]: entry for entry in load_mine()}
+
+    print("Читайте каждую фразу так, как обычно диктуете: с того же места, "
+          "тем же голосом. Enter - начать, Enter - стоп.")
+    for index, (pattern, text) in enumerate(MINE, 1):
+        target = folder / "{:02d}.wav".format(index)
+        if target.exists() and str(target) in kept and not again:
+            continue
+        while True:
+            print("\n{} из {}:\n    {}".format(index, len(MINE), text))
+            answer = input("Enter - начать, s - пропустить, q - выйти: ")
+            if answer.strip().lower() in ("s", "q"):
+                break
+            chunks.clear()
+            if not mic.start():
+                print("Микрофон не открылся.")
+                return 1
+            input("    говорите... Enter - стоп ")
+            mic.stop()
+            pcm = b"".join(chunks)
+            seconds = len(pcm) / 2.0 / rate
+            if seconds < 0.8:
+                print("    слишком коротко, ещё раз")
+                continue
+            samples = np.frombuffer(pcm, dtype=np.int16)
+            peak = 20 * math.log10(max(1, int(np.abs(samples).max())) / 32768.0)
+            write_wav(target, pcm, rate)
+            kept[str(target)] = {"file": str(target), "pattern": pattern,
+                                 "text": text}
+            mine_path().write_text(json.dumps(list(kept.values()),
+                                              ensure_ascii=False, indent=1),
+                                   encoding="utf-8")
+            print("    записано: {:.1f} с, громкость {:.0f} дБ".format(
+                seconds, peak))
+            if input("    Enter - дальше, r - перезаписать: ").strip().lower() \
+                    != "r":
+                break
+        if answer.strip().lower() == "q":
+            break
+    print("\nГотово: {} из {} фраз записано, они лежат в {}".format(
+        len(kept), len(MINE), folder))
+    return 0
+
+
+def mine_versions(args, cfg):
+    """The person's own recordings, as recorded."""
+    entries = [e for e in load_mine() if Path(e["file"]).exists()]
+    if not entries:
+        print("No recordings of yours yet: run `voice_lab.py mine` first.")
+        return []
+    versions = []
+    for entry in entries:
+        ident = "m{:08x}".format(zlib.crc32(entry["text"].encode("utf-8")))
+        item = {"id": ident, "text": entry["text"], "pattern": entry["pattern"],
+                "source": "yours", "holdout": False}
+        pcm = (np.clip(read_wav(Path(entry["file"])), -1, 1)
+               * 32767).astype(np.int16).tobytes()
+        pcm = levels.normalise(pcm, cfg["recording"])
+        versions.append({"item": item, "room": "yours", "pcm": pcm,
+                         "voice": "yours", "manner": "real",
+                         "seconds": len(pcm) / 2.0 / RATE})
+    return versions
+
+
 def lines_with(shipped):
     """LINES, with the one the app ships among them, most asking first."""
     numbers = {line for line in LINES if line is not None} | {shipped}
@@ -968,6 +1120,11 @@ def main():
     run_cmd.add_argument("--people", action="store_true",
                          help="real people's recordings instead of voices; "
                               "--limit is then recordings per language")
+    run_cmd.add_argument("--mine", action="store_true",
+                         help="your own recordings, made with `mine`")
+    mine_cmd = sub.add_parser("mine", help="read the sentences aloud yourself")
+    mine_cmd.add_argument("--again", action="store_true",
+                          help="record the ones already recorded too")
     people_cmd = sub.add_parser("people", help="real recordings, from FLEURS")
     people_cmd.add_argument("--each", type=int, default=80,
                             help="recordings per language")
@@ -984,6 +1141,8 @@ def main():
         print("Added {} sentences; {} in {}".format(added, total,
                                                      texts_path()))
         return 0
+    if args.command == "mine":
+        return record_mine(args.again)
     if args.command == "people":
         print("Fetching real recordings ({} per language)...".format(
             args.each))
