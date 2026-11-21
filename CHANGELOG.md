@@ -4,6 +4,27 @@ Notable changes to HeySpeaky, called VoiceType until September 2026, then
 SpeakIt, and SpeakIt again from 26 October to 19 November 2026. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Changed
+
+- **Kazakh letters come back even with no English in the sentence.** When
+  OpenAI says it heard Kazakh, the alphabet check now looks at the text
+  even if it is all Cyrillic, and puts back the letters the model lost:
+  "дарылык өсүмдүк экен" becomes "дәрілік өсімдік екен". On 71 such
+  answers in the new listening lab, words wrong went from 26.7% to 22.9%,
+  15 better and 1 worse. A sentence heard as Russian still never waits.
+
+### Added
+
+- **A listening lab for anyone tuning HeySpeaky** (`tools/voice_lab.py`).
+  It writes sentences that change language from random Wikipedia
+  articles and takes real ones from tech news, has eleven voices read
+  them in eight manners, plays each through five rooms built in code, and
+  scores what the app's own path makes of them. A quarter of the
+  sentences are held out, so a change has to help sentences it was not
+  tuned on.
+
 ## [1.2.1] - 2026-11-21
 
 ### Changed

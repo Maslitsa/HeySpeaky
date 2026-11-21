@@ -3052,6 +3052,49 @@ def _tool(name):
     return module
 
 
+class TheListeningLab(unittest.TestCase):
+    """tools/voice_lab.py: the parts of it that need no network."""
+
+    def test_a_room_is_the_same_every_time_and_keeps_the_length(self):
+        import numpy as np
+        lab = _tool("voice_lab")
+        beat = np.arange(lab.RATE) / float(lab.RATE)
+        speech = (0.3 * np.sin(2 * np.pi * 220 * beat)).astype(np.float32)
+        padded = lab.RATE + int(0.4 * lab.RATE) + int(0.6 * lab.RATE)
+        for name in lab.ROOMS:
+            pcm = lab.recording(speech, name, 7, {})
+            self.assertEqual(pcm, lab.recording(speech, name, 7, {}), name)
+            self.assertEqual(len(pcm), 2 * padded, name)
+
+    def test_only_sayable_mixed_sentences_are_taken_from_the_news(self):
+        lab = _tool("voice_lab")
+        self.assertTrue(lab.speakable_mix(
+            "Мы перенесли деплой на Kubernetes и теперь всё работает быстрее."))
+        # Digits cannot be scored against what a voice says for them.
+        self.assertFalse(lab.speakable_mix("В версии 2.0 добавили новый API."))
+        self.assertFalse(lab.speakable_mix(
+            "Мы перенесли деплой и теперь всё работает быстрее."))
+
+    def test_a_sentence_held_out_stays_held_out(self):
+        lab = _tool("voice_lab")
+        one = lab.text_item("Сен келесің бе, or should I come?", "kk>en", "a")
+        two = lab.text_item("Сен келесің бе, or should I come?", "kk>en", "b")
+        self.assertEqual((one["id"], one["holdout"]),
+                         (two["id"], two["holdout"]))
+
+    def test_the_line_the_app_ships_is_always_compared(self):
+        lab = _tool("voice_lab")
+        lines = lab.lines_with(-0.33)
+        self.assertIn(-0.33, lines)
+        self.assertIsNone(lines[-1])
+        self.assertEqual(lines[:-1], sorted(lines[:-1], reverse=True))
+
+    def test_yo_is_read_as_ye_and_a_hallucination_counts_once(self):
+        lab = _tool("voice_lab")
+        self.assertEqual(lab.error_rate("Ещё не пришла", "еще не пришла"), 0.0)
+        self.assertEqual(lab.error_rate("да", "нет нет нет нет"), 1.0)
+
+
 class TheSessionBrief(unittest.TestCase):
     """What every session used to gather by hand, in twenty lines."""
 
@@ -3516,6 +3559,22 @@ class TheAlphabetCheck(unittest.TestCase):
         self.assertFalse(alphabet.needed("cluster upal", ["en", "de"]))
         self.assertFalse(alphabet.needed("Kubernetes упал", ["ru"]))
 
+    def test_kazakh_heard_is_checked_with_no_latin_in_it(self):
+        """The model hears Kazakh and drops its letters: "дарылык өсүмдүк
+        экен" for "дәрілік өсімдік екен". Measured in the listening lab: 15
+        better, 1 worse."""
+        self.assertTrue(alphabet.needed("Бұл мұзей қалада екен", self.MIXED,
+                                        heard=("kk",)))
+        # Heard as Russian: typed as it came, with no wait.
+        self.assertFalse(alphabet.needed("Всё понятно, спасибо.", self.MIXED,
+                                         heard=("ru",)))
+        # Kazakh is not one of this person's languages.
+        self.assertFalse(alphabet.needed("Бул музей", ["ru", "en"],
+                                         heard=("kk",)))
+        # Every language in one alphabet: nothing to move it into.
+        self.assertFalse(alphabet.needed("Бул музей", ["kk", "ru"],
+                                         heard=("kk",)))
+
     def test_the_same_words_in_another_alphabet_pass(self):
         for before, after in [
             ("Kubernetes cluster upal, and the ingress returned 502.",
@@ -3621,6 +3680,12 @@ class TheRouterChecksTheAlphabet(unittest.TestCase):
             self.router().transcribe(b"\0\0", "ru")
             self.router(check_on=False).transcribe(b"\0\0", "")
         check.assert_not_called()
+
+    def test_it_is_told_which_languages_the_cloud_heard(self):
+        with mock.patch.object(alphabet, "check",
+                               return_value="cluster упал") as check:
+            self.router().transcribe(b"\0\0", "")
+        self.assertEqual(tuple(check.call_args.kwargs["heard"]), ("en",))
 
 
 @unittest.skipIf(panel_module is None, "tkinter is missing")

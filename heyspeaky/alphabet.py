@@ -27,10 +27,22 @@ better, nothing worse. gpt-4o-mini, tried first, turned "ещё не пришл�
 into "уже пришла", which says the opposite; the word check below refuses
 that kind of answer.
 
+It also runs on text with no Latin in it when the speech model says it
+heard Kazakh, because then the usual fault is Kazakh letters lost in
+Cyrillic: "дарылык өсүмдүк экен" for "дәрілік өсімдік екен". Measured with
+tools/voice_lab.py the same evening, 80 sentences from the web, eleven
+voices, five rooms. Of the 194 answers with no Latin in them, the 71 the
+model said it heard Kazakh in went from 26.7% of words wrong to 22.9%, 15
+better and 1 worse. The other 123 would have gained too (21.2% to 18.4%,
+22 better, 6 worse, most of the worse ones place names moved into Latin),
+but at a second and a half on every Russian sentence, so they are not
+checked.
+
 Three rules keep it honest:
 
-- It runs only when it can help: the text has Latin letters in it and one
-  of your languages is written in Cyrillic. A purely Russian sentence is
+- It runs only when it can help: one of your languages is written in
+  Cyrillic and another is not, and the text has Latin letters in it or
+  the speech model heard Kazakh. A Russian sentence heard as Russian is
   typed as it came, with no wait.
 - It cannot rewrite you. `same_words` reads the answer and the original
   in Latin letters and refuses any answer that is not the same words, in
@@ -90,12 +102,16 @@ _AS_LATIN = str.maketrans({
 })
 
 
-def needed(text, languages):
+def needed(text, languages, heard=()):
     """True when the text could hold a word in the wrong alphabet: your
-    languages are written in more than one, and the text has Latin in it."""
+    languages are written in more than one, and either the text has Latin
+    in it or the speech model says it heard Kazakh (`heard`, its language
+    codes), whose letters it loses even in Cyrillic."""
+    if not (any(code in CYRILLIC for code in languages)
+            and any(code not in CYRILLIC for code in languages)):
+        return False
     return (bool(_LATIN.search(text or ""))
-            and any(code in CYRILLIC for code in languages)
-            and any(code not in CYRILLIC for code in languages))
+            or ("kk" in heard and "kk" in languages))
 
 
 def _as_latin_words(text):
@@ -184,9 +200,10 @@ def instructions(languages, names, words=()):
     return "\n".join(lines)
 
 
-def check(text, languages, names, key, model, words=()):
-    """Returns the text with its alphabets fixed, or exactly as it was."""
-    if not needed(text, languages):
+def check(text, languages, names, key, model, words=(), heard=()):
+    """Returns the text with its alphabets fixed, or exactly as it was.
+    `heard` is the languages the speech model said it heard, if it said."""
+    if not needed(text, languages, heard):
         return text
     import httpx
 

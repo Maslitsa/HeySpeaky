@@ -554,9 +554,9 @@ class Router:
         it reaches local transcription too - which needs it more, being the
         weaker of the two on exactly the words people end up correcting.
         """
-        text, backend = self._transcribe(pcm_bytes, language)
+        text, backend, heard_in = self._transcribe(pcm_bytes, language)
         if backend == "cloud" and not language:
-            text = self._check_alphabet(text)
+            text = self._check_alphabet(text, heard_in)
         # Naming the words in the request gets most of the way and not always
         # all of it: the measurement that put them there also showed a Kazakh
         # letter failing to survive into a Russian sentence. What the user has
@@ -564,10 +564,11 @@ class Router:
         # heyspeaky/dictionary.py.
         return dictionary.apply(text), backend
 
-    def _check_alphabet(self, text):
+    def _check_alphabet(self, text, heard_in=()):
         """A word written in the wrong alphabet, put back in its own. Only
         with the cloud, which is already online with a key, and not when a
         language is pinned: then the user has said which one it is.
+        `heard_in` is the languages the cloud said it heard.
         See heyspeaky/alphabet.py."""
         cloud = self._cfg["transcription"]["cloud"]
         if not cloud.get("alphabet_check", True):
@@ -576,9 +577,10 @@ class Router:
         return alphabet.check(
             text, languages, _LANGUAGE_NAMES, self.cloud.api_key,
             cloud.get("alphabet_model") or alphabet.MODEL,
-            dictionary.words())
+            dictionary.words(), heard=heard_in)
 
     def _ask_cloud(self, pcm_bytes, language):
+        """The cloud's answer, as a Heard: asked again if it was unsure."""
         heard = self.cloud.heard(pcm_bytes, language)
         if heard.average is not None:
             # Numbers and language codes, never the words.
@@ -586,7 +588,7 @@ class Router:
                         "word %.2f", ",".join(heard.languages) or "?",
                         heard.average, heard.lowest)
         if language or heard.average is None or heard.average >= UNSURE_BELOW:
-            return heard.text
+            return heard
         return self._second_opinion(pcm_bytes, heard)
 
     def _second_opinion(self, pcm_bytes, heard):
@@ -610,7 +612,7 @@ class Router:
         others = [code for code in configured
                   if code not in heard.languages][:2]
         if not others:
-            return heard.text
+            return heard
         with ThreadPoolExecutor(len(others)) as pool:
             answers = list(pool.map(
                 lambda code: self._ask_with_first(pcm_bytes, code), others))
@@ -627,7 +629,7 @@ class Router:
                     ",".join(heard.languages) or "?", " and ".join(others),
                     "the {} one ({:.3f})".format(kept, best.average)
                     if kept else "the first answer")
-        return best.text
+        return best
 
     def _ask_with_first(self, pcm_bytes, code):
         try:
@@ -651,9 +653,9 @@ class Router:
                 )
             else:
                 try:
-                    text = self._ask_cloud(pcm_bytes, language)
+                    heard = self._ask_cloud(pcm_bytes, language)
                     self._offline_until = 0.0
-                    return text, "cloud"
+                    return heard.text, "cloud", heard.languages
                 except CloudUnreachable as exc:
                     self._offline_until = (
                         time.monotonic() + OFFLINE_MEMO_SECONDS
@@ -671,4 +673,4 @@ class Router:
                         "fallback_to_local"
                     ]:
                         raise
-        return self.local.transcribe(pcm_bytes, language), "local"
+        return self.local.transcribe(pcm_bytes, language), "local", ()

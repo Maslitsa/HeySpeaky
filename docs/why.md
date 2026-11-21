@@ -273,6 +273,36 @@ nothing had been tuned on came back unchanged, nothing better or worse.
 Runs vary by about half a point. A stored "gpt-5.4-mini" is moved forward
 by `_migrate`.
 
+**That evening it learned to look at Kazakh with no Latin in it.** The
+first listening-lab run (`tools/voice_lab.py`: 80 sentences from the web,
+eleven voices, eight manners, five rooms, 400 recordings) found Kazakh the
+weakest - around 30% of words wrong in Kazakh mixed with Russian - and
+much of it letters lost in Cyrillic: "дарылык өсүмдүк экен" for "дәрілік
+өсімдік екен". The check never saw those, because it ran only on text with
+Latin in it. Run anyway on the 194 answers with no Latin, it took them from
+23.2% to 20.1% (45 better, 10 worse), but it would add a second and a half
+to every Russian sentence, and most of the worse ones were place names
+moved into Latin. So it runs when the cloud says it heard Kazakh (`heard`):
+there, 71 answers went from 26.7% to 22.9%, 15 better and 1 worse, and a
+sentence heard as Russian still never waits.
+
+### Listening lab
+
+**Measure a change to hearing in the listening lab, and decide on the
+held-out quarter** (`tools/voice_lab.py`). The drill's 24 sentences in one
+voice were too few and too alike to show what was wrong: the lab's first
+run, on 21 November, showed in one evening that Kazakh is the weak
+language, that the second-opinion line made no difference anywhere from
+-0.5 to -0.1 on the sentences held out, and that the alphabet check was
+missing Kazakh with no Latin in it. Its sentences come from random
+Wikipedia articles, rewritten by a model into speech that changes
+language, and from Russian tech news as written; a quarter are held out by
+their own names. Its rooms are filters and noise built in code. Everything
+it makes lives in `%LOCALAPPDATA%\HeySpeaky-lab`, never in the repository:
+the sentences are other people's writing, and the clips are recordings.
+It is not anyone's voice, so a real failure is still looked at with
+`voice_lab.py replay` on a problem report saved right after it.
+
 ### Asking again when unsure
 
 The owner said "Они потребуют одинаковое количество энергий" and got
@@ -290,6 +320,15 @@ the surest answer wins unless it has under 80% of the words: on the drill,
 asked with Kazakh first, one sentence came back without its English half
 and surer than the whole one. The next nonsense transcript in his log will
 say where the line really belongs.
+
+The listening lab's first run (400 recordings) never went below -0.35, and
+moving the line made no difference that held: at -0.1 it asked again a
+fifth of the time and the held-out sentences came out no better (19.6%
+against 19.0% at -0.3). Its nonsense answers averaged -0.14 and the rest
+-0.03, so the odds do separate them, but asking again with another
+language first does not fix them: they were names and Kazakh, not the
+wrong language. The line stays at -0.3, where it costs nothing, until a
+real failure says otherwise.
 
 ### Your words
 

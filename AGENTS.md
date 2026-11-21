@@ -42,6 +42,7 @@ without jargon, and say what you actually did and what you could not do.
 | `video/` | the film: Speaky, the Mono pill with eyes, in a 3D world drawn in code (Remotion + three.js); build it outside OneDrive (`video/README.md`) |
 | `tools/benchmark.py` | measures models against real recordings |
 | `tools/language_drill.py` | measures sentences that change language halfway |
+| `tools/voice_lab.py` | the listening lab: web sentences, many voices and rooms, through the app's own path; lives in `%LOCALAPPDATA%\HeySpeaky-lab` |
 | `tools/live_check.py` | shows the pill on the real screen and photographs it |
 | `tools/correction_check.py` | the same, for the correction composer: hovers, clicks, drags |
 | `tools/panel_check.py` | the same, for the tray panel, typing in Kazakh |
@@ -100,14 +101,18 @@ rule here in a line or two, with its story there.
 - **One correction is a hint, not a rule**: it replaces only once made
   `REPLACE_AFTER` (2) times; a Kazakh spelling is fixed at once. ([why](docs/why.md#hints))
 - **The alphabet check** (`alphabet.py`) may change only the alphabet
-  (`same_words`), only after the cloud, and never logs the text. Its
+  (`same_words`), only after the cloud, and never logs the text. It runs on
+  text with Latin in it, or when the cloud heard Kazakh (`heard`). Its
   wording and model (gpt-5.5) were chosen on the drill; change either only
   with a drill run. ([why](docs/why.md#alphabet-check))
+- **Measure a change to hearing in the listening lab** (`tools/voice_lab.py`)
+  and decide on the held-out quarter; what it makes stays out of the
+  repository. ([why](docs/why.md#listening-lab))
 - **When the model is unsure it is asked again** with the next languages
   first (`Router._second_opinion`, `UNSURE_BELOW`); the surest answer wins
-  unless it is shorter. The line is a first guess: tune it from the
-  "Cloud heard … sure on average" lines in the owner's log.
-  ([why](docs/why.md#asking-again-when-unsure))
+  unless it is shorter. The lab found no better line than -0.3; move it
+  only for a real failure in the owner's log ("Cloud heard … sure on
+  average"). ([why](docs/why.md#asking-again-when-unsure))
 - **Your words is a page in the panel, not a file**; its action names carry a
   CRC of the entry, never the word. ([why](docs/why.md#your-words))
 - **The correction key is Ctrl+Alt+Win, not Ctrl+Alt+Space**, in any order.
