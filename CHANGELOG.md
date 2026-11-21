@@ -15,6 +15,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   answers in the new listening lab, words wrong went from 26.7% to 22.9%,
   15 better and 1 worse. A sentence heard as Russian still never waits.
 
+### Fixed
+
+- **Out of OpenAI credit, it says so, and at once.** It used to ask three
+  more times, which made the dictation wait 25 seconds, and then said only
+  "local (cloud error)". Now it goes straight to the local model and the
+  pill says "local (no OpenAI credit)".
+
 ### Added
 
 - **A listening lab for anyone tuning HeySpeaky** (`tools/voice_lab.py`).
@@ -23,7 +30,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   them in eight manners, plays each through five rooms built in code, and
   scores what the app's own path makes of them. A quarter of the
   sentences are held out, so a change has to help sentences it was not
-  tuned on.
+  tuned on. It can also use real people's recordings from Google's FLEURS
+  set, alone and joined across languages, and it refuses a run that would
+  send more than half an hour of audio unless asked.
 
 ## [1.2.1] - 2026-11-21
 

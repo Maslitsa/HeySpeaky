@@ -3089,6 +3089,20 @@ class TheListeningLab(unittest.TestCase):
         self.assertIsNone(lines[-1])
         self.assertEqual(lines[:-1], sorted(lines[:-1], reverse=True))
 
+    def test_it_reads_the_float_wavs_real_recordings_come_in(self):
+        """FLEURS ships 32-bit float wavs, which the wave module refuses."""
+        import struct
+        import numpy as np
+        lab = _tool("voice_lab")
+        samples = np.array([0.0, 0.5, -0.5, 0.25], dtype="<f4").tobytes()
+        fmt = struct.pack("<HHIIHH", 3, 1, lab.RATE, lab.RATE * 4, 4, 32)
+        body = (b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt
+                + b"data" + struct.pack("<I", len(samples)) + samples)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "float.wav"
+            path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+            self.assertEqual(list(lab.read_wav(path)), [0.0, 0.5, -0.5, 0.25])
+
     def test_yo_is_read_as_ye_and_a_hallucination_counts_once(self):
         lab = _tool("voice_lab")
         self.assertEqual(lab.error_rate("Ещё не пришла", "еще не пришла"), 0.0)
@@ -3686,6 +3700,55 @@ class TheRouterChecksTheAlphabet(unittest.TestCase):
                                return_value="cluster упал") as check:
             self.router().transcribe(b"\0\0", "")
         self.assertEqual(tuple(check.call_args.kwargs["heard"]), ("en",))
+
+
+class WhenTheAccountRunsOutOfCredit(unittest.TestCase):
+    """21 November: OpenAI said "no credits remaining", the app asked three
+    times anyway, which cost the dictation 25 seconds, and the pill said
+    only "cloud error"."""
+
+    BODY = ('{"error": {"type": "insufficient_quota", '
+            '"code": "credit_balance_exhausted"}}')
+
+    def backend(self):
+        from heyspeaky.transcribe import CloudBackend
+        return CloudBackend(config_module.load())
+
+    def test_it_is_not_asked_again(self):
+        from heyspeaky import transcribe
+        refused = mock.Mock(status_code=429, text=self.BODY)
+        with mock.patch("httpx.post", return_value=refused) as post, \
+                mock.patch("time.sleep") as sleep:
+            with self.assertRaises(transcribe.NoCredit):
+                self.backend()._post("k", b"wav", [{"model": "m"}])
+        self.assertEqual(post.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_a_rate_limit_still_is(self):
+        busy = mock.Mock(status_code=429,
+                         text='{"error": {"type": "rate_limit_exceeded"}}')
+        fine = mock.Mock(status_code=200, text="")
+        fine.json.return_value = {"text": "hello"}
+        with mock.patch("httpx.post", side_effect=[busy, fine]), \
+                mock.patch("time.sleep"):
+            heard = self.backend()._post("k", b"wav", [{"model": "m"}])
+        self.assertEqual(heard.text, "hello")
+
+    def test_the_pill_says_why(self):
+        from heyspeaky.transcribe import NoCredit, Router
+        cfg = config_module.load()
+        cfg["transcription"]["backend"] = "cloud"
+        cfg["transcription"]["cloud"]["fallback_to_local"] = True
+        router = Router(engine=None, config=cfg)
+        router.cloud.available = lambda: True
+
+        def refused(*args, **kwargs):
+            raise NoCredit("OpenAI says the account has no credit left")
+
+        router.cloud.heard = refused
+        router.local.transcribe = lambda pcm, language: "local text"
+        self.assertEqual(router.transcribe(b"\0\0", "")[1], "local")
+        self.assertEqual(router.last_fallback, "no OpenAI credit")
 
 
 @unittest.skipIf(panel_module is None, "tkinter is missing")

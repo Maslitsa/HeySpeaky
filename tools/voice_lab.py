@@ -6,6 +6,8 @@ it hear better is to measure. This makes the measurement big and varied:
     python tools\voice_lab.py texts            new sentences, from the web
     python tools\voice_lab.py run              voice them, hear them, score
     python tools\voice_lab.py run --limit 20   a cheap trial
+    python tools\voice_lab.py people           real people's recordings
+    python tools\voice_lab.py run --people     ...heard the same way
     python tools\voice_lab.py replay report.zip
 
 `texts` takes random Wikipedia articles in Kazakh, Russian, English and
@@ -46,6 +48,7 @@ are not yours, which is the most a lab can be.
 import argparse
 import html
 import hashlib
+import io
 import json
 import math
 import os
@@ -341,14 +344,36 @@ def voiced(key, item, take):
 
 
 def read_wav(path):
-    """A wav as float samples at 16 kHz, mono."""
-    import wave
+    """A wav as float samples at 16 kHz, mono: 16-bit, or the 32-bit float
+    FLEURS uses, which the wave module will not open."""
+    import struct
 
-    with wave.open(str(path), "rb") as handle:
-        raw = handle.readframes(handle.getnframes())
-        source = handle.getframerate()
-        channels = handle.getnchannels()
-    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    data = Path(path).read_bytes()
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        raise ValueError("{} is not a wav".format(path))
+    form = channels = source = bits = None
+    raw = b""
+    at = 12
+    while at + 8 <= len(data):
+        name, size = data[at:at + 4], struct.unpack("<I", data[at + 4:at + 8])[0]
+        body = data[at + 8:at + 8 + size]
+        if name == b"fmt ":
+            form, channels, source = struct.unpack("<HHI", body[:8])
+            bits = struct.unpack("<H", body[14:16])[0]
+            if form == 0xFFFE and len(body) >= 26:
+                # WAVE_FORMAT_EXTENSIBLE: the real format is in the GUID.
+                form = struct.unpack("<H", body[24:26])[0]
+        elif name == b"data":
+            raw = body
+        at += 8 + size + (size & 1)
+    if form == 1 and bits == 16:
+        audio = np.frombuffer(raw[:len(raw) // 2 * 2],
+                              dtype="<i2").astype(np.float32) / 32768.0
+    elif form == 3 and bits == 32:
+        audio = np.frombuffer(raw[:len(raw) // 4 * 4],
+                              dtype="<f4").astype(np.float32)
+    else:
+        raise ValueError("{}: format {} at {} bits".format(path, form, bits))
     if channels > 1:
         audio = audio.reshape(-1, channels)[:, 0]
     if source != RATE:
@@ -406,6 +431,9 @@ def _reverb(x, rng, seconds, wet):
 
 
 def room(name, speech, rng):
+    if name == "as recorded":
+        # A real recording already has its own room and microphone.
+        return speech
     if name == "clean":
         return _to_level(speech, 0.5)
     if name == "laptop":
@@ -480,11 +508,26 @@ class Ear:
         alphabet.check = checked
 
     def hear(self, pcm):
-        self.router._offline_until = 0.0
-        try:
-            return self.router.transcribe(pcm, self.language)[0]
-        except Exception as exc:
-            return "FAILED: " + type(exc).__name__
+        # Six at once, each asking again in pairs, is more than the API takes
+        # without a refusal now and then. A refusal is the lab's fault, not
+        # the app's, so it waits and tries again rather than score it: the
+        # first real-voice run counted 18 of them as nonsense.
+        failure = "FAILED"
+        for attempt in range(4):
+            self.router._offline_until = 0.0
+            try:
+                return self.router.transcribe(pcm, self.language)[0]
+            except transcribe.NoCredit:
+                # The owner's own dictation needs that money more than the
+                # lab does: on 21 November a lab run spent the last of it,
+                # and his next dictation went to the local model.
+                print("OpenAI says the account has no credit left: the lab "
+                      "stops here.", flush=True)
+                os._exit(2)
+            except Exception as exc:
+                failure = "FAILED: " + type(exc).__name__
+                time.sleep(2.0 * (attempt + 1))
+        return failure
 
     def first(self, pcm):
         return self.answers.get(
@@ -528,19 +571,65 @@ def lab_config():
 
 def run(args):
     cfg = lab_config()
+    if args.languages:
+        cfg["transcription"]["cloud"]["languages"] = [
+            code.strip() for code in args.languages.split(",")]
     ear = Ear(cfg)
     key = ear.router.cloud.api_key
     if not key:
         print("No OpenAI key found.")
         return 1
+    shipped = transcribe.UNSURE_BELOW
+    versions = (people_versions(args, cfg) if args.people
+                else voiced_versions(args, cfg, key))
+    if not versions:
+        return 1
+    minutes = sum(v["seconds"] for v in versions) / 60.0
+    # The money is the owner's, and his own dictation runs on it. A run that
+    # sends more than half an hour of audio has to be asked for by name.
+    if minutes > args.max_minutes:
+        print("This run would send {:.0f} minutes of audio to OpenAI, some "
+              "of it two or three times. Ask the owner first, then pass "
+              "--max-minutes {:.0f}.".format(minutes, math.ceil(minutes)))
+        return 1
+    lines = lines_with(shipped)
+    print("Hearing {} versions, {:.0f} minutes of audio, at {} lines..."
+          .format(len(versions), minutes, len(lines)), flush=True)
+
+    started = time.monotonic()
+    for line in lines:
+        set_line(line)
+        with ThreadPoolExecutor(args.workers) as pool:
+            heard = list(pool.map(ear.hear, [v["pcm"] for v in versions]))
+        for version, text in zip(versions, heard):
+            version.setdefault("heard", {})[str(line)] = text
+            version.setdefault("errors", {})[str(line)] = error_rate(
+                version["item"]["text"], text)
+        print("  line {:>5}: {:.1f}% of words wrong ({:.0f}s)".format(
+            str(line), 100 * _mean(v["errors"][str(line)] for v in versions),
+            time.monotonic() - started), flush=True)
+    set_line(shipped)
+
+    for version in versions:
+        first = ear.first(version["pcm"])
+        version["first"] = None if first is None else {
+            "text": first.text, "average": first.average,
+            "lowest": first.lowest, "languages": list(first.languages)}
+        version["first_errors"] = (None if first is None else
+                                   error_rate(version["item"]["text"],
+                                              first.text))
+    return report(versions, lines, shipped, cfg, minutes)
+
+
+def voiced_versions(args, cfg, key):
+    """The web sentences, voiced and put through the rooms."""
     items = load_texts()
     if not items:
         print("No sentences yet: run `voice_lab.py texts` first.")
-        return 1
+        return []
     if args.limit:
         items = random.Random(7).sample(items, min(args.limit, len(items)))
     rooms = [r.strip() for r in args.rooms.split(",")] if args.rooms else ROOMS
-    shipped = transcribe.UNSURE_BELOW
 
     print("Voicing {} sentences ({} reading(s) each)...".format(
         len(items), args.takes), flush=True)
@@ -570,34 +659,153 @@ def run(args):
             versions.append({"item": item, "voice": voice, "manner": manner,
                              "room": room_name, "pcm": pcm,
                              "seconds": len(pcm) / 2.0 / RATE})
-    minutes = sum(v["seconds"] for v in versions) / 60.0
-    lines = lines_with(shipped)
-    print("Hearing {} versions, {:.0f} minutes of audio, at {} lines..."
-          .format(len(versions), minutes, len(lines)), flush=True)
+    return versions
 
-    started = time.monotonic()
-    for line in lines:
-        set_line(line)
-        with ThreadPoolExecutor(args.workers) as pool:
-            heard = list(pool.map(ear.hear, [v["pcm"] for v in versions]))
-        for version, text in zip(versions, heard):
-            version.setdefault("heard", {})[str(line)] = text
-            version.setdefault("errors", {})[str(line)] = error_rate(
-                version["item"]["text"], text)
-        print("  line {:>5}: {:.1f}% of words wrong ({:.0f}s)".format(
-            str(line), 100 * _mean(v["errors"][str(line)] for v in versions),
-            time.monotonic() - started), flush=True)
-    set_line(shipped)
 
-    for version in versions:
-        first = ear.first(version["pcm"])
-        version["first"] = None if first is None else {
-            "text": first.text, "average": first.average,
-            "lowest": first.lowest, "languages": list(first.languages)}
-        version["first_errors"] = (None if first is None else
-                                   error_rate(version["item"]["text"],
-                                              first.text))
-    return report(versions, lines, shipped, cfg, minutes)
+# -- people ----------------------------------------------------------------
+# Real people reading real sentences: Google's FLEURS (CC BY 4.0), native
+# speakers on their own microphones. A synthetic voice says Kazakh as well
+# as its makers taught it to; these say it as Kazakhs do. Each language's
+# archive is read as a stream and dropped after the first recordings, so
+# the lab keeps tens of megabytes, not the gigabyte behind them.
+
+FLEURS = "https://huggingface.co/datasets/google/fleurs/resolve/main/data/"
+FLEURS_CODES = {"kk": "kk_kz", "ru": "ru_ru", "en": "en_us", "de": "de_de"}
+# One person's sentence, then another's in another language: a whole
+# sentence said in the other language, which is one half of what HeySpeaky
+# is for. Two speakers, so harder than one person switching.
+SWITCHES = (("ru", "en"), ("en", "ru"), ("kk", "ru"), ("ru", "kk"),
+            ("de", "en"), ("ru", "de"))
+PEOPLE_ROOMS = ("as recorded", "laptop")
+
+
+def people_path():
+    return LAB / "people" / "people.json"
+
+
+def load_people():
+    try:
+        return json.loads(people_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+class _Chunks(io.RawIOBase):
+    """A file that reads from an HTTP response as it arrives."""
+
+    def __init__(self, chunks):
+        self._chunks = chunks
+        self._left = b""
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        while not self._left:
+            try:
+                self._left = next(self._chunks)
+            except StopIteration:
+                return 0
+        count = min(len(buffer), len(self._left))
+        buffer[:count] = self._left[:count]
+        self._left = self._left[count:]
+        return count
+
+
+def fetch_people(each):
+    """The first `each` recordings of each language's FLEURS dev set."""
+    import httpx
+    import tarfile
+
+    people = [p for p in load_people()]
+    have = {p["file"] for p in people}
+    for code, name in FLEURS_CODES.items():
+        folder = LAB / "people" / code
+        folder.mkdir(parents=True, exist_ok=True)
+        said = {}
+        for row in _get(FLEURS + name + "/dev.tsv").text.splitlines():
+            cells = row.split("\t")
+            if len(cells) >= 7:
+                said[cells[1]] = (cells[0], cells[2], cells[6])
+        got = sum(1 for p in people if p["lang"] == code)
+        if got >= each:
+            continue
+        with httpx.stream("GET", FLEURS + name + "/audio/dev.tar.gz",
+                          headers={"User-Agent": AGENT}, timeout=60.0,
+                          follow_redirects=True) as response:
+            response.raise_for_status()
+            stream = io.BufferedReader(_Chunks(response.iter_bytes()),
+                                       1 << 20)
+            # Read as a stream, member by member; nothing is extracted by
+            # its own path, and only names from the table are kept.
+            with tarfile.open(fileobj=stream, mode="r|gz") as archive:
+                for member in archive:
+                    base = Path(member.name).name
+                    if not member.isfile() or base not in said:
+                        continue
+                    target = folder / re.sub(r"[^0-9A-Za-z_.-]", "_", base)
+                    if str(target) in have:
+                        continue
+                    data = archive.extractfile(member).read()
+                    target.write_bytes(data)
+                    sentence, text, gender = said[base]
+                    people.append({"file": str(target), "lang": code,
+                                   "sentence": sentence, "text": text,
+                                   "gender": gender})
+                    got += 1
+                    if got >= each:
+                        break
+        print("  {}: {} recordings".format(code, got), flush=True)
+    people_path().write_text(json.dumps(people, ensure_ascii=False, indent=1),
+                             encoding="utf-8")
+    return len(people)
+
+
+def people_versions(args, cfg):
+    """Real recordings alone, and two of them joined across languages."""
+    people = load_people()
+    if not people:
+        print("No recordings yet: run `voice_lab.py people` first.")
+        return []
+    codes = [str(c) for c in cfg["transcription"]["cloud"].get("languages")
+             or []]
+    by_lang = {}
+    for person in people:
+        if person["lang"] in codes and Path(person["file"]).exists():
+            by_lang.setdefault(person["lang"], []).append(person)
+    pick = random.Random(11)
+    rooms = ([r.strip() for r in args.rooms.split(",")] if args.rooms
+             else PEOPLE_ROOMS)
+    each = args.limit or 30
+    takes = []
+    for code, found in sorted(by_lang.items()):
+        for person in pick.sample(found, min(each, len(found))):
+            takes.append(("real " + code, [person]))
+    for first, second in SWITCHES:
+        if first in by_lang and second in by_lang:
+            for _ in range(max(1, each // 3)):
+                takes.append(("real {}>{}".format(first, second),
+                              [pick.choice(by_lang[first]),
+                               pick.choice(by_lang[second])]))
+    versions = []
+    gap = np.zeros(int(0.25 * RATE), np.float32)
+    for pattern, parts in takes:
+        text = " ".join(p["text"] for p in parts)
+        speech = np.concatenate(sum(([read_wav(Path(p["file"])), gap]
+                                     for p in parts), [])[:-1])
+        ident = "p{:08x}".format(zlib.crc32(
+            "|".join(p["file"] for p in parts).encode("utf-8")))
+        item = {"id": ident, "text": text, "pattern": pattern,
+                "source": "fleurs",
+                "holdout": zlib.crc32(ident.encode("ascii")) % 4 == 0}
+        for room_name in rooms:
+            seed = zlib.crc32("{}/{}".format(ident, room_name).encode("ascii"))
+            pcm = recording(speech, room_name, seed, cfg["recording"])
+            versions.append({"item": item, "room": room_name, "pcm": pcm,
+                             "voice": "/".join(p["gender"] for p in parts),
+                             "manner": "real",
+                             "seconds": len(pcm) / 2.0 / RATE})
+    return versions
 
 
 def lines_with(shipped):
@@ -749,7 +957,20 @@ def main():
                          help="readings per sentence, each a new voice")
     run_cmd.add_argument("--rooms", help="comma-separated, of: " +
                          ", ".join(ROOMS))
-    run_cmd.add_argument("--workers", type=int, default=6)
+    run_cmd.add_argument("--workers", type=int, default=3,
+                         help="requests at once; more can crowd out the "
+                              "owner's own dictation on the same line")
+    run_cmd.add_argument("--max-minutes", type=float, default=30.0,
+                         help="refuse a run that sends more audio than this")
+    run_cmd.add_argument("--languages",
+                         help="comma-separated, in order, instead of this "
+                              "computer's list")
+    run_cmd.add_argument("--people", action="store_true",
+                         help="real people's recordings instead of voices; "
+                              "--limit is then recordings per language")
+    people_cmd = sub.add_parser("people", help="real recordings, from FLEURS")
+    people_cmd.add_argument("--each", type=int, default=80,
+                            help="recordings per language")
     replay_cmd = sub.add_parser("replay", help="a problem report's recordings")
     replay_cmd.add_argument("report")
     args = parser.parse_args()
@@ -762,6 +983,12 @@ def main():
         added, total = gather(key, args.articles, args.real)
         print("Added {} sentences; {} in {}".format(added, total,
                                                      texts_path()))
+        return 0
+    if args.command == "people":
+        print("Fetching real recordings ({} per language)...".format(
+            args.each))
+        print("{} recordings in {}".format(fetch_people(args.each),
+                                           people_path()))
         return 0
     if args.command == "run":
         return run(args)

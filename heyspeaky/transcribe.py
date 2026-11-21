@@ -45,6 +45,12 @@ class CloudUnreachable(RuntimeError):
     seconds, and stalling on every dictation helps nobody.
     """
 
+
+class NoCredit(RuntimeError):
+    """OpenAI answered, and the account has no credit left. Only the
+    person can fix it, on OpenAI's billing page, so it is never retried."""
+
+
 OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
 
 # Names for the generated prompt, shared with the tray so a language added
@@ -507,6 +513,11 @@ class CloudBackend:
                     return Heard.from_payload(payload)
 
                 body = response.text[:400]
+                # Out of credit is a 429 too, and no retry will change it:
+                # on 21 November three of them cost a dictation 25 seconds.
+                if response.status_code == 429 and "insufficient_quota" in body:
+                    raise NoCredit("OpenAI says the account has no credit "
+                                   "left")
                 # Rate limits and server hiccups deserve a retry: the
                 # alternative is throwing away what the user just said.
                 if (response.status_code == 429
@@ -662,6 +673,16 @@ class Router:
                     )
                     self.last_fallback = "offline"
                     logger.warning("Cloud unreachable: %s", exc)
+                    if not self._cfg["transcription"]["cloud"][
+                        "fallback_to_local"
+                    ]:
+                        raise
+                except NoCredit as exc:
+                    # Said in so many words, so the person knows it is the
+                    # account and not the app: the pill reads "no OpenAI
+                    # credit", where "cloud error" told him nothing.
+                    self.last_fallback = "no OpenAI credit"
+                    logger.warning("%s; using local", exc)
                     if not self._cfg["transcription"]["cloud"][
                         "fallback_to_local"
                     ]:

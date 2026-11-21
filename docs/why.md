@@ -303,6 +303,37 @@ the sentences are other people's writing, and the clips are recordings.
 It is not anyone's voice, so a real failure is still looked at with
 `voice_lab.py replay` on a problem report saved right after it.
 
+The same evening it got real voices too: `voice_lab.py people` streams the
+first recordings out of Google's FLEURS (CC BY 4.0, native speakers on
+their own microphones) and `run --people` hears them alone and joined in
+pairs across languages. One language at a time, real people came out well
+(German 3.0% of words wrong, Russian 3.7%, English 5.0%, Kazakh 11.6%). Two
+joined across languages showed the fault the owner started HeySpeaky over:
+the model kept to the first language and dropped the second - 18 of 120
+joined recordings lost a quarter of their words or more, most of them an
+English sentence after a Russian or German one, and no one-language
+recording did. Hearing the recording in pieces at its pauses as well, and
+taking the pieces only when they hold half as many words again, brought 5
+of those back and spoiled nothing; it is measured, not yet in the app.
+
+### The lab's bill
+
+**The lab spends the owner's money.** On 21 November one evening of lab
+runs sent six to seven hours of audio and about two thousand text
+requests, and the account ran out: his next dictation got "You have no
+credits remaining" and was heard by the local model. Earlier, a run
+uploading six recordings at once had probably crowded out one of his own,
+which timed out. So a run that would send more than half an hour of audio
+refuses until it is asked for by name (`--max-minutes`), three requests go
+at once rather than six, and the lab stops at the first "no credit".
+
+The app had made it worse: it asked three more times, because "no credit"
+comes back as a 429 like a rate limit, which cost the dictation 25
+seconds, and then the pill said only "local (cloud error)". Now a 429 that
+says `insufficient_quota` raises `NoCredit`, is never retried, and the pill
+says "local (no OpenAI credit)": only the person can fix it, on OpenAI's
+billing page.
+
 ### Asking again when unsure
 
 The owner said "Они потребуют одинаковое количество энергий" and got
