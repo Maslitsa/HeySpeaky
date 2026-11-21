@@ -4,7 +4,42 @@ Notable changes to HeySpeaky, called VoiceType until September 2026, then
 SpeakIt, and SpeakIt again from 26 October to 19 November 2026. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## [1.2.0] - 2026-11-21
+
+The first numbered release since 1.0.0, and the first with HeySpeaky's
+name on it. The newest changes first, then everything since September.
+
+### Added
+
+- **Fix the alphabet.** After OpenAI transcribes, a small text model puts a
+  word written in the wrong alphabet back in its own: "Kubernetes cluster
+  upal" becomes "упал", "Данке дир" becomes "Danke dir". On twelve sentences
+  that change language, read twice, it improved 4 of 24 recordings and made
+  none worse, usually in under a second. A second check refuses any answer
+  that changes the words rather than their alphabet, and any error or slow
+  answer leaves the text as the speech model wrote it. It runs only when
+  your languages use both Latin and Cyrillic letters and the text has Latin
+  in it, and it is a switch in the tray panel.
+- **Your words** in the tray panel is now a page: every word it has learned,
+  what it heard instead, and two clicks to make it forget one. It used to
+  open a JSON file in Notepad.
+- Issue forms for a bug, for wrong words in your languages and for an idea,
+  and a contributing guide that walks through how one dictation goes through
+  the code.
+
+### Fixed
+
+- Ctrl+Alt could stop working for good. When a key's release never reached
+  HeySpeaky - after Win+L, Ctrl+Alt+Del, or a key let go over another
+  program - it went on thinking that key was held, took every Ctrl+Alt
+  for a shortcut like Ctrl+Alt+Q, and did nothing until restarted. It now
+  asks Windows which keys are really down before it decides.
+- The glass pill's shadow was cut off by the edge of its window and drew a
+  faint grey rectangle round the pill on a white page. The shadow, and the
+  coloured rim while listening, now fade to nothing before the edge, in the
+  pill, the correction box and the tray panel alike.
+
+### Since September
 
 HeySpeaky is HeySpeaky again: the program, its folders, its shortcuts and
 the GitHub repository. The SpeakIt and VoiceType install commands still
@@ -21,7 +56,7 @@ GitHub links still work, a key saved under any old name is still found,
 settings and the key are copied across on the first update, and the old
 shortcuts are removed so only one copy starts with Windows.
 
-### Fixed
+#### Fixed
 
 - A copy installed before a rename stopped hearing about updates: GitHub
   answers a renamed repository's old address with a redirect, and the update
@@ -57,37 +92,7 @@ shortcuts are removed so only one copy starts with Windows.
   up front, downloads the speech models and loads one before finishing, and
   confirms the app actually started. CI runs it on a clean Windows runner.
 
-### Added
-
-- **Fix the alphabet.** After OpenAI transcribes, a small text model puts a
-  word written in the wrong alphabet back in its own: "Kubernetes cluster
-  upal" becomes "упал", "Данке дир" becomes "Danke dir". On twelve sentences
-  that change language, read twice, it improved 4 of 24 recordings and made
-  none worse, usually in under a second. A second check refuses any answer
-  that changes the words rather than their alphabet, and any error or slow
-  answer leaves the text as the speech model wrote it. It runs only when your languages use
-  both Latin and Cyrillic letters and the text has Latin in it, and it is a
-  switch in the tray panel.
-- **Your words** in the tray panel is now a page: every word it has learned,
-  what it heard instead, and two clicks to make it forget one. It used to
-  open a JSON file in Notepad.
-- Issue forms for a bug, for wrong words in your languages and for an idea,
-  and a contributing guide that walks through how one dictation goes through
-  the code.
-
-### Fixed
-
-- Ctrl+Alt could stop working for good. When a key's release never reached
-  HeySpeaky - after Win+L, Ctrl+Alt+Del, or a key let go over another
-  program - it went on thinking that key was held, took every Ctrl+Alt
-  for a shortcut like Ctrl+Alt+Q, and did nothing until restarted. It now
-  asks Windows which keys are really down before it decides.
-- The glass pill's shadow was cut off by the edge of its window and drew a
-  faint grey rectangle round the pill on a white page. The shadow, and the
-  coloured rim while listening, now fade to nothing before the edge, in the
-  pill, the correction box and the tray panel alike.
-
-### Added, earlier
+#### Added
 
 - A window opens during the install with a progress bar, a rough time left,
   and a dinosaur that jumps cactuses (Space) until SpeakIt is ready. It closes
@@ -130,7 +135,7 @@ shortcuts are removed so only one copy starts with Windows.
   either backend. `--sweep` runs any recording under a range of language
   lists, which is how the `languages` finding below was checked.
 
-### Changed
+#### Changed
 
 - The installer loads the speech engine once instead of twice. It used to
   start the engine as a check and then start SpeakIt, which loaded it again;
@@ -160,7 +165,7 @@ shortcuts are removed so only one copy starts with Windows.
   the finding that the cloud backend is not the faster option. Its median is
   comparable to local and its tail is much worse.
 
-### Removed
+#### Removed
 
 - The grey live text while you speak. It came from a small model that was
   never close to the final transcript, and loading and running it cost CPU
