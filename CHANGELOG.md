@@ -77,6 +77,11 @@ shortcuts are removed so only one copy starts with Windows.
 
 ### Fixed
 
+- Ctrl+Alt could stop working for good. When a key's release never reached
+  HeySpeaky - after Win+L, Ctrl+Alt+Del, or a key let go over another
+  program - it went on thinking that key was held, took every Ctrl+Alt
+  for a shortcut like Ctrl+Alt+Q, and did nothing until restarted. It now
+  asks Windows which keys are really down before it decides.
 - The glass pill's shadow was cut off by the edge of its window and drew a
   faint grey rectangle round the pill on a white page. The shadow, and the
   coloured rim while listening, now fade to nothing before the edge, in the

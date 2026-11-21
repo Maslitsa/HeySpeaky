@@ -446,6 +446,10 @@ class HotkeyListener:
             if self._paused:
                 return
 
+            if (kind in ("ctrl", "alt") and not repeat
+                    and event.event_type == keyboard.KEY_DOWN):
+                self._forget_released_keys_locked()
+
             has_ctrl = any(self._classify(k) == "ctrl" for k in self._pressed)
             has_alt = any(self._classify(k) == "alt" for k in self._pressed)
             has_other = any(
@@ -527,6 +531,26 @@ class HotkeyListener:
                         self._fire(self._on_hold_release)
                 elif not dirty and held < self._engage_delay:
                     self._chord_tapped()
+
+    def _forget_released_keys_locked(self):
+        """Drops keys the hook thinks are held when Windows says none is.
+
+        A release that never reaches the hook - after Win+L, Ctrl+Alt+Del,
+        or a key let go while another program's window had the keyboard -
+        leaves its key in `_pressed` for good. From then on every Ctrl+Alt
+        looks like Ctrl+Alt+that key, a shortcut, and does nothing. On the
+        owner's machine that went on from 20 November: every press was
+        "taken as a shortcut", and dictation could only be started and
+        stopped from the tray. Asked when Ctrl or Alt goes down, so Windows'
+        own key state has the last word.
+        """
+        others = [key for key in self._pressed
+                  if self._classify(key) == "other"]
+        if not others or _other_key_down():
+            return
+        self._pressed.difference_update(others)
+        logger.info("Forgot %d key(s) the hook never heard being let go",
+                    len(others))
 
     def _say_blocked(self):
         """Ctrl and Alt are down, but so is something else, so this is a
@@ -629,6 +653,21 @@ class HotkeyListener:
 # key codes Windows itself uses for them.
 _MODIFIER_KEYS = (("ctrl", (0x11,)), ("alt", (0x12,)), ("shift", (0x10,)),
                   ("windows", (0x5B, 0x5C)))
+
+
+# Ctrl and Alt by their virtual key codes: the chord itself, which is not
+# what the check for a key left held is looking for.
+_CHORD_KEYS = frozenset((0x11, 0x12, 0xA2, 0xA3, 0xA4, 0xA5))
+
+
+def _other_key_down():
+    """Whether Windows says any key but Ctrl and Alt is down right now."""
+    try:
+        state = ctypes.windll.user32.GetAsyncKeyState
+        return any(state(vk) & 0x8000 for vk in range(0x08, 0xFF)
+                   if vk not in _CHORD_KEYS)
+    except Exception:
+        return True         # Windows cannot be asked: believe the hook.
 
 
 def _key_down(vk):

@@ -419,6 +419,14 @@ without jargon, and say what you actually did and what you could not do.
   selections came from, and the warning lines. It prints counts and program
   names, never anything dictated. The commit check also refuses an
   `install.ps1` or `uninstall.ps1` that is not ASCII or does not parse.
+- **A key the hook thinks is held is checked with Windows** before it
+  turns Ctrl+Alt into a shortcut (`_forget_released_keys_locked`). A
+  release that never reached the hook left a letter in `_pressed`, and
+  from 20 November every Ctrl+Alt on the owner's machine was "taken as a
+  shortcut": he had to start and stop dictation from the tray. Same
+  lesson as `wait_for_modifiers_released`: the hook's own list of held
+  keys goes stale, Windows' does not. The suite tells Windows to agree
+  with the keys it sends (`setUpModule`), since they are not real.
 - **A Ctrl+Alt that does nothing now leaves a line.** After a restart the
   owner said Ctrl+Alt did nothing, and the log could not tell that apart
   from nothing being pressed. It now notes the first key the hook hears after

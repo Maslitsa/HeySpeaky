@@ -51,6 +51,11 @@ def setUpModule():
     _real_dictionary = dictionary_module.PATH
     dictionary_module.PATH = os.path.join(tempfile.mkdtemp(), "none.json")
     dictionary_module.LEGACY_PATHS = ()
+    # The tests press keys that exist only in the events they send, so
+    # Windows would call every one of them up. Unless a test says otherwise,
+    # Windows agrees with the hook about what is held.
+    if HotkeyListener is not None:
+        hotkey._other_key_down = lambda: True
 
 
 def tearDownModule():
@@ -2991,6 +2996,34 @@ class TheLogSaysWhyCtrlAltDidNothing(unittest.TestCase):
         self.assertIn("a character key", said)
         self.assertNotIn("'q'", said)
         self.assertNotIn(" q ", said)
+
+    def test_a_key_whose_release_was_missed_does_not_block_ctrl_alt(self):
+        """From 20 November every Ctrl+Alt on the owner's machine was
+        "taken as a shortcut": a letter's release had never reached the hook,
+        so the hook still thought it was held. Windows knew better."""
+        listener = self.listener()
+        listener._keys_seen = 5
+        listener._on_key_event(_Event("q", "down"))    # its "up" never came
+        real = hotkey._other_key_down
+        self.addCleanup(setattr, hotkey, "_other_key_down", real)
+        hotkey._other_key_down = lambda: False          # Windows: nothing held
+        with self.assertLogs("heyspeaky.hotkey", level="INFO") as logs:
+            listener._on_key_event(_Event("ctrl", "down"))
+            listener._on_key_event(_Event("alt", "down"))
+        said = " | ".join(logs.output)
+        self.assertIn("never heard being let go", said)
+        self.assertNotIn("already held", said)
+        self.assertTrue(listener._combo_active)
+        listener._cancel_timer()
+
+    def test_a_key_that_really_is_held_still_makes_a_shortcut(self):
+        listener = self.listener()
+        listener._keys_seen = 5
+        listener._on_key_event(_Event("q", "down"))
+        listener._on_key_event(_Event("ctrl", "down"))
+        listener._on_key_event(_Event("alt", "down"))
+        self.assertFalse(listener._combo_active)
+        self.assertIn("q", listener._pressed)
 
     def test_a_refresh_names_the_program_in_front(self):
         """Sixty-three refreshes in two days, and what caused them was still
