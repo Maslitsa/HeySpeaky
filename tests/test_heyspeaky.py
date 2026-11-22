@@ -12,6 +12,7 @@ They use only the standard library plus numpy, so CI can run them on a machine
 with no sound card.
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -575,6 +576,12 @@ class ProblemReport(unittest.TestCase):
             logs.mkdir()
             (logs / "heyspeaky.log").write_text(
                 "sent with " + self.FAKE_KEY, encoding="utf-8")
+            # How the last run ended travels with the report; other files
+            # in the folder do not.
+            (logs / "crash.log").write_text("=== HeySpeaky ===\n",
+                                            encoding="utf-8")
+            (logs / "running.json").write_text("{}", encoding="utf-8")
+            (logs / "running.json.tmp").write_text("{}", encoding="utf-8")
             path = diagnostics.save_report(cfg, [entry, entry], logs,
                                            out_dir=tmp, check_network=False)
             with zipfile.ZipFile(path) as archive:
@@ -582,7 +589,8 @@ class ProblemReport(unittest.TestCase):
                 contents = b"".join(archive.read(name) for name in names)
                 report = archive.read("report.txt").decode("utf-8")
         self.assertEqual(names, {"report.txt", "config.json",
-                                 "logs/heyspeaky.log", "recordings/1.wav",
+                                 "logs/heyspeaky.log", "logs/crash.log",
+                                 "logs/running.json", "recordings/1.wav",
                                  "recordings/2.wav"})
         self.assertNotIn(self.FAKE_KEY.encode(), contents)
         self.assertIn("local (offline)", report)
@@ -3954,6 +3962,220 @@ class TheWordsPage(_PanelModel, unittest.TestCase):
         self.assertNotIn("Мағжан", key)
         self.assertNotIn("Marzhan", key)
         self.assertTrue(key.startswith("word:"))
+
+
+class TheBlackBox(unittest.TestCase):
+    """HeySpeaky vanished six times in November with nothing in the log.
+
+    The next start must say that the last run ended without shutting down,
+    when it was last alive and what it held, and never anything dictated.
+    """
+
+    def setUp(self):
+        from heyspeaky import blackbox
+        self.blackbox = blackbox
+        self.tmp = tempfile.TemporaryDirectory()
+        # A cleanup, not tearDown: cleanups run after the crash log is
+        # closed, and Windows will not delete a file that is still open.
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        self.now = [1_800_000_000.0]
+        self.held = {"memory_mb": 300, "private_mb": 280, "handles": 700,
+                     "gdi": 40, "user": 20, "threads": 12}
+
+    def _crash_log(self):
+        """Opens crash.log the way the app does, and undoes it after."""
+        import faulthandler
+        was_on = faulthandler.is_enabled()
+        path = self.blackbox.open_crash_log(self.dir, "9.9.9")
+        self.addCleanup(self.blackbox._crash_file.close)
+        self.addCleanup(lambda: faulthandler.enable() if was_on
+                        else faulthandler.disable())
+        return path
+
+    def _box(self, who="explorer.exe"):
+        import atexit
+        box = self.blackbox.BlackBox(
+            self.dir, "9.9.9", clock=lambda: self.now[0],
+            measure=lambda: dict(self.held), who=lambda: who)
+        # The real app registers this once per process; the tests make many
+        # boxes, and none of them should write when the test run exits.
+        self.addCleanup(atexit.unregister, box._at_exit)
+        return box
+
+    def test_a_run_that_never_shut_down_is_reported_at_the_next_start(self):
+        first = self._box(who="powershell.exe")
+        first.start()
+        self.now[0] += 3 * 3600
+        self.held["memory_mb"] = 900
+        first.tick()
+        # Killed here: no stop(), so running.json stays behind.
+        self.now[0] += 8 * 3600
+        second = self._box()
+        with self.assertLogs("heyspeaky.blackbox", "INFO") as logs:
+            second.start()
+        said = "\n".join(logs.output)
+        self.assertIn("ended without shutting down", said)
+        self.assertIn("powershell.exe", said)
+        self.assertIn("memory 900 MB", said)
+        self.assertIn("480 min before this start", said)
+        self.assertIn("killed, or crashed", said)
+        marker = json.loads((self.dir / "running.json").read_text("utf-8"))
+        self.assertEqual(marker["started_by"], "explorer.exe")
+        self.assertEqual(set(marker), {"pid", "version", "started",
+                                       "started_by", "seen", "held"})
+
+    def test_a_clean_shutdown_leaves_nothing_to_report(self):
+        first = self._box()
+        first.start()
+        first.stop()
+        self.assertFalse((self.dir / "running.json").exists())
+        with self.assertLogs("heyspeaky.blackbox", "INFO") as logs:
+            self._box().start()
+        self.assertNotIn("without shutting down", "\n".join(logs.output))
+
+    def test_python_leaving_on_its_own_is_told_apart_from_a_kill(self):
+        first = self._box()
+        first.start()
+        with self.assertLogs("heyspeaky.blackbox", "WARNING"):
+            first._at_exit()
+        with self.assertLogs("heyspeaky.blackbox", "INFO") as logs:
+            self._box().start()
+        self.assertIn("Python exited on its own", "\n".join(logs.output))
+
+    def test_a_late_tick_says_the_computer_slept(self):
+        box = self._box()
+        box.start()
+        self.now[0] += 60
+        with self.assertNoLogs("heyspeaky.blackbox", "INFO"):
+            box.tick()
+        self.now[0] += 40 * 60
+        with self.assertLogs("heyspeaky.blackbox", "INFO") as logs:
+            box.tick()
+        self.assertIn("Back after 40 min", "\n".join(logs.output))
+
+    def test_what_it_holds_is_logged_once_an_hour(self):
+        box = self._box()
+        box.start()
+        lines = []
+        for _ in range(130):
+            self.now[0] += 60
+            with mock.patch.object(self.blackbox.logger, "info") as info:
+                box.tick()
+            lines += [call for call in info.call_args_list
+                      if call.args[0].startswith("Alive")]
+        self.assertEqual(len(lines), 2)
+
+    def test_a_crash_leaves_its_last_words_in_crash_log(self):
+        import faulthandler
+        path = self._crash_log()
+        self.assertTrue(faulthandler.is_enabled())
+        pid = os.getpid()
+        self.assertFalse(self.blackbox.last_words(path, pid))
+        faulthandler.dump_traceback(file=self.blackbox._crash_file)
+        self.blackbox._crash_file.flush()
+        self.assertTrue(self.blackbox.last_words(path, pid))
+        self.assertIn("pid {} started".format(pid),
+                      path.read_text(encoding="utf-8"))
+
+    def test_a_big_crash_log_is_set_aside_not_grown(self):
+        (self.dir / "crash.log").write_text(
+            "x" * (self.blackbox.CRASH_LOG_LIMIT + 10), encoding="utf-8")
+        path = self._crash_log()
+        self.assertTrue((self.dir / "crash.log.1").exists())
+        self.assertLess(path.stat().st_size, 200)
+
+    def test_an_exception_in_a_thread_reaches_the_log(self):
+        saved = (threading.excepthook, sys.excepthook)
+        self.addCleanup(lambda: (setattr(threading, "excepthook", saved[0]),
+                                 setattr(sys, "excepthook", saved[1])))
+        self.blackbox.catch_uncaught()
+
+        def fails():
+            raise RuntimeError("boom")
+
+        with self.assertLogs("heyspeaky.blackbox", "ERROR") as logs:
+            worker = threading.Thread(target=fails, name="engine-test")
+            worker.start()
+            worker.join()
+        self.assertIn("engine-test", logs.output[0])
+        self.assertIn("RuntimeError", logs.output[0])
+
+    def test_started_by_looks_past_the_venv_launcher(self):
+        table = {10: (9, "pythonw.exe"), 9: (4, "pythonw.exe"),
+                 4: (1, "explorer.exe"), 1: (0, "System")}
+        self.assertEqual(self.blackbox.started_by(10, table), "explorer.exe")
+        table[4] = (1, "powershell.exe")
+        self.assertEqual(self.blackbox.started_by(10, table),
+                         "powershell.exe")
+        self.assertEqual(self.blackbox.started_by(10, {}), "unknown")
+
+    def test_it_can_measure_this_process(self):
+        held = self.blackbox.holdings()
+        self.assertGreater(held.get("memory_mb", 0), 0)
+        self.assertGreater(held.get("handles", 0), 0)
+        self.assertIn("memory", self.blackbox.describe(held))
+
+
+class TheLastRunsOutput(unittest.TestCase):
+    """A traceback printed as the app died used to be wiped by the next
+    start, because the parent opened stdout.log fresh each run."""
+
+    def _opener(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "heyspeaky_run_stdout", ROOT / "run.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module._open_stdout_log
+
+    def test_the_parent_keeps_the_last_runs_output(self):
+        open_log = self._opener()
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "stdout.log").write_text("Traceback: the last words\n",
+                                                  encoding="utf-8")
+            stream = open_log(tmp, is_worker=False)
+            stream.write("a new run\n")
+            stream.close()
+            self.assertIn("the last words", (Path(tmp) / "stdout.prev.log")
+                          .read_text(encoding="utf-8"))
+            self.assertEqual((Path(tmp) / "stdout.log")
+                             .read_text(encoding="utf-8"), "a new run\n")
+
+    def test_an_empty_log_does_not_replace_the_kept_one(self):
+        open_log = self._opener()
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "stdout.prev.log").write_text("kept\n",
+                                                       encoding="utf-8")
+            (Path(tmp) / "stdout.log").write_text("", encoding="utf-8")
+            open_log(tmp, is_worker=False).close()
+            self.assertEqual((Path(tmp) / "stdout.prev.log")
+                             .read_text(encoding="utf-8"), "kept\n")
+
+    def test_a_log_still_open_elsewhere_is_appended_to_not_wiped(self):
+        open_log = self._opener()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "stdout.log"
+            path.write_text("the running copy's output\n", encoding="utf-8")
+            with open(path, "a", encoding="utf-8"):
+                # Held open, as the running copy holds it: Windows refuses
+                # the rename, and the second copy must not empty the file.
+                stream = open_log(tmp, is_worker=False)
+                stream.close()
+            self.assertIn("the running copy's output",
+                          path.read_text(encoding="utf-8"))
+
+    def test_a_worker_appends(self):
+        open_log = self._opener()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "stdout.log"
+            path.write_text("parent\n", encoding="utf-8")
+            stream = open_log(tmp, is_worker=True)
+            stream.write("worker\n")
+            stream.close()
+            self.assertEqual(path.read_text(encoding="utf-8"),
+                             "parent\nworker\n")
+            self.assertFalse((Path(tmp) / "stdout.prev.log").exists())
 
 
 from unittest import mock  # noqa: E402

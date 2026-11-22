@@ -118,6 +118,41 @@ timer, so a scheduled probe stops the laptop ever sleeping.
 **The transcription worker must die with the app** (`winjob.py`). Orphans
 once wrote 8.7 GB of the same traceback.
 
+### Black box
+
+**A run that ends must leave a trace** (`blackbox.py`). In November 2026
+HeySpeaky vanished six times, mostly overnight, and the owner found out only
+when Ctrl+Alt did nothing; once it stayed gone for a whole day. Each time the
+log just stopped. There was no "Shutting down", no "Fatal error", nothing in
+Windows' Application log, and the computer had not restarted since 18
+October. Windows did flag python's memory as growing twice (1 and 20
+November), which is a lead, not an answer. The last run had been started by
+the installer from a script, not from the shortcut, so the window that ran
+the script may have taken it down. Nothing could tell.
+
+Nothing could tell because nothing wrote it down. Under pythonw.exe a native
+crash, a Tk callback that fails and an exception in a thread all print to
+stderr, which `run.py` points at stdout.log, and the next start emptied
+stdout.log. So now:
+
+- faulthandler writes every thread's stack to `logs/crash.log` when the
+  process dies in C code, one header line per start, set aside at 1 MB;
+- uncaught exceptions in any thread, and failed Tk callbacks, go to the log;
+- `logs/running.json` holds the pid, who started it, when it was last seen
+  alive and what it held, refreshed every minute and removed by a clean
+  shutdown. The next start finds it and says "ended without shutting down",
+  telling a Python exit apart from a kill;
+- once an hour, a line with memory, handles and GDI objects, so a leak shows
+  as a slope;
+- a tick five minutes late says the computer slept or the loop stood still;
+- the last run's stdout.log is kept as stdout.prev.log. A rename that fails
+  means another copy still has the file open, and it is appended to, never
+  emptied.
+
+All of it is numbers, times and program names, never anything dictated. The
+marker is read only after the single-instance check, because a second copy
+on its way out would otherwise read the running copy's marker as a death.
+
 ### Keys
 
 **Keys live outside the project**, in `%APPDATA%\HeySpeaky\openai.key`. The

@@ -97,20 +97,38 @@ class _CappedStream:
         return "utf-8"
 
 
+def _open_stdout_log(log_dir, is_worker):
+    """The stream for stdout and stderr.
+
+    The parent starts a clean log each run, but keeps the last run's as
+    stdout.prev.log first: a traceback printed as the app died would be
+    wiped by the very start that comes to look for it. Workers append, so
+    they cannot truncate the log their parent is still writing. A rename
+    that fails means another HeySpeaky still has the file open (a second
+    copy, about to exit), and its output is not ours to wipe either.
+    """
+    path = Path(log_dir) / "stdout.log"
+    mode = "a"
+    if not is_worker:
+        mode = "w"
+        try:
+            if path.stat().st_size > 0:
+                os.replace(path, Path(log_dir) / "stdout.prev.log")
+        except FileNotFoundError:
+            pass
+        except OSError:
+            mode = "a"
+    return _CappedStream(path, mode, STDOUT_LOG_LIMIT)
+
+
 try:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
     pass
 
 if sys.stdout is None or sys.stderr is None:
-    # The parent starts a clean log each run; workers append to it so they
-    # cannot truncate the log their parent is still writing.
     try:
-        _stream = _CappedStream(
-            LOG_DIR / "stdout.log",
-            "a" if IS_WORKER else "w",
-            STDOUT_LOG_LIMIT,
-        )
+        _stream = _open_stdout_log(LOG_DIR, IS_WORKER)
     except OSError:
         _stream = open(os.devnull, "w", encoding="utf-8")
     sys.stdout = sys.__stdout__ = _stream

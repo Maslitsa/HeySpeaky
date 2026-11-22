@@ -24,6 +24,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A black box for when HeySpeaky disappears.** It sometimes vanished
+  overnight with nothing in its log. Now a crash leaves the last words of
+  every thread in `logs\crash.log`, and the next start says in the log that
+  the last run ended without shutting down: when it was last alive, which
+  program started it, and how much memory it held. Once an hour it notes its
+  memory, so a leak would show. The last run's `stdout.log` is kept as
+  `stdout.prev.log` instead of being emptied. Nothing dictated is written.
 - **A listening lab for anyone tuning HeySpeaky** (`tools/voice_lab.py`).
   It writes sentences that change language from random Wikipedia
   articles and takes real ones from tech news, has eleven voices read

@@ -25,7 +25,9 @@ import tkinter as tk
 
 import webrtcvad
 
+from . import __version__
 from . import apikey
+from . import blackbox
 from . import config as config_module
 from . import correct
 from . import diagnostics
@@ -90,8 +92,9 @@ def setup_logging(level_name):
 class App:
     """Owns the state machine that turns key events into inserted text."""
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, box=None):
         self.cfg = cfg
+        self._box = box
         self.state = IDLE
         self._state_lock = threading.RLock()
         # Serialises hotkey transitions. Opening the microphone takes a
@@ -113,6 +116,7 @@ class App:
 
         self.root = tk.Tk()
         self.root.title("HeySpeaky")
+        blackbox.watch_tk(self.root)
         self.overlay = Overlay(
             self.root,
             cfg["overlay"],
@@ -985,8 +989,21 @@ class App:
         self.tray.start()
         self.tray.set_status("Loading speech models…")
         self.root.after(16, self._pump)
+        self.root.after(blackbox.TICK_SECONDS * 1000, self._tick_box)
         logger.info("HeySpeaky running")
         self.root.mainloop()
+
+    def _tick_box(self):
+        # On the Tk thread on purpose: a loop that stands still shows up in
+        # the black box as a late tick.
+        if self._quitting:
+            return
+        if self._box is not None:
+            try:
+                self._box.tick()
+            except Exception:
+                logger.exception("The black box tick failed")
+        self.root.after(blackbox.TICK_SECONDS * 1000, self._tick_box)
 
     def shutdown(self):
         if self._quitting:
@@ -1000,6 +1017,9 @@ class App:
             self.engine.shutdown()
             self.tray.stop()
         finally:
+            box = getattr(self, "_box", None)
+            if box is not None:
+                box.stop()
             try:
                 self.root.destroy()
             except tk.TclError:
@@ -1019,8 +1039,16 @@ def main():
         logger.warning("Another instance is already running; exiting")
         return 0
 
+    # After the single-instance check, never before it: a second copy that
+    # is about to exit must not read the running copy's marker as the trace
+    # of a run that died.
+    blackbox.open_crash_log(config_module.LOG_DIR, __version__)
+    blackbox.catch_uncaught()
+    box = blackbox.BlackBox(config_module.LOG_DIR, __version__)
+    box.start()
+
     enable_dpi_awareness()
-    app = App(cfg)
+    app = App(cfg, box=box)
     try:
         app.run()
     except KeyboardInterrupt:

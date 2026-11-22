@@ -303,6 +303,9 @@ def report_text(cfg, entries, check_network=True):
     return redact(text + "\n" + _WHAT_TO_LOOK_FOR)
 
 
+_BLACK_BOX_FILES = ("stdout.log", "stdout.prev.log", "running.json")
+
+
 def save_report(cfg, entries, log_dir, out_dir=None, check_network=True):
     """Writes the ZIP and returns its path."""
     out_dir = Path(out_dir) if out_dir else (desktop_dir() or Path(log_dir))
@@ -321,8 +324,11 @@ def save_report(cfg, entries, log_dir, out_dir=None, check_network=True):
         log_dir = Path(log_dir)
         if log_dir.is_dir():
             for log in sorted(log_dir.iterdir()):
+                # The black box's files too: how the last run ended is
+                # often the question the report is sent to answer.
                 if log.is_file() and (log.name.startswith("heyspeaky.log")
-                                      or log.name == "stdout.log"):
+                                      or log.name.startswith("crash.log")
+                                      or log.name in _BLACK_BOX_FILES):
                     try:
                         content = log.read_text(encoding="utf-8",
                                                 errors="replace")

@@ -34,6 +34,7 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/levels.py` | making a quiet recording loud enough to transcribe |
 | `heyspeaky/sound.py` | the tone at the end, built here, not shipped |
 | `heyspeaky/diagnostics.py` | the problem report people send you |
+| `heyspeaky/blackbox.py` | what a run leaves behind when it dies without saying why |
 | `heyspeaky/tray.py` `hotkey.py` `mic.py` `output.py` `winjob.py` | the rest |
 | `install.ps1` `uninstall.ps1` | how everyone installs and removes it |
 | `tools/doctor.py` | the check-up; the installer runs it with `--install` |
@@ -81,6 +82,10 @@ rule here in a line or two, with its story there.
   by injecting a key: `SendInput` stops the laptop sleeping. ([why](docs/why.md#watchdog))
 - **The transcription worker must die with the app** (`winjob.py`).
   ([why](docs/why.md#worker))
+- **A run that ends must leave a trace** (`blackbox.py`): `crash.log` for
+  native crashes, `running.json` until a clean shutdown, the last run's
+  stdout kept as `stdout.prev.log`. Numbers and program names only.
+  ([why](docs/why.md#black-box))
 - **Keys live outside the project**, in `%APPDATA%\HeySpeaky\openai.key`. Never
   log one, print one or put one in config.json. ([why](docs/why.md#keys))
 - **Quiet audio comes back as an empty string, not an error**: `levels.py`
