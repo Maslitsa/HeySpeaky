@@ -3132,6 +3132,25 @@ class TheListeningLab(unittest.TestCase):
             self.assertEqual(len(lab.read_wav(Path(kept[0]["file"]))),
                              lab.RATE)
 
+    def test_own_sentences_come_from_the_lines_of_a_note(self):
+        """The owner said only the Kazakh-and-Russian sentences written for
+        him were how he talks: his own are read from his own note."""
+        lab = _tool("voice_lab")
+        note = ("# My sentences\n\nRead them as you dictate.\n\n"
+                "- Сен келесің бе, или мне самому к тебе приехать?\n"
+                "- Скинь мне file, пожалуйста\n"
+                "* Хорошо, я понял.\n"
+                "not a sentence\n-\n")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "note.md"
+            path.write_text(note, encoding="utf-8")
+            found = lab.own_sentences(path)
+        self.assertEqual(found, [
+            ("his kk+ru", "Сен келесің бе, или мне самому к тебе приехать?"),
+            ("his ru+latin", "Скинь мне file, пожалуйста"),
+            ("his ru", "Хорошо, я понял."),
+        ])
+
     def test_yo_is_read_as_ye_and_a_hallucination_counts_once(self):
         lab = _tool("voice_lab")
         self.assertEqual(lab.error_rate("Ещё не пришла", "еще не пришла"), 0.0)

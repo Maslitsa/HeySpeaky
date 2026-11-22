@@ -9,6 +9,7 @@ it hear better is to measure. This makes the measurement big and varied:
     python tools\voice_lab.py people           real people's recordings
     python tools\voice_lab.py run --people     ...heard the same way
     python tools\voice_lab.py mine             read 30 sentences yourself
+    python tools\voice_lab.py mine --from note.md   ...or your own ones
     python tools\voice_lab.py run --mine       ...and hear your own voice
     python tools\voice_lab.py replay report.zip
 
@@ -816,12 +817,17 @@ def people_versions(args, cfg):
 
 # -- yours -----------------------------------------------------------------
 # The one voice that matters: the person's own, on their own microphone.
-# `mine` shows these one at a time and records each as it is read; `run
-# --mine` hears them the way the app would. They are the owner's languages
-# and the way he talks - a word that would only come in English, a whole
-# sentence in the other language - and the first short one is the sentence
-# that came back as "Альбатрос бродит акварель часовой мерки". For other
-# languages, change the list. The recordings stay in the lab folder.
+# `mine` shows sentences one at a time and records each as it is read; `run
+# --mine` hears them the way the app would. The recordings stay in the lab
+# folder.
+#
+# The list below was written FOR the owner, and he read it and said only the
+# Kazakh-and-Russian ones were how he talks: "the rest I would not even say
+# like that". Sentences somebody else invents measure somebody else. So
+# `mine --from notes.md` reads the person's own sentences, one per line
+# starting with "- ", and this list is only where to begin. The first short
+# one is the sentence that came back as "Альбатрос бродит акварель часовой
+# мерки".
 
 MINE = [
     ("ru+en word", "Мне нужно до пятницы сдать этот assignment, иначе не "
@@ -869,11 +875,40 @@ def mine_path():
     return LAB / "mine" / "mine.json"
 
 
-def load_mine():
+def own_path():
+    """Where the person's own sentences, read with --from, are kept."""
+    return LAB / "mine" / "own" / "own.json"
+
+
+def load_mine(path=None):
     try:
-        return json.loads(mine_path().read_text(encoding="utf-8"))
+        return json.loads((path or mine_path()).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
+
+
+def own_sentences(path):
+    """The lines of a note that start with "- ", as (kind, sentence)."""
+    found = []
+    for line in Path(path).read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if line[:2] in ("- ", "* ") and len(line) > 3:
+            text = line[2:].strip()
+            found.append((kind_of(text), text))
+    return found
+
+
+def kind_of(text):
+    """What a sentence mixes, from its letters: kk, ru, latin."""
+    lower = text.lower()
+    parts = []
+    if re.search(r"[әғқңөұүһі]", lower):
+        parts.append("kk")
+    if re.search(r"[а-яё]", lower):
+        parts.append("ru")
+    if re.search(r"[a-zäöüß]", lower):
+        parts.append("latin")
+    return "his " + ("+".join(parts) or "?")
 
 
 def write_wav(path, pcm, rate=RATE):
@@ -886,7 +921,7 @@ def write_wav(path, pcm, rate=RATE):
         handle.writeframes(pcm)
 
 
-def record_mine(again=False):
+def record_mine(again=False, source=None):
     """Shows each sentence, records it as it is read, and keeps it."""
     from heyspeaky.mic import Microphone
 
@@ -894,18 +929,31 @@ def record_mine(again=False):
     rate = int(cfg["audio"]["sample_rate"])
     chunks = []
     mic = Microphone(cfg["audio"], chunks.append, lambda level: None)
-    folder = mine_path().parent
+    store = own_path() if source else mine_path()
+    sentences = own_sentences(source) if source else MINE
+    if not sentences:
+        print("В заметке нет ни одной строки, которая начинается с \"- \".")
+        return 1
+    folder = store.parent
     folder.mkdir(parents=True, exist_ok=True)
-    kept = {entry["file"]: entry for entry in load_mine()}
+    kept = {entry["file"]: entry for entry in load_mine(store)}
+    if source:
+        # A sentence edited in the note is a new sentence: keep a recording
+        # only while its text still matches.
+        texts = {text for _kind, text in sentences}
+        kept = {k: e for k, e in kept.items() if e["text"] in texts}
 
     print("Читайте каждую фразу так, как обычно диктуете: с того же места, "
           "тем же голосом. Enter - начать, Enter - стоп.")
-    for index, (pattern, text) in enumerate(MINE, 1):
-        target = folder / "{:02d}.wav".format(index)
+    for index, (pattern, text) in enumerate(sentences, 1):
+        # The person's own sentences are named by their text, so a line
+        # added to the note does not shift every recording after it.
+        target = folder / ("s{:08x}.wav".format(zlib.crc32(text.encode("utf-8")))
+                           if source else "{:02d}.wav".format(index))
         if target.exists() and str(target) in kept and not again:
             continue
         while True:
-            print("\n{} из {}:\n    {}".format(index, len(MINE), text))
+            print("\n{} из {}:\n    {}".format(index, len(sentences), text))
             answer = input("Enter - начать, s - пропустить, q - выйти: ")
             if answer.strip().lower() in ("s", "q"):
                 break
@@ -925,9 +973,9 @@ def record_mine(again=False):
             write_wav(target, pcm, rate)
             kept[str(target)] = {"file": str(target), "pattern": pattern,
                                  "text": text}
-            mine_path().write_text(json.dumps(list(kept.values()),
-                                              ensure_ascii=False, indent=1),
-                                   encoding="utf-8")
+            store.write_text(json.dumps(list(kept.values()),
+                                        ensure_ascii=False, indent=1),
+                             encoding="utf-8")
             print("    записано: {:.1f} с, громкость {:.0f} дБ".format(
                 seconds, peak))
             if input("    Enter - дальше, r - перезаписать: ").strip().lower() \
@@ -936,23 +984,31 @@ def record_mine(again=False):
         if answer.strip().lower() == "q":
             break
     print("\nГотово: {} из {} фраз записано, они лежат в {}".format(
-        len(kept), len(MINE), folder))
+        len(kept), len(sentences), folder))
     return 0
 
 
 def mine_versions(args, cfg):
-    """The person's own recordings, as recorded."""
-    entries = [e for e in load_mine() if Path(e["file"]).exists()]
+    """The person's own recordings, as recorded: the starting list and
+    their own sentences."""
+    entries = [e for e in load_mine() + load_mine(own_path())
+               if Path(e["file"]).exists()]
     if not entries:
         print("No recordings of yours yet: run `voice_lab.py mine` first.")
         return []
     versions = []
     for entry in entries:
+        speech = read_wav(Path(entry["file"]))
+        # A stop pressed too soon leaves a second of a ten-word sentence:
+        # that scores the button, not the hearing.
+        if len(speech) / float(RATE) < 0.2 * len(entry["text"].split()):
+            print("  skipped {}: too short for its sentence".format(
+                Path(entry["file"]).name))
+            continue
         ident = "m{:08x}".format(zlib.crc32(entry["text"].encode("utf-8")))
         item = {"id": ident, "text": entry["text"], "pattern": entry["pattern"],
                 "source": "yours", "holdout": False}
-        pcm = (np.clip(read_wav(Path(entry["file"])), -1, 1)
-               * 32767).astype(np.int16).tobytes()
+        pcm = (np.clip(speech, -1, 1) * 32767).astype(np.int16).tobytes()
         pcm = levels.normalise(pcm, cfg["recording"])
         versions.append({"item": item, "room": "yours", "pcm": pcm,
                          "voice": "yours", "manner": "real",
@@ -1125,6 +1181,9 @@ def main():
     mine_cmd = sub.add_parser("mine", help="read the sentences aloud yourself")
     mine_cmd.add_argument("--again", action="store_true",
                           help="record the ones already recorded too")
+    mine_cmd.add_argument("--from", dest="source",
+                          help="a note with your own sentences, one per line "
+                               "starting with \"- \"")
     people_cmd = sub.add_parser("people", help="real recordings, from FLEURS")
     people_cmd.add_argument("--each", type=int, default=80,
                             help="recordings per language")
@@ -1142,7 +1201,7 @@ def main():
                                                      texts_path()))
         return 0
     if args.command == "mine":
-        return record_mine(args.again)
+        return record_mine(args.again, args.source)
     if args.command == "people":
         print("Fetching real recordings ({} per language)...".format(
             args.each))
