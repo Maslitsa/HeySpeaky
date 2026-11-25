@@ -3112,6 +3112,10 @@ class TheListeningLab(unittest.TestCase):
             self.assertEqual(list(lab.read_wav(path)), [0.0, 0.5, -0.5, 0.25])
 
     def test_the_reading_session_keeps_what_was_read(self):
+        try:
+            from heyspeaky import mic   # noqa: F401
+        except Exception:           # CI does not install the audio stack
+            self.skipTest("the app's own packages are not installed")
         lab = _tool("voice_lab")
 
         class Mic(object):
