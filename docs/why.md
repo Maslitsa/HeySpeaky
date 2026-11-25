@@ -369,6 +369,18 @@ says `insufficient_quota` raises `NoCredit`, is never retried, and the pill
 says "local (no OpenAI credit)": only the person can fix it, on OpenAI's
 billing page.
 
+On 25 November the owner offered testers on Reddit a key of his own, in a
+project with a hard $5 limit. OpenAI's spend-limits guide says a spent
+limit answers 429 with `project_spend_limit_exceeded` or
+`organization_spend_limit_exceeded`, neither of which said
+`insufficient_quota` to the old check, so a tester would have been
+retried and told "cloud error". `transcribe.money_refusal` now knows all
+three, most particular first. Looking at it showed the other half: a
+finished pill shows no words, so the "no OpenAI credit" of 1.2.2 reached
+only the problem report. `Router.last_warning` is what the pill says
+instead, as a message of its own after the words land, and each one must
+fit the glass pill whole (116 pixels; a test measures them).
+
 ### Asking again when unsure
 
 The owner said "Они потребуют одинаковое количество энергий" and got

@@ -734,6 +734,14 @@ class App:
         state = "done" if status in ("inserted", "copied") else "error"
         if state == "done":
             self._play_finish()
+        warning = "" if backend == "cloud" else self.router.last_warning
+        if warning and state == "done":
+            # The words landed, but through the weaker local model, and for
+            # a reason only the person can fix: no credit, or the key's
+            # spending limit used up. A finished pill shows no words, so it
+            # is said as a message of its own, the way "Too quiet" is.
+            self.post(self.overlay.flash, "error", "", warning, 3.0)
+            return
         self.post(self.overlay.flash, state, text, label)
 
     def _play_finish(self):

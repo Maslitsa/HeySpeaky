@@ -47,8 +47,47 @@ class CloudUnreachable(RuntimeError):
 
 
 class NoCredit(RuntimeError):
-    """OpenAI answered, and the account has no credit left. Only the
-    person can fix it, on OpenAI's billing page, so it is never retried."""
+    """OpenAI answered, and money is what stops it: no credit left, or a
+    spending limit somebody set has been reached. Only a person can fix
+    either, on OpenAI's site, so it is never retried.
+
+    `reason` is what the problem report gives, beside "offline" and "cloud
+    error". `say` is what the pill shows, and has to fit the glass pill's
+    116 pixels of text: anything longer ends in an ellipsis."""
+
+    def __init__(self, detail, reason="no OpenAI credit",
+                 say="No OpenAI credit"):
+        super(NoCredit, self).__init__(detail)
+        self.reason = reason
+        self.say = say
+
+
+# The 429s that no retry can help, most particular first: a spending limit's
+# body may call itself insufficient_quota as well. The two limit codes are
+# from OpenAI's spend-limits guide. A key handed to testers lives in a project
+# with a hard limit, and when it ran out they were told only "cloud error".
+_MONEY_REFUSALS = (
+    ("project_spend_limit_exceeded",
+     "OpenAI says this key's project has reached its spending limit",
+     "key's spend limit", "Key's limit used up"),
+    ("organization_spend_limit_exceeded",
+     "OpenAI says the account has reached its spending limit",
+     "account's spend limit", "Account's limit hit"),
+    ("insufficient_quota",
+     "OpenAI says the account has no credit left",
+     "no OpenAI credit", "No OpenAI credit"),
+)
+
+
+def money_refusal(status_code, body):
+    """NoCredit for an answer that is about money rather than traffic, or
+    None when a retry might still help."""
+    if status_code != 429:
+        return None
+    for code, detail, reason, say in _MONEY_REFUSALS:
+        if code in body:
+            return NoCredit(detail, reason, say)
+    return None
 
 
 OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
@@ -515,9 +554,11 @@ class CloudBackend:
                 body = response.text[:400]
                 # Out of credit is a 429 too, and no retry will change it:
                 # on 21 November three of them cost a dictation 25 seconds.
-                if response.status_code == 429 and "insufficient_quota" in body:
-                    raise NoCredit("OpenAI says the account has no credit "
-                                   "left")
+                # A spent limit is the same. The whole answer is read: the
+                # code comes after a message that can be long.
+                refusal = money_refusal(response.status_code, response.text)
+                if refusal is not None:
+                    raise refusal
                 # Rate limits and server hiccups deserve a retry: the
                 # alternative is throwing away what the user just said.
                 if (response.status_code == 429
@@ -552,6 +593,11 @@ class Router:
         # on Russian and German, so being dropped onto it without being told
         # looks like the app suddenly got worse for no reason.
         self.last_fallback = ""
+        # What the pill should say about it, when it is something only the
+        # person can fix. A finished pill shows no words, so without this the
+        # reason reached only the problem report and the text simply got
+        # worse.
+        self.last_warning = ""
         self._offline_until = 0.0
 
     @property
@@ -652,6 +698,7 @@ class Router:
 
     def _transcribe(self, pcm_bytes, language):
         self.last_fallback = ""
+        self.last_warning = ""
         if self.preferred == "cloud":
             if not self.cloud.available():
                 self.last_fallback = "no API key"
@@ -679,9 +726,10 @@ class Router:
                         raise
                 except NoCredit as exc:
                     # Said in so many words, so the person knows it is the
-                    # account and not the app: the pill reads "no OpenAI
-                    # credit", where "cloud error" told him nothing.
-                    self.last_fallback = "no OpenAI credit"
+                    # account or the key and not the app, where "cloud error"
+                    # told him nothing.
+                    self.last_fallback = exc.reason
+                    self.last_warning = exc.say
                     logger.warning("%s; using local", exc)
                     if not self._cfg["transcription"]["cloud"][
                         "fallback_to_local"

@@ -3809,6 +3809,102 @@ class WhenTheAccountRunsOutOfCredit(unittest.TestCase):
         router.local.transcribe = lambda pcm, language: "local text"
         self.assertEqual(router.transcribe(b"\0\0", "")[1], "local")
         self.assertEqual(router.last_fallback, "no OpenAI credit")
+        self.assertEqual(router.last_warning, "No OpenAI credit")
+
+
+class WhenAKeysSpendingLimitIsUsedUp(unittest.TestCase):
+    """25 November: the owner offered testers a key of his own, in a project
+    with a hard $5 limit. OpenAI's spend-limits guide says a spent limit
+    answers 429 with project_spend_limit_exceeded or
+    organization_spend_limit_exceeded, which the app took for a rate limit:
+    asked three times, then said "cloud error"."""
+
+    PROJECT = ('{"error": {"message": "You have exceeded the spend limit '
+               'for this project.", "type": "insufficient_quota", '
+               '"code": "project_spend_limit_exceeded"}}')
+    ACCOUNT = ('{"error": {"type": "insufficient_quota", '
+               '"code": "organization_spend_limit_exceeded"}}')
+
+    def backend(self):
+        from heyspeaky.transcribe import CloudBackend
+        return CloudBackend(config_module.load())
+
+    def refused(self, body):
+        from heyspeaky import transcribe
+        answer = mock.Mock(status_code=429, text=body)
+        with mock.patch("httpx.post", return_value=answer) as post, \
+                mock.patch("time.sleep") as sleep:
+            with self.assertRaises(transcribe.NoCredit) as caught:
+                self.backend()._post("k", b"wav", [{"model": "m"}])
+        self.assertEqual(post.call_count, 1)
+        sleep.assert_not_called()
+        return caught.exception
+
+    def test_a_projects_limit_is_named_as_the_keys(self):
+        refusal = self.refused(self.PROJECT)
+        self.assertEqual(refusal.reason, "key's spend limit")
+        self.assertEqual(refusal.say, "Key's limit used up")
+
+    def test_an_accounts_limit_is_named_as_the_accounts(self):
+        refusal = self.refused(self.ACCOUNT)
+        self.assertEqual(refusal.reason, "account's spend limit")
+        self.assertEqual(refusal.say, "Account's limit hit")
+
+    def test_only_a_429_is_about_money(self):
+        from heyspeaky.transcribe import money_refusal
+        self.assertIsNone(money_refusal(400, self.PROJECT))
+        self.assertIsNone(money_refusal(
+            429, '{"error": {"code": "rate_limit_exceeded"}}'))
+
+    def test_every_warning_fits_the_glass_pill_whole(self):
+        from heyspeaky.transcribe import _MONEY_REFUSALS
+        shown = {}
+        real = glass._fit
+
+        def spy(text, drawing, text_font, limit):
+            shown[text] = real(text, drawing, text_font, limit)
+            return shown[text]
+
+        with mock.patch.object(glass, "_fit", spy):
+            pill = glass.prepare(scale=1.0)
+            for _code, _detail, _reason, say in _MONEY_REFUSALS:
+                glass.paint(pill, state="error", status=say)
+                self.assertEqual(shown[say], say)
+
+
+@unittest.skipIf(app_module is None,
+                 "the app's own packages are not installed")
+class ThePillSaysWhyTheTextGotWorse(unittest.TestCase):
+    """A finished pill shows no words, so "local (no OpenAI credit)" was
+    worked out and never seen: the text just came back worse."""
+
+    def deliver(self, backend, warning):
+        import types
+        flashes = []
+        app = object.__new__(app_module.App)
+        app.cfg = {"output": {}}
+        app._last_peak_db = -12.0
+        app._reset_to_idle = lambda: None
+        app._play_finish = lambda: None
+        app.router = types.SimpleNamespace(last_fallback="key's spend limit",
+                                           last_warning=warning)
+        app.overlay = types.SimpleNamespace(flash="flash")
+        app.post = lambda *args: flashes.append(args)
+        with mock.patch.object(app_module.output, "deliver",
+                               return_value="inserted"):
+            app._deliver("the words", backend)
+        return flashes[-1]
+
+    def test_a_spent_key_is_said_on_the_pill(self):
+        self.assertEqual(self.deliver("local", "Key's limit used up"),
+                         ("flash", "error", "", "Key's limit used up", 3.0))
+
+    def test_never_the_words_themselves(self):
+        self.assertNotIn("the words",
+                         self.deliver("local", "No OpenAI credit"))
+
+    def test_an_ordinary_dictation_is_left_alone(self):
+        self.assertEqual(self.deliver("cloud", "")[1], "done")
 
 
 @unittest.skipIf(panel_module is None, "tkinter is missing")

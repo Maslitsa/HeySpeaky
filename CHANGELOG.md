@@ -4,6 +4,21 @@ Notable changes to HeySpeaky, called VoiceType until September 2026, then
 SpeakIt, and SpeakIt again from 26 October to 19 November 2026. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- **A key whose spending limit is used up is named, and not asked again.**
+  A key someone hands you can sit in an OpenAI project with a monthly
+  limit. When it ran out, HeySpeaky took the refusal for a busy server,
+  asked three more times and said "cloud error". Now it goes straight to
+  the local model, and the pill says "Key's limit used up" ("Account's
+  limit hit" for a limit on the whole account).
+- **Out of credit is now actually shown.** 1.2.2 worked out "no OpenAI
+  credit", but a finished dictation shows no words on the pill, so nobody
+  saw it: the text just came out worse. Now the pill says "No OpenAI
+  credit" for three seconds after the words land.
+
 ## [1.2.2] - 2026-11-25
 
 ### Changed

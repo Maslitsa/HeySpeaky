@@ -117,8 +117,9 @@ rule here in a line or two, with its story there.
   on**: ask him before a run over half an hour of audio (`--max-minutes`),
   keep `--workers` low, and never run it while he is dictating.
   ([why](docs/why.md#the-labs-bill))
-- **Out of credit is never retried** (`transcribe.NoCredit`), and the pill
-  says "no OpenAI credit". ([why](docs/why.md#the-labs-bill))
+- **Out of credit or a spent limit is never retried**
+  (`transcribe.money_refusal`), and the pill says which, short enough for
+  the glass pill (`Router.last_warning`). ([why](docs/why.md#the-labs-bill))
 - **When the model is unsure it is asked again** with the next languages
   first (`Router._second_opinion`, `UNSURE_BELOW`); the surest answer wins
   unless it is shorter. The lab found no better line than -0.3; move it

@@ -82,6 +82,9 @@ The status line after a dictation tells you which backend produced the text:
 | `· local (offline)` | The network was unreachable, so it fell back |
 | `· local (no API key)` | No key configured |
 | `· local (cloud error)` | The API returned an error |
+| `· local (no OpenAI credit)` | The account has no money left; the pill says "No OpenAI credit" |
+| `· local (key's spend limit)` | The key's project reached its monthly limit; the pill says "Key's limit used up" |
+| `· local (account's spend limit)` | The whole account reached its limit; the pill says "Account's limit hit" |
 
 **`local (offline)` is the one to care about**, because local is markedly
 weaker on Russian and German. A sentence that was perfect yesterday can come

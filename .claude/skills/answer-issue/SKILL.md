@@ -18,8 +18,9 @@ microphones, and the last five recordings with what they were transcribed as.
 ## 2. Read `report.txt` in this order
 
 1. **Which engine actually ran.** Each dictation says `OpenAI` or `local`, and
-   a fallback gives its reason: `no API key`, `offline`, `cloud error`. Most
-   "it got worse" reports are this.
+   a fallback gives its reason: `no API key`, `offline`, `cloud error`, or
+   the money (`no OpenAI credit`, `key's spend limit`, `account's spend
+   limit`). Most "it got worse" reports are this.
 2. **`captured` against `held`.** Much shorter means audio was lost, usually a
    busy processor. The log says so in as many words.
 3. **Loudness.** `average` below about -45 dB is a very quiet microphone;
