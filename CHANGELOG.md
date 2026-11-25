@@ -4,7 +4,7 @@ Notable changes to HeySpeaky, called VoiceType until September 2026, then
 SpeakIt, and SpeakIt again from 26 October to 19 November 2026. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## [1.2.2] - 2026-11-25
 
 ### Changed
 
