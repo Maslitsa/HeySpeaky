@@ -4511,6 +4511,20 @@ class TheConnectionIsKeptAndOpenedEarly(unittest.TestCase):
         self.assertEqual(args[0], link.WARM_URL)
         self.assertNotIn("headers", kwargs)
 
+    def test_its_401_never_reaches_the_log(self):
+        """A 401 in a problem report reads as a bad key."""
+        import logging
+        from heyspeaky import link
+        quiet = logging.getLogger("httpx")
+        with self.assertLogs("httpx", "INFO") as logs:
+            quiet.info('HTTP Request: GET %s "HTTP/1.1 401 Unauthorized"',
+                       link.WARM_URL)
+            quiet.info('HTTP Request: POST %s "HTTP/1.1 200 OK"',
+                       "https://api.openai.com/v1/audio/transcriptions")
+        joined = "\n".join(logs.output)
+        self.assertNotIn("401", joined)
+        self.assertIn("transcriptions", joined)
+
     def test_it_stops_when_the_recording_does(self):
         from heyspeaky import link
         warmed = []

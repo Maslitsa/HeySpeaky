@@ -44,6 +44,17 @@ _lock = threading.Lock()
 _client = None
 
 
+class _QuietWarmUp(logging.Filter):
+    """httpx logs every request, and the warm-up's is a 401 Unauthorized:
+    in a problem report that reads as a bad key, which it is not."""
+
+    def filter(self, record):
+        return WARM_URL not in record.getMessage()
+
+
+logging.getLogger("httpx").addFilter(_QuietWarmUp())
+
+
 def client():
     """The one client every OpenAI request goes through."""
     global _client
