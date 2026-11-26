@@ -549,7 +549,7 @@ class TrayPanel(object):
             self.window.geometry("{}x{}+{}+{}".format(
                 width, height, self._position[0], y))
         except tk.TclError:
-            pass
+            pass  # the panel is closing
 
     # -- drawing and motion ------------------------------------------------
 
@@ -683,7 +683,7 @@ class TrayPanel(object):
             try:
                 self.window.after_cancel(self._caret_job)
             except tk.TclError:
-                pass
+                pass  # already run, or the window is gone
         self._caret_on = True
         self._caret_job = self.window.after(
             int(theme.CARET_BLINK * 1000), self._blink)
@@ -729,7 +729,7 @@ class TrayPanel(object):
             try:
                 self.window.configure(cursor="hand2" if key else "")
             except tk.TclError:
-                pass
+                pass  # the panel is closing
             self._schedule()
 
     def _left(self, _event=None):
@@ -947,7 +947,7 @@ class TrayPanel(object):
             try:
                 self.window.after(FOCUS_GRACE_MS, self._focus_gone)
             except tk.TclError:
-                pass
+                pass  # the panel is already gone
 
     def _focus_gone(self):
         if self._closed or self._closing_at is not None:
@@ -956,7 +956,7 @@ class TrayPanel(object):
             if self.window.focus_get() is not None:
                 return
         except (tk.TclError, KeyError):
-            pass
+            pass  # focus unreadable: treated as lost
         self.close()
 
     def close(self, _event=None):
@@ -979,11 +979,11 @@ class TrayPanel(object):
                 try:
                     self.window.after_cancel(job)
                 except tk.TclError:
-                    pass
+                    pass  # already run, or the window is gone
         try:
             self.window.destroy()
         except tk.TclError:
-            pass
+            pass  # already destroyed
         self._surface.close()
         if self._on_closed is not None:
             try:

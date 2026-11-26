@@ -384,7 +384,7 @@ class Game:
             with open(self.path, "r", encoding="utf-8-sig") as handle:
                 self.state = json.load(handle)
         except (OSError, ValueError):
-            pass
+            pass  # no saved state yet: start afresh
 
         kind = (self.state or {}).get("state")
         if kind == "done":
@@ -425,7 +425,7 @@ def main():
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
-        pass
+        pass  # older Windows: the default DPI
 
     root = tk.Tk()
     root.title("Installing HeySpeaky")

@@ -25,7 +25,7 @@ import ctypes
 import logging
 import threading
 import time
-from ctypes import wintypes
+import ctypes.wintypes as wintypes
 
 import keyboard
 
@@ -216,7 +216,7 @@ class HotkeyListener:
             try:
                 keyboard.unhook(self._hook)
             except (KeyError, ValueError):
-                pass
+                pass  # the hook was already removed
             self._hook = None
 
     def stop(self):

@@ -22,7 +22,7 @@ Call join_kill_on_close() once, in the parent, before anything is spawned.
 
 import ctypes
 import logging
-from ctypes import wintypes
+import ctypes.wintypes as wintypes
 
 logger = logging.getLogger("heyspeaky.winjob")
 

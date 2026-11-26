@@ -171,7 +171,7 @@ def main():
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
-            pass
+            pass  # not a console: printed as it is
     parser = argparse.ArgumentParser(
         description="Transcribe the demo clip and print the result.")
     parser.add_argument("wav", nargs="?", default=None,

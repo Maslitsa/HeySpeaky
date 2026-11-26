@@ -1031,7 +1031,7 @@ class App:
             try:
                 self.root.destroy()
             except tk.TclError:
-                pass
+                pass  # Tk is already shutting down
 
 
 def main():

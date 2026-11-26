@@ -62,7 +62,7 @@ def save(config, key):
         try:
             os.unlink(temporary)
         except OSError:
-            pass
+            pass  # already gone; the real error follows
         raise
     user = os.environ.get("USERNAME", "")
     if user:

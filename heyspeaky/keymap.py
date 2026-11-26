@@ -16,7 +16,7 @@ agree and Tk is left to do its own typing.
 import ctypes
 import logging
 import tkinter as tk
-from ctypes import wintypes
+import ctypes.wintypes as wintypes
 
 logger = logging.getLogger("heyspeaky.keymap")
 
@@ -94,7 +94,7 @@ def fix_typing(widget, on_typed=None):
             # What Tk's own typing does next: keep the caret in view.
             widget.tk.call("tk::EntrySeeInsert", widget._w)
         except tk.TclError:
-            pass
+            pass  # the text is typed either way
         if on_typed is not None:
             try:
                 on_typed(event)

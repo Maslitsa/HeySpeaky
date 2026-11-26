@@ -102,7 +102,7 @@ def desktop_dir():
                                                   buffer) == 0 and buffer.value:
             return Path(buffer.value)
     except Exception:
-        pass
+        pass  # no answer: the caller looks elsewhere
     return None
 
 
@@ -140,7 +140,7 @@ def _memory_gb():
             return "{:.1f} GB, {:.1f} GB free".format(
                 status.ullTotalPhys / 2**30, status.ullAvailPhys / 2**30)
     except Exception:
-        pass
+        pass  # the report says unknown
     return "unknown"
 
 

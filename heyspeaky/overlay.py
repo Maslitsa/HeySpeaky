@@ -37,7 +37,7 @@ import threading
 import time
 import tkinter as tk
 from collections import deque
-from ctypes import wintypes
+import ctypes.wintypes as wintypes
 
 from PIL import Image, ImageChops
 
@@ -193,7 +193,7 @@ def _pointer():
         if ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
             return (point.x, point.y)
     except Exception:
-        pass
+        pass  # no position: the caller does without
     return None
 
 
@@ -460,7 +460,7 @@ class Overlay:
         try:
             self._root.configure(cursor="hand2" if name else "")
         except tk.TclError:
-            pass
+            pass  # the window is gone
 
     def _ease_buttons(self):
         """One frame of each button moving towards how it should look."""

@@ -57,7 +57,7 @@ class _CappedStream:
                 )
                 self._file.flush()
             except (OSError, ValueError):
-                pass
+                pass  # a log that cannot be written must not stop the app
             return len(text)
         try:
             return self._file.write(text)
@@ -69,7 +69,7 @@ class _CappedStream:
         try:
             self._file.flush()
         except (OSError, ValueError):
-            pass
+            pass  # a log that cannot be written must not stop the app
 
     def isatty(self):
         return False
@@ -90,7 +90,7 @@ class _CappedStream:
         try:
             self._file.close()
         except (OSError, ValueError):
-            pass
+            pass  # closing at exit; nothing left to keep
 
     @property
     def encoding(self):
@@ -115,7 +115,7 @@ def _open_stdout_log(log_dir, is_worker):
             if path.stat().st_size > 0:
                 os.replace(path, Path(log_dir) / "stdout.prev.log")
         except FileNotFoundError:
-            pass
+            pass  # no earlier log to keep
         except OSError:
             mode = "a"
     return _CappedStream(path, mode, STDOUT_LOG_LIMIT)
@@ -124,7 +124,7 @@ def _open_stdout_log(log_dir, is_worker):
 try:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
-    pass
+    pass  # without the folder, output below goes to devnull
 
 if sys.stdout is None or sys.stderr is None:
     try:
@@ -138,7 +138,7 @@ if sys.stdin is None:
     try:
         sys.stdin = sys.__stdin__ = open(os.devnull, "r", encoding="utf-8")
     except OSError:
-        pass
+        pass  # no stdin only matters to code that reads it
 
 
 if __name__ == "__main__":

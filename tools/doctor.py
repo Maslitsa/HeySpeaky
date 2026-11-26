@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
-    pass
+    pass  # not a console: printed as it is
 
 OK, WARN, FAIL = "[ ok ]", "[warn]", "[FAIL]"
 

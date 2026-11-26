@@ -74,7 +74,7 @@ for stream in (sys.stdout, sys.stderr):
     try:
         stream.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
-        pass
+        pass  # not a console: printed as it is
 
 import numpy as np                                           # noqa: E402
 
@@ -227,6 +227,7 @@ def wikipedia_passage(lang):
             if attempt == 2:
                 raise
             time.sleep(3.0 * (attempt + 1))
+    return "", ""                          # not reached: the last try raises
 
 
 def feed_sentences(url):
@@ -1061,11 +1062,11 @@ def report(versions, lines_run, shipped, cfg, minutes):
     table("By voice", lambda v: v["voice"])
 
     lines.extend(["## The second-opinion line", "",
-                  "Asked again when the model's average log probability is "
-                  "below the line. Tune on the first columns; the held-out "
-                  "ones are the check.", "",
-                  "| line | words wrong | nonsense | asked again | held out: "
-                  "words wrong | held out: nonsense |",
+                  ("Asked again when the model's average log probability is "
+                   "below the line. Tune on the first columns; the held-out "
+                   "ones are the check."), "",
+                  ("| line | words wrong | nonsense | asked again | held out: "
+                   "words wrong | held out: nonsense |"),
                   "| --- | --- | --- | --- | --- | --- |"])
     for line in lines_run:
         tag = str(line)

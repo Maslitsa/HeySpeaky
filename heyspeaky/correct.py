@@ -41,7 +41,7 @@ import math
 import threading
 import time
 import tkinter as tk
-from ctypes import wintypes
+import ctypes.wintypes as wintypes
 
 from . import dictionary, glass, keymap, overlay, theme
 
@@ -399,7 +399,7 @@ class CorrectionBox(object):
                 try:
                     self.top.attributes("-alpha", self._field_alpha)
                 except tk.TclError:
-                    pass
+                    pass  # the box is closing; no fade to finish
                 busy = True
             self._heard_alpha = _approach(self._heard_alpha, 1.0, 0.22)
             busy = busy or self._heard_alpha < 1.0
@@ -525,13 +525,13 @@ class CorrectionBox(object):
             try:
                 self.back.after_cancel(self._job)
             except tk.TclError:
-                pass
+                pass  # already run, or the window is gone
             self._job = None
         for window in (self.top, self.back):
             try:
                 window.destroy()
             except tk.TclError:
-                pass
+                pass  # already destroyed
         self._surface.close()
 
     def bring_forward(self):
@@ -593,7 +593,7 @@ class CorrectionBox(object):
                 entry[2] - entry[0], entry[3] - entry[1],
                 x + entry[0], y + entry[1]))
         except tk.TclError:
-            pass
+            pass  # the box is closing; nowhere to move
 
     def _button_at(self, x, y):
         slop = self._px(4)
@@ -613,7 +613,7 @@ class CorrectionBox(object):
             try:
                 self.back.configure(cursor="hand2" if name else "")
             except tk.TclError:
-                pass
+                pass  # the box is closing; no cursor to set
             self._schedule()
 
     def _left(self, _event=None):
@@ -622,7 +622,7 @@ class CorrectionBox(object):
             try:
                 self.back.configure(cursor="")
             except tk.TclError:
-                pass
+                pass  # the box is closing; no cursor to set
             self._schedule()
 
     def _grab(self, event):
@@ -689,7 +689,7 @@ class CorrectionBox(object):
         try:
             self.back.after(FOCUS_GRACE_MS, self._focus_gone)
         except tk.TclError:
-            pass
+            pass  # the box is gone; nothing to watch
 
     def _focus_gone(self):
         if self._answered or self._destroyed:
@@ -701,7 +701,7 @@ class CorrectionBox(object):
                     self.top):
                 return
         except (tk.TclError, KeyError):
-            pass
+            pass  # focus unreadable: treated as lost
         self._cancel()
 
     def _accept(self, _event=None):
@@ -738,7 +738,7 @@ class CorrectionBox(object):
         try:
             self.top.withdraw()
         except tk.TclError:
-            pass
+            pass  # already hidden or destroyed
         self._schedule()
         try:
             self._on_done(answer)

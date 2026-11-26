@@ -30,7 +30,7 @@ for stream in (sys.stdout, sys.stderr):
     try:
         stream.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
-        pass
+        pass  # not a console: printed as it is
 
 from heyspeaky import languages                              # noqa: E402
 from correction_check import kazakh_layout, type_in_layout   # noqa: E402

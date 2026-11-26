@@ -74,7 +74,7 @@ def _bytes_so_far(folder):
             try:
                 total += os.path.getsize(os.path.join(base, file_name))
             except OSError:
-                pass
+                pass  # a file gone mid-count; an estimate
     return total
 
 

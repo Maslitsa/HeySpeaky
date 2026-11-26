@@ -28,10 +28,15 @@ import numpy as np  # noqa: E402
 
 from heyspeaky import config as config_module          # noqa: E402
 from heyspeaky import dictionary as dictionary_module   # noqa: E402
+from heyspeaky import transcribe as transcribe_module   # noqa: E402
 from heyspeaky.transcribe import (                     # noqa: E402
-    CloudBackend, _default_keywords, _default_prompt, _join_segments,
-    _merge_spans, pcm_to_float, pcm_to_wav,
+    CloudBackend, _join_segments, _merge_spans, pcm_to_float, pcm_to_wav,
 )
+
+# The real two, taken once on purpose: the drill swaps them out on the
+# module for its "no prompt" variant, and these tests are about the real ones.
+_default_prompt = transcribe_module._default_prompt
+_default_keywords = transcribe_module._default_keywords
 
 _real_dictionary = dictionary_module.PATH
 _real_legacy_dictionaries = dictionary_module.LEGACY_PATHS
@@ -316,7 +321,7 @@ class TheLocalModelGetsEveryThread(unittest.TestCase):
         try:
             from heyspeaky import engine
         except Exception:
-            self.skipTest("RealtimeSTT is not installed")
+            raise unittest.SkipTest("RealtimeSTT is not installed")
         made = []
         box = object.__new__(engine.TranscriptionEngine)
         box._model_cfg = {"final": "base"}
@@ -2324,7 +2329,7 @@ class HookWatchdog(unittest.TestCase):
         hotkey._cursor_position = lambda: (5, 5)
         self.addCleanup(setattr, hotkey, "_cursor_position", original)
         self.assertFalse(listener._cursor_moved())
-        self.assertTrue(listener._cursor_moved() is False)
+        self.assertIs(listener._cursor_moved(), False)
         hotkey._cursor_position = lambda: (6, 5)
         self.assertTrue(listener._cursor_moved())
 
@@ -3175,16 +3180,16 @@ class TheSessionBrief(unittest.TestCase):
     LOG = [
         "2026-09-20 10:00:00,000 INFO    heyspeaky          HeySpeaky running",
         "2026-09-25 09:00:00,000 INFO    heyspeaky          HeySpeaky running",
-        "2026-09-25 09:01:00,000 INFO    heyspeaky          Final transcript "
-        "(cloud): 40 chars",
-        "2026-09-25 09:02:00,000 INFO    heyspeaky.output   Selection: 6 chars"
-        " from claude.exe (Chrome_WidgetWin_1), 1 try; keys up after 0.20s;"
-        " the window answered",
-        "2026-09-25 09:03:00,000 INFO    heyspeaky.output   Selection: 0 chars"
-        " from Chrome_WidgetWin_1, 2 tries; keys up after 0.14s; the window "
-        "never answered",
-        "2026-09-25 09:04:00,000 WARNING heyspeaky          Another instance "
-        "is already running; exiting",
+        ("2026-09-25 09:01:00,000 INFO    heyspeaky          Final transcript "
+         "(cloud): 40 chars"),
+        ("2026-09-25 09:02:00,000 INFO    heyspeaky.output   Selection: 6 "
+         "chars from claude.exe (Chrome_WidgetWin_1), 1 try; keys up after "
+         "0.20s; the window answered"),
+        ("2026-09-25 09:03:00,000 INFO    heyspeaky.output   Selection: 0 "
+         "chars from Chrome_WidgetWin_1, 2 tries; keys up after 0.14s; the "
+         "window never answered"),
+        ("2026-09-25 09:04:00,000 WARNING heyspeaky          Another "
+         "instance is already running; exiting"),
         "  a traceback line with no stamp",
     ]
 
@@ -3316,7 +3321,6 @@ class ANewInstallStartsWithThisComputersLanguages(unittest.TestCase):
                          ["fr", "it", "pl", "tr", "en"])
 
     def test_a_new_config_json_starts_with_them(self):
-        import json
         path = self.use(["uk", "en"])
         cfg = config_module.load()
         self.assertEqual(cfg["transcription"]["cloud"]["languages"],
@@ -3328,7 +3332,6 @@ class ANewInstallStartsWithThisComputersLanguages(unittest.TestCase):
                          ["uk", "en"])
 
     def test_an_existing_config_json_keeps_its_own(self):
-        import json
         path = self.use(["uk", "en"])
         path.write_text(json.dumps({"transcription": {"cloud": {
             "languages": ["ru", "kk", "en"]}}}), encoding="utf-8")
@@ -4278,7 +4281,7 @@ class TheLastRunsOutput(unittest.TestCase):
             self.assertFalse((Path(tmp) / "stdout.prev.log").exists())
 
 
-from unittest import mock  # noqa: E402
+import unittest.mock as mock  # noqa: E402
 
 
 if __name__ == "__main__":

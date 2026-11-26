@@ -147,7 +147,7 @@ def main():
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
-            pass
+            pass  # not a console: printed as it is
 
     now = datetime.datetime.now()
     print("HeySpeaky session brief, {:%Y-%m-%d %H:%M}".format(now))

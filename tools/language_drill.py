@@ -41,7 +41,7 @@ for stream in (sys.stdout, sys.stderr):
     try:
         stream.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
-        pass
+        pass  # not a console: printed as it is
 
 from heyspeaky import alphabet                               # noqa: E402
 from heyspeaky import config as config_module               # noqa: E402
@@ -397,7 +397,7 @@ def main():
               .format(len(SENTENCES)))
         clips = synthesise(backend.api_key, workspace)
     else:
-        parser.error("choose --tts, --report or --clips")
+        return parser.error("choose --tts, --report or --clips")
 
     table = variants(cfg)
     if args.only:

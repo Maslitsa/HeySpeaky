@@ -31,7 +31,7 @@ import os
 import sys
 import threading
 import time
-from ctypes import wintypes
+import ctypes.wintypes as wintypes
 from pathlib import Path
 
 logger = logging.getLogger("heyspeaky.blackbox")
@@ -94,7 +94,7 @@ def holdings():
         found["gdi"] = user32.GetGuiResources(me, 0)
         found["user"] = user32.GetGuiResources(me, 1)
     except (OSError, AttributeError):
-        pass
+        pass  # the counts are extras; logged without
     return found
 
 
@@ -157,7 +157,7 @@ def _process_table():
         finally:
             kernel32.CloseHandle(snapshot)
     except (OSError, AttributeError):
-        pass
+        pass  # no table only loses the parent's name
     return table
 
 
@@ -207,7 +207,7 @@ def open_crash_log(log_dir, version):
         try:
             _crash_file.close()
         except OSError:
-            pass
+            pass  # it is being replaced either way
     _crash_file = handle
     return path
 
@@ -343,7 +343,7 @@ class BlackBox:
         try:
             self.path.unlink()
         except FileNotFoundError:
-            pass
+            pass  # already gone is what was wanted
         except OSError:
             logger.warning("Could not remove %s", self.path.name)
 

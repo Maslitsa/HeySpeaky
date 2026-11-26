@@ -9,7 +9,7 @@ Alt is still down would fire Ctrl+Alt+V in the target app instead.
 import ctypes
 import logging
 import time
-from ctypes import wintypes
+import ctypes.wintypes as wintypes
 
 import keyboard
 
