@@ -691,6 +691,72 @@ laptop: OpenAI got a four-language clip completely right; local `base` lost
 most of the Russian and Kazakh, `small` took 4-7 s, `large-v3-turbo` 17-19 s.
 The installer picks `large-v3-turbo` only when a CUDA card is usable.
 
+### Offline said
+
+On 26 November the owner said the app had got worse, and pointed at
+"дектовку" for "диктовку" and "прихня" for "брехня". The log showed that
+the cloud had not written them. A 37-second dictation's connection failed
+in the handshake (8.0 s, the connect timeout twice over), and the local
+model wrote the text. The pill's label said "local (offline)", but a
+finished pill shows no words, so he never saw it. In the week before,
+10 of his 245 dictations had gone that way unseen. Now the pill says
+"Offline: local model", 113 of the glass pill's 116 pixels, and a missing
+key or a cloud error say so too.
+
+### The kept connection
+
+Every request opened its own connection, after the keys came up: the
+transcription, and the alphabet check a second later. Measured that night
+from his PC, a new connection cost 0.05-0.3 s more than a kept one. On
+the bad line that lost the 37-second dictation, opening it was the whole
+failure. So `link.py` keeps one client, and `keep_warm` opens its
+connection when recording starts. It asks for the model list without a
+key, and the 401 that comes back is fine: the point is the open
+connection. It does this again every 25 s of a long recording. OpenAI
+kept an idle connection for more than 95 s (the request count went up on
+one connection), so `KEEP_OPEN` is 60 s. A connection the server has closed
+is tried once more. A timeout is not, because waiting twice is worse than
+the fallback.
+
+The recording goes as FLAC, which is lossless, so OpenAI hears exactly the
+same samples. On nineteen of his recordings, boosted as the app boosts
+them, FLAC was 65% of the WAV size and took 5 ms to encode. Lossy Opus
+would be an eighth of the size, but it changes what the model hears, so
+it waits for a run in the listening lab.
+
+Where the rest of the wait goes, from that week's log: 3.2 s median after
+letting go, 6.8 s at the 90th percentile. The speech model takes 1.5 s
+for under five seconds of audio and 6.3 s for over thirty. The alphabet
+check ran on 83 of 232 cloud dictations, at 1.9 s each, and changed words
+on 3 of them. It was left as it is: the archive will show whether those
+words were worth the wait.
+
+### The archive
+
+A problem report holds five recordings, and only if somebody thinks to
+save one. The owner asked to keep every dictation on his own PC, so a day
+can be looked back on, the good next to the bad. `archive.py` keeps the
+recording before the boost and a line for each dictation:
+
+- what the cloud wrote, what asking again made of it;
+- what the alphabet check and the dictionary changed;
+- what was typed in the end;
+- how long each step took;
+- the program it went into;
+- how soon after the last one it came, since a quick second try in the
+  same program marks the first as wrong.
+
+A Ctrl+Alt+Win correction gets a line of its own.
+
+It is in `%LOCALAPPDATA%`. On his PC the Desktop and Documents are in
+OneDrive, which would upload the recordings. The install folder is
+replaced by an update. It is off in the defaults, and on only in his
+config.json, because it holds what was said. That is everything the log
+and the problem report are built to leave out. Days older than
+`keep_days` (30) are deleted whole. `tools/archive_review.py` prints a day
+back with the dictations worth a look flagged, so it is run when he asks,
+never by the session brief.
+
 ## The name
 
 ### The way back

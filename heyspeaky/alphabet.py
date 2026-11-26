@@ -57,7 +57,9 @@ import re
 import time
 import unicodedata
 
-logger = logging.getLogger("heyspeaky.alphabet")
+from . import link
+
+logger =logging.getLogger("heyspeaky.alphabet")
 
 URL = "https://api.openai.com/v1/chat/completions"
 
@@ -225,7 +227,7 @@ def check(text, languages, names, key, model, words=(), heard=()):
 
     started = time.monotonic()
     try:
-        response = httpx.post(
+        response = link.post(
             URL, headers={"Authorization": "Bearer " + key}, json=body,
             timeout=httpx.Timeout(TIMEOUT, connect=2.0))
         response.raise_for_status()

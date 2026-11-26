@@ -23,6 +23,8 @@ without jargon, and say what you actually did and what you could not do.
 | `heyspeaky/overlay.py` | the window: never focused, and its two buttons |
 | `heyspeaky/engine.py` | RealtimeSTT: capture and voice activity detection |
 | `heyspeaky/transcribe.py` | OpenAI and local backends, the key lookup |
+| `heyspeaky/link.py` | the one connection to OpenAI, opened while you speak |
+| `heyspeaky/archive.py` | every dictation kept on the owner's PC, off for everyone else |
 | `heyspeaky/languages.py` | the languages list and its tray grouping |
 | `heyspeaky/dictionary.py` | words this person says that the model gets wrong |
 | `heyspeaky/alphabet.py` | the alphabet check: a word put back in the alphabet it was spoken in |
@@ -50,6 +52,7 @@ without jargon, and say what you actually did and what you could not do.
 | `tools/make_icon.py` | draws the shortcuts' icon; the installer runs it |
 | `tools/session_brief.py` | a session's starting facts; runs when a session starts |
 | `tools/try_demo.py` | runs a recording through both backends |
+| `tools/archive_review.py` | prints the archive back, the dictations worth a look flagged |
 
 ## Rules that cost something to learn
 
@@ -169,6 +172,16 @@ rule here in a line or two, with its story there.
 - **A Ctrl+Alt that does nothing now leaves a line** in the log, never naming
   a letter. ([why](docs/why.md#silent-chord))
 - **OpenAI is the default and local is a fallback.** ([why](docs/why.md#openai-first))
+- **When the local model wrote it, the pill says why** ("Offline: local
+  model", `Router.last_warning`), never only the label. ([why](docs/why.md#offline-said))
+- **Every OpenAI request goes through `link.post`**, on one kept
+  connection opened when recording starts (`link.keep_warm`, no key sent);
+  a timeout is never retried. The recording goes as FLAC; anything lossy
+  needs the listening lab first. ([why](docs/why.md#the-kept-connection))
+- **The archive is the owner's, on his PC only** (`archive.py`): off by
+  default, in `%LOCALAPPDATA%\HeySpeaky\archive`, never in the log, a
+  problem report, the session brief or the repository.
+  `tools/archive_review.py` reads it when he asks. ([why](docs/why.md#the-archive))
 
 ## Before you push
 

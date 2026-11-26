@@ -3674,41 +3674,41 @@ class TheAlphabetCheck(unittest.TestCase):
 
     def test_a_good_answer_is_used_and_a_bad_one_thrown_away(self):
         text = "Kubernetes cluster upal."
-        with mock.patch("httpx.post",
+        with mock.patch("heyspeaky.link.post",
                         return_value=self.answer("Kubernetes cluster упал.")):
             self.assertEqual(alphabet.check(text, self.MIXED, {}, "k",
                                             "gpt-5.4-mini"),
                              "Kubernetes cluster упал.")
-        with mock.patch("httpx.post",
+        with mock.patch("heyspeaky.link.post",
                         return_value=self.answer("The cluster crashed.")):
             self.assertEqual(alphabet.check(text, self.MIXED, {}, "k",
                                             "gpt-5.4-mini"), text)
 
     def test_it_never_costs_the_dictation(self):
         text = "Kubernetes cluster upal."
-        with mock.patch("httpx.post", side_effect=TimeoutError("slow")):
+        with mock.patch("heyspeaky.link.post", side_effect=TimeoutError("slow")):
             self.assertEqual(alphabet.check(text, self.MIXED, {}, "k",
                                             "gpt-5.4-mini"), text)
-        with mock.patch("httpx.post", return_value=self.answer("", 500)):
+        with mock.patch("heyspeaky.link.post", return_value=self.answer("", 500)):
             self.assertEqual(alphabet.check(text, self.MIXED, {}, "k",
                                             "gpt-5.4-mini"), text)
 
     def test_a_sentence_it_cannot_help_is_not_sent_at_all(self):
-        with mock.patch("httpx.post") as post:
+        with mock.patch("heyspeaky.link.post") as post:
             alphabet.check("Всё понятно, спасибо.", self.MIXED, {}, "k",
                            "gpt-5.4-mini")
         post.assert_not_called()
 
     def test_a_reasoning_model_is_told_not_to_think(self):
         """Left to its default effort it thinks for seconds about one line."""
-        with mock.patch("httpx.post",
+        with mock.patch("heyspeaky.link.post",
                         return_value=self.answer("cluster упал")) as post:
             alphabet.check("cluster upal", self.MIXED, {}, "k", "gpt-5.4-mini")
         self.assertEqual(post.call_args.kwargs["json"]["reasoning_effort"],
                          "none")
 
     def test_the_log_never_holds_what_was_said(self):
-        with mock.patch("httpx.post",
+        with mock.patch("heyspeaky.link.post",
                         return_value=self.answer("Magzhan cluster упал")):
             with self.assertLogs("heyspeaky.alphabet", "INFO") as logs:
                 alphabet.check("Magzhan cluster upal", self.MIXED, {}, "k",
@@ -3776,7 +3776,7 @@ class WhenTheAccountRunsOutOfCredit(unittest.TestCase):
     def test_it_is_not_asked_again(self):
         from heyspeaky import transcribe
         refused = mock.Mock(status_code=429, text=self.BODY)
-        with mock.patch("httpx.post", return_value=refused) as post, \
+        with mock.patch("heyspeaky.link.post", return_value=refused) as post, \
                 mock.patch("time.sleep") as sleep:
             with self.assertRaises(transcribe.NoCredit):
                 self.backend()._post("k", b"wav", [{"model": "m"}])
@@ -3788,7 +3788,7 @@ class WhenTheAccountRunsOutOfCredit(unittest.TestCase):
                          text='{"error": {"type": "rate_limit_exceeded"}}')
         fine = mock.Mock(status_code=200, text="")
         fine.json.return_value = {"text": "hello"}
-        with mock.patch("httpx.post", side_effect=[busy, fine]), \
+        with mock.patch("heyspeaky.link.post", side_effect=[busy, fine]), \
                 mock.patch("time.sleep"):
             heard = self.backend()._post("k", b"wav", [{"model": "m"}])
         self.assertEqual(heard.text, "hello")
@@ -3831,7 +3831,7 @@ class WhenAKeysSpendingLimitIsUsedUp(unittest.TestCase):
     def refused(self, body):
         from heyspeaky import transcribe
         answer = mock.Mock(status_code=429, text=body)
-        with mock.patch("httpx.post", return_value=answer) as post, \
+        with mock.patch("heyspeaky.link.post", return_value=answer) as post, \
                 mock.patch("time.sleep") as sleep:
             with self.assertRaises(transcribe.NoCredit) as caught:
                 self.backend()._post("k", b"wav", [{"model": "m"}])
@@ -4275,6 +4275,301 @@ class TheLastRunsOutput(unittest.TestCase):
             self.assertEqual(path.read_text(encoding="utf-8"),
                              "parent\nworker\n")
             self.assertFalse((Path(tmp) / "stdout.prev.log").exists())
+
+
+class TheArchive(unittest.TestCase):
+    """26 November: the owner asked for every dictation on his own PC to be
+    kept, so a whole day can be looked back on, not the last five."""
+
+    def archive(self, enabled=True, keep_days=30, today=None):
+        from heyspeaky import archive
+        self.root = tempfile.mkdtemp()
+        cfg = {"archive": {"enabled": enabled, "keep_days": keep_days,
+                           "folder": self.root}}
+        return archive.Archive(cfg, today=today)
+
+    def lines(self, day_folder):
+        path = Path(day_folder) / "dictations.jsonl"
+        return [json.loads(line) for line in
+                path.read_text(encoding="utf-8").splitlines()]
+
+    def test_it_is_off_for_everyone_unless_switched_on(self):
+        from heyspeaky import archive
+        cfg = config_module.load()
+        self.assertFalse(cfg["archive"]["enabled"])
+        self.assertFalse(archive.Archive(cfg).enabled)
+        keeper = self.archive(enabled=False)
+        self.assertIsNone(keeper.keep(tone(0.2), RATE, {"text": "hi"}))
+        self.assertEqual(os.listdir(self.root), [])
+
+    def test_it_lives_outside_onedrive_and_the_install(self):
+        from heyspeaky import archive
+        self.assertTrue(archive.DEFAULT_FOLDER.startswith("%LOCALAPPDATA%"))
+        self.assertEqual(config_module.DEFAULTS["archive"]["folder"],
+                         archive.DEFAULT_FOLDER)
+
+    def test_a_dictation_is_kept_with_its_recording(self):
+        import wave
+        keeper = self.archive()
+        pcm = tone(0.5)
+        wav = keeper.keep(pcm, RATE, {"text": "Ертең барамын",
+                                      "backend": "cloud"})
+        with wave.open(str(wav), "rb") as handle:
+            self.assertEqual(handle.getframerate(), RATE)
+            self.assertEqual(handle.readframes(handle.getnframes()), pcm)
+        line, = self.lines(wav.parent)
+        self.assertEqual(line["kind"], "dictation")
+        self.assertEqual(line["text"], "Ертең барамын")
+        self.assertEqual(line["wav"], wav.name)
+
+    def test_two_in_one_second_do_not_overwrite_each_other(self):
+        keeper = self.archive()
+        with mock.patch("time.strftime", return_value="231503"):
+            first = keeper.keep(tone(0.2), RATE, {"text": "one"})
+            second = keeper.keep(tone(0.2), RATE, {"text": "two"})
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.exists() and second.exists())
+
+    def test_a_correction_marks_the_one_before(self):
+        keeper = self.archive()
+        wav = keeper.keep(tone(0.2), RATE, {"text": "дектовку"})
+        keeper.correction("дектовку", "диктовку")
+        kinds = [line["kind"] for line in self.lines(wav.parent)]
+        self.assertEqual(kinds, ["dictation", "correction"])
+        self.assertEqual(self.lines(wav.parent)[1]["meant"], "диктовку")
+
+    def test_old_days_go_and_nothing_else_is_touched(self):
+        import datetime
+        keeper = self.archive(keep_days=30,
+                              today=lambda: datetime.date(2026, 11, 26))
+        for name in ("2026-10-01", "2026-11-25", "notes"):
+            os.makedirs(os.path.join(self.root, name))
+        Path(self.root, "readme.txt").write_text("mine", encoding="utf-8")
+        self.assertEqual(keeper.prune(), 1)
+        self.assertEqual(sorted(os.listdir(self.root)),
+                         ["2026-11-25", "notes", "readme.txt"])
+
+    def test_a_failure_costs_nothing_and_logs_no_words(self):
+        keeper = self.archive()
+        # A file where the day's folder should be: nothing can be written.
+        Path(keeper.day_folder()).parent.mkdir(parents=True, exist_ok=True)
+        Path(keeper.day_folder()).write_text("", encoding="utf-8")
+        with self.assertLogs("heyspeaky.archive", "WARNING") as logs:
+            self.assertIsNone(keeper.keep(tone(0.2), RATE,
+                                          {"text": "секрет"}))
+        self.assertNotIn("секрет", "\n".join(logs.output))
+
+    def test_the_review_finds_a_word_in_two_alphabets(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "archive_review", str(ROOT / "tools" / "archive_review.py"))
+        review = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(review)
+        # The owner's "спрeтии", with a Latin e.
+        self.assertEqual(review.mixed_words("Ну спрeтии спуси"),
+                         ["спрeтии"])
+        self.assertEqual(review.mixed_words("Kubernetes кластер упал"), [])
+        first = {"kind": "dictation", "backend": "cloud", "program": "a.exe",
+                 "text": "x", "steps": {}}
+        again = dict(first, since_last=6.0)
+        self.assertIn("tried again 6s later", review.flags(first, again))
+        self.assertEqual(review.flags(first, dict(again, program="b.exe")),
+                         [])
+
+
+class TheRouterSaysWhatEachStepMade(unittest.TestCase):
+    """The archive's lines come from Router.trace, which holds the words and
+    so must never reach the log."""
+
+    def router(self):
+        from heyspeaky.transcribe import Heard, Router
+        cfg = config_module.load()
+        cfg["transcription"]["backend"] = "cloud"
+        cfg["transcription"]["cloud"]["alphabet_check"] = False
+        router = Router(engine=None, config=cfg)
+        router.cloud.available = lambda: True
+        router.cloud.heard = lambda pcm, language, first=None: Heard(
+            "Привет мир", -0.02, -0.1, ["ru"])
+        return router
+
+    def test_the_cloud_step_is_kept_with_its_numbers(self):
+        router = self.router()
+        with self.assertLogs("heyspeaky.transcribe", "INFO") as logs:
+            self.assertEqual(router.transcribe(b"\0\0", ""),
+                             ("Привет мир", "cloud"))
+        step = router.trace["cloud"]
+        self.assertEqual(step["text"], "Привет мир")
+        self.assertEqual(step["languages"], ["ru"])
+        self.assertNotIn("Привет", "\n".join(logs.output))
+
+    def test_each_call_starts_a_new_trace(self):
+        router = self.router()
+        router.trace = {"local": {"text": "old"}}
+        router.transcribe(b"\0\0", "")
+        self.assertNotIn("local", router.trace)
+
+
+class WhenTheCloudCannotBeReached(unittest.TestCase):
+    """26 November: a 37-second dictation lost its connection, the local
+    model wrote it ("дектовку", "прихня"), and the pill said nothing."""
+
+    def router(self):
+        from heyspeaky.transcribe import Router
+        cfg = config_module.load()
+        cfg["transcription"]["backend"] = "cloud"
+        cfg["transcription"]["cloud"]["fallback_to_local"] = True
+        router = Router(engine=None, config=cfg)
+        router.cloud.available = lambda: True
+        router.local.transcribe = lambda pcm, language: "local text"
+        return router
+
+    def test_the_pill_says_the_local_model_wrote_it(self):
+        from heyspeaky.transcribe import OFFLINE_SAY, CloudUnreachable
+        router = self.router()
+
+        def unreachable(*args, **kwargs):
+            raise CloudUnreachable("timed out")
+
+        router.cloud.heard = unreachable
+        self.assertEqual(router.transcribe(b"\0\0", "")[1], "local")
+        self.assertEqual(router.last_warning, OFFLINE_SAY)
+        # And the next one, skipped while the line is down, says so too.
+        self.assertEqual(router.transcribe(b"\0\0", "")[1], "local")
+        self.assertEqual(router.last_warning, OFFLINE_SAY)
+
+    def test_every_fallback_message_fits_the_glass_pill_whole(self):
+        from heyspeaky.transcribe import OFFLINE_SAY
+        shown = {}
+        real = glass._fit
+
+        def spy(text, drawing, text_font, limit):
+            shown[text] = real(text, drawing, text_font, limit)
+            return shown[text]
+
+        with mock.patch.object(glass, "_fit", spy):
+            pill = glass.prepare(scale=1.0)
+            for say in (OFFLINE_SAY, "Cloud error: local", "No key: local"):
+                glass.paint(pill, state="error", status=say)
+                self.assertEqual(shown[say], say)
+
+    def test_the_pill_shows_it_instead_of_the_usual_tick(self):
+        import types
+        if app_module is None:
+            self.skipTest("the app's own packages are not installed")
+        from heyspeaky.transcribe import OFFLINE_SAY
+        flashes = []
+        app = object.__new__(app_module.App)
+        app.cfg = {"output": {}}
+        app._last_peak_db = -12.0
+        app._reset_to_idle = lambda: None
+        app._play_finish = lambda: None
+        app.router = types.SimpleNamespace(last_fallback="offline",
+                                           last_warning=OFFLINE_SAY)
+        app.overlay = types.SimpleNamespace(flash="flash")
+        app.post = lambda *args: flashes.append(args)
+        with mock.patch.object(app_module.output, "deliver",
+                               return_value="inserted"):
+            app._deliver("the words", "local")
+        self.assertEqual(flashes[-1], ("flash", "error", "", OFFLINE_SAY,
+                                       3.0))
+
+
+class TheConnectionIsKeptAndOpenedEarly(unittest.TestCase):
+    """26 November: every request opened its own connection after the keys
+    came up. Now there is one, opened while the person speaks."""
+
+    def test_one_client_for_every_request(self):
+        from heyspeaky import link
+        self.assertIs(link.client(), link.client())
+        self.assertGreater(link.KEEP_OPEN, 5.0)
+
+    def test_a_closed_connection_is_tried_once_more(self):
+        import httpx
+        from heyspeaky import link
+        fake = mock.Mock()
+        fake.post.side_effect = [httpx.RemoteProtocolError("gone"), "fine"]
+        with mock.patch.object(link, "client", return_value=fake):
+            self.assertEqual(link.post("https://x", data={}), "fine")
+        self.assertEqual(fake.post.call_count, 2)
+
+    def test_a_timeout_is_not_waited_out_twice(self):
+        import httpx
+        from heyspeaky import link
+        fake = mock.Mock()
+        fake.post.side_effect = httpx.ReadTimeout("slow")
+        with mock.patch.object(link, "client", return_value=fake):
+            with self.assertRaises(httpx.ReadTimeout):
+                link.post("https://x", data={})
+        self.assertEqual(fake.post.call_count, 1)
+
+    def test_the_warm_up_sends_no_key(self):
+        from heyspeaky import link
+        fake = mock.Mock()
+        with mock.patch.object(link, "client", return_value=fake):
+            self.assertTrue(link.warm())
+        args, kwargs = fake.get.call_args
+        self.assertEqual(args[0], link.WARM_URL)
+        self.assertNotIn("headers", kwargs)
+
+    def test_it_stops_when_the_recording_does(self):
+        from heyspeaky import link
+        warmed = []
+        going = [True, True, False]
+        with mock.patch.object(link, "warm",
+                               side_effect=lambda: warmed.append(1)), \
+                mock.patch.object(link.threading, "Thread") as thread:
+            link.keep_warm(lambda: going.pop(0), every=1.0, step=0.5)
+            run = thread.call_args.kwargs["target"]
+            with mock.patch.object(link.time, "sleep"):
+                run()
+        self.assertEqual(len(warmed), 2)
+
+    def test_only_when_the_cloud_will_hear_it(self):
+        from heyspeaky.transcribe import Router
+        cfg = config_module.load()
+        router = Router(engine=None, config=cfg)
+        router.cloud.available = lambda: True
+        with mock.patch("heyspeaky.link.keep_warm") as keep_warm:
+            cfg["transcription"]["backend"] = "local"
+            router.keep_warm(lambda: True)
+            keep_warm.assert_not_called()
+            cfg["transcription"]["backend"] = "cloud"
+            router.keep_warm(lambda: True)
+            keep_warm.assert_called_once()
+
+
+class TheRecordingGoesAsFlac(unittest.TestCase):
+    """Two thirds the size of WAV on the owner's recordings, and lossless."""
+
+    def test_it_decodes_to_exactly_what_was_recorded(self):
+        import io
+        from heyspeaky.transcribe import pcm_to_upload
+        try:
+            import soundfile
+        except ImportError:
+            self.skipTest("soundfile is not installed")
+        pcm = tone(1.0)
+        name, data, kind = pcm_to_upload(pcm, RATE)
+        self.assertEqual((name, kind), ("speech.flac", "audio/flac"))
+        back, rate = soundfile.read(io.BytesIO(data), dtype="int16")
+        self.assertEqual(rate, RATE)
+        self.assertEqual(back.tobytes(), pcm)
+
+    def test_without_soundfile_it_is_wav_as_before(self):
+        from heyspeaky.transcribe import pcm_to_upload
+        with mock.patch.dict(sys.modules, {"soundfile": None}):
+            name, data, kind = pcm_to_upload(tone(0.1), RATE)
+        self.assertEqual((name, kind), ("speech.wav", "audio/wav"))
+        self.assertEqual(data[:4], b"RIFF")
+
+    def test_the_upload_is_what_is_sent(self):
+        fine = mock.Mock(status_code=200, text="")
+        fine.json.return_value = {"text": "hello"}
+        upload = ("speech.flac", b"fLaC", "audio/flac")
+        with mock.patch("heyspeaky.link.post", return_value=fine) as post:
+            CloudBackend(config_module.load())._post("k", upload,
+                                                     [{"model": "m"}])
+        self.assertEqual(post.call_args.kwargs["files"], {"file": upload})
 
 
 import unittest.mock as mock  # noqa: E402

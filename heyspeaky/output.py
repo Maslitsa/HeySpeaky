@@ -189,6 +189,11 @@ def _foreground_class():
         return "?"
 
 
+def foreground_program():
+    """The program in front, by file name: see _foreground_program."""
+    return _foreground_program()
+
+
 def _foreground_program():
     """The program in front, by file name - chrome.exe, not the title,
     which can be the name of somebody's document. Chrome, Edge, VS Code and

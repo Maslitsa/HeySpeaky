@@ -27,6 +27,7 @@ import webrtcvad
 
 from . import __version__
 from . import apikey
+from . import archive
 from . import blackbox
 from . import config as config_module
 from . import correct
@@ -136,6 +137,12 @@ class App:
         self.router = Router(self.engine, cfg)
         # The last few dictations, for a problem report. Memory only.
         self.recent = diagnostics.Recent()
+        # Every dictation, on a PC whose config.json switches it on. See
+        # archive.py: it is the owner's, on his own computer.
+        self.archive = archive.Archive(cfg)
+        if self.archive.enabled:
+            logger.info("Archive is on: dictations are kept on this PC")
+        self._last_finished = 0.0
         self._held_seconds = 0.0
         self._audio_chunks = []
         self._audio_lock = threading.Lock()
@@ -468,6 +475,7 @@ class App:
             correct.restore_foreground(came_from)
             return
         logger.info("Correction saved (%d chars heard)", len(heard or ""))
+        self.archive.correction(heard, fixed)
         correct.restore_foreground(came_from)
         if heard:
             # Replacing the selection is the point: the wrong words are still
@@ -538,10 +546,17 @@ class App:
             self._recording_started = time.monotonic()
         self._consume_release = False
         self._start_max_timer()
+        # The connection to OpenAI is opened now, while the person talks,
+        # so the recording can go the moment they stop. See link.py.
+        self.router.keep_warm(self._recording_now)
         self.tray.set_status("Listening…", busy=True)
         self.post(
             self.overlay.show, "listening", "Listening · release to insert"
         )
+
+    def _recording_now(self):
+        with self._state_lock:
+            return self.state in (RECORDING_HOLD, RECORDING_LATCHED)
 
     def _finish_recording(self):
         elapsed = time.monotonic() - self._recording_started
@@ -644,18 +659,53 @@ class App:
             text, backend = self.router.transcribe(pcm, language)
         except Exception as exc:
             logger.exception("Transcription failed")
-            self._remember(raw, language, "failed", str(exc)[:80],
-                           time.monotonic() - started, "")
+            took = time.monotonic() - started
+            stats = self._remember(raw, language, "failed", str(exc)[:80],
+                                   took, "")
             self._reset_to_idle()
             self.post(
                 self.overlay.flash, "error", str(exc)[:120], "", 3.0
             )
+            self._keep(raw, stats, language, "failed", type(exc).__name__,
+                       took, "")
             return
 
-        self._remember(raw, language, backend, self.router.last_fallback,
-                       time.monotonic() - started, text)
+        took = time.monotonic() - started
+        stats = self._remember(raw, language, backend,
+                               self.router.last_fallback, took, text)
         logger.info("Final transcript (%s): %d chars", backend, len(text))
         self._deliver(text, backend)
+        self._keep(raw, stats, language, backend, self.router.last_fallback,
+                   took, text)
+
+    def _keep(self, pcm, stats, language, backend, fallback, took, text):
+        """Into the archive, after the text is typed so it waits for
+        nothing. Off unless config.json switches it on: see archive.py."""
+        started = self._recording_started
+        since = started - self._last_finished if self._last_finished else None
+        self._last_finished = time.monotonic()
+        if not self.archive.enabled:
+            return
+        self.archive.keep(pcm, self._sample_rate, {
+            "version": __version__,
+            "held": round(self._held_seconds, 2),
+            "seconds": stats["seconds"],
+            "peak_db": stats["peak_db"],
+            "rms_db": stats["rms_db"],
+            "clipped_pct": stats["clipped_pct"],
+            "speech_run": self._speech_run_max,
+            "language": language,
+            "backend": backend,
+            "fallback": fallback,
+            "took": round(took, 2),
+            # The program it went into, by file name, and how soon after
+            # the last one it came: a quick second try in the same program
+            # says the first one was wrong.
+            "program": output.foreground_program(),
+            "since_last": round(since, 1) if since is not None else None,
+            "steps": self.router.trace,
+            "text": text,
+        })
 
     def _remember(self, pcm, language, backend, fallback, took, text):
         """Logs the numbers a problem report needs, and keeps the recording.
@@ -698,6 +748,7 @@ class App:
             "took": took,
             "text": text,
         })
+        return stats
 
     # Below this the microphone is the problem, not the speaking. Measured:
     # every recording of the owner's that came back empty peaked under -27 dB,

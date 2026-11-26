@@ -31,7 +31,7 @@ import wave
 import numpy as np
 import webrtcvad
 
-from . import alphabet, dictionary
+from . import alphabet, dictionary, link
 from .languages import NAMES
 
 logger = logging.getLogger("heyspeaky.transcribe")
@@ -166,6 +166,13 @@ OFFLINE_MEMO_SECONDS = 20.0
 # next nonsense transcript will show where the line belongs.
 UNSURE_BELOW = -0.3
 
+# What the pill says when the cloud could not be reached and the local model
+# wrote the text instead. Ten of the owner's 245 dictations in the week to
+# 26 November went that way and he was never told: the text just came out
+# worse ("дектовку", "прихня"), and it read as the app getting worse. Short
+# enough for the glass pill's 116 pixels (113).
+OFFLINE_SAY = "Offline: local model"
+
 # Where the key lived under the older names, newest first. Only ever read,
 # as a fallback, so nobody has to move a file after updating.
 LEGACY_KEY_FILES = (
@@ -189,6 +196,27 @@ def pcm_to_wav(pcm_bytes, rate):
         handle.setframerate(rate)
         handle.writeframes(pcm_bytes)
     return buffer.getvalue()
+
+
+def pcm_to_upload(pcm_bytes, rate):
+    """The recording as it goes to OpenAI: (file name, bytes, type).
+
+    FLAC where it can be written, which is lossless - the samples OpenAI
+    decodes are exactly the ones recorded - and two thirds the size: 1740 KB
+    against 2685 KB on nineteen of the owner's own recordings, boosted the
+    way the app boosts them, in 5 ms. Less to send is less to wait for after
+    the keys come up, most of all on a poor line. WAV when soundfile is
+    missing, as it always used to be.
+    """
+    try:
+        import soundfile
+        buffer = io.BytesIO()
+        soundfile.write(buffer, np.frombuffer(pcm_bytes, dtype=np.int16),
+                        rate, format="FLAC", subtype="PCM_16")
+        return "speech.flac", buffer.getvalue(), "audio/flac"
+    except Exception:
+        logger.debug("FLAC unavailable; sending WAV", exc_info=True)
+        return "speech.wav", pcm_to_wav(pcm_bytes, rate), "audio/wav"
 
 
 def split_on_pauses(pcm_bytes, rate, min_pause=0.35, aggressiveness=2,
@@ -386,6 +414,11 @@ class Heard(object):
         return len(self.text.split())
 
 
+def _timeout(seconds, connect):
+    import httpx
+    return httpx.Timeout(seconds, connect=connect)
+
+
 class CloudBackend:
     """Transcribes with OpenAI's speech-to-text API."""
 
@@ -515,27 +548,26 @@ class CloudBackend:
                     self._cloud["api_key_env"]
                 )
             )
-        wav = pcm_to_wav(pcm_bytes, self._rate)
-        return self._post(key, wav, self._field_variants(language, first))
+        upload = pcm_to_upload(pcm_bytes, self._rate)
+        return self._post(key, upload, self._field_variants(language, first))
 
-    def _post(self, key, wav, variants):
-        """Tries each request shape, retrying transient failures."""
-        import httpx
-
+    def _post(self, key, upload, variants):
+        """Tries each request shape, retrying transient failures. `upload`
+        is (file name, bytes, type), or bare WAV bytes."""
+        if isinstance(upload, bytes):
+            upload = ("speech.wav", upload, "audio/wav")
         last_error = "no attempt made"
         for index, fields in enumerate(variants):
             transient = 0
             while True:
                 try:
-                    response = httpx.post(
+                    response = link.post(
                         OPENAI_TRANSCRIBE_URL,
                         headers={"Authorization": "Bearer {}".format(key)},
                         data=fields,
-                        files={"file": ("speech.wav", wav, "audio/wav")},
-                        timeout=httpx.Timeout(
-                            float(self._cloud["timeout"]),
-                            connect=CONNECT_TIMEOUT,
-                        ),
+                        files={"file": upload},
+                        timeout=_timeout(
+                            float(self._cloud["timeout"]), CONNECT_TIMEOUT),
                     )
                 except Exception as exc:
                     raise CloudUnreachable(
@@ -598,11 +630,21 @@ class Router:
         # reason reached only the problem report and the text simply got
         # worse.
         self.last_warning = ""
+        # What each step of the last call wrote and how long it took, for
+        # the archive (archive.py). It holds the words, so it is never
+        # logged and never goes into a problem report.
+        self.trace = {}
         self._offline_until = 0.0
 
     @property
     def preferred(self):
         return self._cfg["transcription"]["backend"]
+
+    def keep_warm(self, still_recording):
+        """Opens the connection to OpenAI while somebody is still speaking,
+        when the cloud is what will hear them. See heyspeaky/link.py."""
+        if self.preferred == "cloud" and self.cloud.available():
+            link.keep_warm(still_recording)
 
     def transcribe(self, pcm_bytes, language):
         """Returns (text, backend_name_used), with corrections applied.
@@ -611,15 +653,26 @@ class Router:
         it reaches local transcription too - which needs it more, being the
         weaker of the two on exactly the words people end up correcting.
         """
+        self.trace = {}
         text, backend, heard_in = self._transcribe(pcm_bytes, language)
         if backend == "cloud" and not language:
-            text = self._check_alphabet(text, heard_in)
+            started = time.monotonic()
+            checked = self._check_alphabet(text, heard_in)
+            took = time.monotonic() - started
+            if took > 0.05 or checked != text:
+                # The check asked the model: what it cost, and what it made.
+                self.trace["alphabet"] = {"seconds": round(took, 2),
+                                          "text": checked}
+            text = checked
         # Naming the words in the request gets most of the way and not always
         # all of it: the measurement that put them there also showed a Kazakh
         # letter failing to survive into a Russian sentence. What the user has
         # spelled out is applied after the model has had its say. See
         # heyspeaky/dictionary.py.
-        return dictionary.apply(text), backend
+        final = dictionary.apply(text)
+        if final != text:
+            self.trace["dictionary"] = final
+        return final, backend
 
     def _check_alphabet(self, text, heard_in=()):
         """A word written in the wrong alphabet, put back in its own. Only
@@ -638,7 +691,12 @@ class Router:
 
     def _ask_cloud(self, pcm_bytes, language):
         """The cloud's answer, as a Heard: asked again if it was unsure."""
+        started = time.monotonic()
         heard = self.cloud.heard(pcm_bytes, language)
+        self.trace["cloud"] = {
+            "seconds": round(time.monotonic() - started, 2),
+            "languages": list(heard.languages), "average": heard.average,
+            "lowest": heard.lowest, "text": heard.text}
         if heard.average is not None:
             # Numbers and language codes, never the words.
             logger.info("Cloud heard %s, sure on average %.3f, least sure "
@@ -670,9 +728,11 @@ class Router:
                   if code not in heard.languages][:2]
         if not others:
             return heard
+        started = time.monotonic()
         with ThreadPoolExecutor(len(others)) as pool:
             answers = list(pool.map(
                 lambda code: self._ask_with_first(pcm_bytes, code), others))
+        took = time.monotonic() - started
         best, kept = heard, ""
         for code, answer in zip(others, answers):
             if answer is None or answer.average is None:
@@ -686,6 +746,12 @@ class Router:
                     ",".join(heard.languages) or "?", " and ".join(others),
                     "the {} one ({:.3f})".format(kept, best.average)
                     if kept else "the first answer")
+        self.trace["asked_again"] = {
+            "seconds": round(took, 2), "kept": kept,
+            "answers": [{"first": code,
+                         "average": getattr(answer, "average", None),
+                         "text": getattr(answer, "text", None)}
+                        for code, answer in zip(others, answers)]}
         return best
 
     def _ask_with_first(self, pcm_bytes, code):
@@ -702,9 +768,11 @@ class Router:
         if self.preferred == "cloud":
             if not self.cloud.available():
                 self.last_fallback = "no API key"
+                self.last_warning = "No key: local"
                 logger.warning("Cloud backend has no API key; using local")
             elif time.monotonic() < self._offline_until:
                 self.last_fallback = "offline"
+                self.last_warning = OFFLINE_SAY
                 logger.info(
                     "Skipping the cloud for another %.0fs after a connection "
                     "failure", self._offline_until - time.monotonic(),
@@ -719,6 +787,7 @@ class Router:
                         time.monotonic() + OFFLINE_MEMO_SECONDS
                     )
                     self.last_fallback = "offline"
+                    self.last_warning = OFFLINE_SAY
                     logger.warning("Cloud unreachable: %s", exc)
                     if not self._cfg["transcription"]["cloud"][
                         "fallback_to_local"
@@ -737,9 +806,14 @@ class Router:
                         raise
                 except Exception as exc:
                     self.last_fallback = "cloud error"
+                    self.last_warning = "Cloud error: local"
                     logger.warning("Cloud transcription failed: %s", exc)
                     if not self._cfg["transcription"]["cloud"][
                         "fallback_to_local"
                     ]:
                         raise
-        return self.local.transcribe(pcm_bytes, language), "local", ()
+        started = time.monotonic()
+        text = self.local.transcribe(pcm_bytes, language)
+        self.trace["local"] = {"seconds": round(time.monotonic() - started, 2),
+                               "text": text}
+        return text, "local", ()

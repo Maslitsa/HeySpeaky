@@ -6,7 +6,26 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **An archive of your own dictation, if you want one.** Set
+  `"archive": {"enabled": true}` in config.json and every dictation is
+  kept on this PC for 30 days: the recording, and what each step made
+  of it, in `%LOCALAPPDATA%\HeySpeaky\archive`. It is off unless you turn
+  it on, and it never goes into a problem report.
+
+### Changed
+
+- **The text comes back sooner.** The connection to OpenAI is opened while
+  you are still speaking and kept open between requests. The recording
+  goes as FLAC, which is lossless and a third smaller than before.
+
 ### Fixed
+
+- **You are told when the offline model wrote your text.** When OpenAI
+  could not be reached, the weaker local model took over without a word,
+  and the text simply came out worse. Now the pill says "Offline: local
+  model".
 
 - **A key whose spending limit is used up is named, and not asked again.**
   A key someone hands you can sit in an OpenAI project with a monthly

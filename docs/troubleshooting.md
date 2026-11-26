@@ -79,9 +79,9 @@ The status line after a dictation tells you which backend produced the text:
 | Label | Meaning |
 | --- | --- |
 | `· cloud` | OpenAI, as configured |
-| `· local (offline)` | The network was unreachable, so it fell back |
-| `· local (no API key)` | No key configured |
-| `· local (cloud error)` | The API returned an error |
+| `· local (offline)` | The network was unreachable, so it fell back; the pill says "Offline: local model" |
+| `· local (no API key)` | No key configured; the pill says "No key: local" |
+| `· local (cloud error)` | The API returned an error; the pill says "Cloud error: local" |
 | `· local (no OpenAI credit)` | The account has no money left; the pill says "No OpenAI credit" |
 | `· local (key's spend limit)` | The key's project reached its monthly limit; the pill says "Key's limit used up" |
 | `· local (account's spend limit)` | The whole account reached its limit; the pill says "Account's limit hit" |

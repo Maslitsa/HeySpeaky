@@ -363,6 +363,14 @@ DEFAULTS = {
         # 0 to 1. Deliberately quiet.
         "volume": 0.18,
     },
+    "archive": {
+        # Every dictation kept on this PC: the recording and what each step
+        # made of it. Off, and meant to stay off for everyone but the owner,
+        # who asked for it on his own computer. See heyspeaky/archive.py.
+        "enabled": False,
+        "keep_days": 30,
+        "folder": "%LOCALAPPDATA%\\HeySpeaky\\archive",
+    },
     "log_level": "INFO",
 }
 
