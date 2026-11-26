@@ -389,7 +389,6 @@ class KeyFile(unittest.TestCase):
     def _backend(self, appdata):
         import copy
         import os
-        from unittest import mock
 
         cfg = copy.deepcopy(config_module.DEFAULTS)
         variable = cfg["transcription"]["cloud"]["api_key_env"]
@@ -980,7 +979,6 @@ class Spending(unittest.TestCase):
     def setUp(self):
         import copy
         import os
-        from unittest import mock
 
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
@@ -1030,7 +1028,6 @@ class Updates(unittest.TestCase):
 
     def setUp(self):
         import os
-        from unittest import mock
 
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
@@ -1061,7 +1058,6 @@ class Updates(unittest.TestCase):
         Measured on 26 October on vuejs/vue-next, renamed to vuejs/core.
         Every copy installed before a rename asks the old address - the
         October SpeakIt asks for Maslitsa/SpeakIt."""
-        from unittest import mock
 
         def get(url, **kwargs):
             if not kwargs.get("follow_redirects"):
